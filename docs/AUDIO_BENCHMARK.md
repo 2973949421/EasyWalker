@@ -1,6 +1,6 @@
 # ADV Walkman Audio Backend Benchmark
 
-> 状态：P0 — Ready to Execute  
+> 状态：P0-01 — DONE；Candidate A 最小播放基线已通过自动与真机验收，P0 后续候选和压力测试仍继续。
 > 目标：在正式播放器开发前，选出 V1 最合适的原生 3.5mm 音频底层。
 
 ## 1. 为什么先做 Benchmark
@@ -48,6 +48,29 @@ Stereo
 - 一首左右声道差异明显的音乐，用于验证 Downmix
 
 测试文件路径固定，三个 Backend 使用同一文件。
+
+P0-01 固定路径：
+
+```text
+/Music/ADVWalkmanBenchmark/benchmark.mp3
+```
+
+文件由用户从自己的音乐库选择，不进入 Git。首次真机测试前使用：
+
+```powershell
+B:\PlatformIO\penv\Scripts\python.exe tools\inspect_mp3.py D:\Music\ADVWalkmanBenchmark\benchmark.mp3
+```
+
+将工具输出的大小、SHA-256、bitrate、sample rate 和 channel mode 记录到下表。测试文件由用户自有 M4A 转码生成，原始文件保留在 SD 卡，不进入 Git。
+
+| Fixture Field | Value |
+|---|---|
+| SD Path | `/Music/ADVWalkmanBenchmark/benchmark.mp3` |
+| Size | 11,972,484 bytes |
+| SHA-256 | `4003b057b19ca95bae78e66b3536557e342d1105315c2a6217f4475c0db51d63` |
+| Bitrate | 320 kbps CBR |
+| Sample Rate | 44.1 kHz |
+| Channel Mode | Stereo |
 
 ### Runtime
 
@@ -161,17 +184,17 @@ Mono = (Left + Right) / 2
 
 | 指标 | A M5.Speaker | B Direct I2S | C BackgroundAudio |
 |---|---|---|---|
-| Build | TBD | TBD | TBD |
-| Boot | TBD | TBD | TBD |
-| 320k / 44.1k 播放 | TBD | TBD | TBD |
+| Build | PASS — baseline | PASS — placeholder | PASS — placeholder |
+| Boot | PASS — Launcher install | TBD | TBD |
+| 320k / 44.1k 播放 | PASS | TBD | TBD |
 | 320k / 48k 播放 | TBD | TBD | TBD |
 | VBR | TBD | TBD | TBD |
 | 30 min 连续播放 | TBD | TBD | TBD |
 | 2 h 连续播放 | TBD | TBD | TBD |
-| Free Heap | TBD | TBD | TBD |
-| Minimum Heap | TBD | TBD | TBD |
+| Free Heap | 286,044 bytes（约 40–45 s） | TBD | TBD |
+| Minimum Heap | 285,764 bytes | TBD | TBD |
 | Heap 是否持续下降 | TBD | TBD | TBD |
-| Underrun / Dropout | TBD | TBD | TBD |
+| Underrun / Dropout | Counter `NA`; user reported normal output | TBD | TBD |
 | 高频 UI 刷新 | TBD | TBD | TBD |
 | 播放中浏览 SD | TBD | TBD | TBD |
 | Pause / Resume 爆音 | TBD | TBD | TBD |
@@ -180,9 +203,45 @@ Mono = (Left + Right) / 2
 | Sample rate 切换 | TBD | TBD | TBD |
 | 最大干净音量 | TBD | TBD | TBD |
 | 主观底噪 | TBD | TBD | TBD |
-| 主观声音 | TBD | TBD | TBD |
+| 主观声音 | PASS — speaker and 3.5mm headphone | TBD | TBD |
 | 实现复杂度 | TBD | TBD | TBD |
 | 维护成本 | TBD | TBD | TBD |
+
+### P0-01 Build Record
+
+验证日期：2026-08-24
+
+```text
+pio run -e bench-a -e bench-b -e bench-c
+```
+
+| Environment | Role | Firmware Size | Conservative Launcher Limit |
+|---|---|---:|---:|
+| `bench-a` | Candidate A 最小可播放基线 | 642,048 bytes | 1,310,720 bytes |
+| `bench-b` | Direct I2S 明确占位 | 463,136 bytes | 1,310,720 bytes |
+| `bench-c` | BackgroundAudio 明确占位 | 463,136 bytes | 1,310,720 bytes |
+
+三个环境均使用 Espressif32 6.7.0 / Arduino-ESP32 2.0.16。只有 `bench-a` 引入 ESP8266Audio 1.9.7；B/C 未迁移工具链，也不编译 A 的音频源文件。
+
+### P0-01 Runtime Contract
+
+- 串口：115200 baud。
+- 自动尝试播放固定 MP3；SD 或文件缺失时进入 `ERROR`，不反复重启。
+- 每 5 秒输出 `backend`、`state`、`sample_rate`、`free_heap`、`minimum_heap`、`elapsed_ms`、`decode_calls`、`backpressure`、`underrun` 和 `error`。
+- 当前 M5.Speaker 路径无法可靠读取真实 DMA underrun，因此输出 `underrun=NA`，不会伪报 0。
+- 支持串口命令：`play`、`pause`、`resume`、`stop`、`status`。
+- 屏幕仅显示 Backend、状态和错误，不属于正式播放器 UI。
+
+### P0-01 Launcher Device Test Result
+
+- 日期：2026-08-24。
+- M5Launcher 正常安装 `/firmware/ADV-Walkman-P0-A.bin`；未执行 PlatformIO upload、erase、partition 修改或 eFuse 操作。
+- 用户确认 Cardputer ADV 正常启动，内置扬声器与原生 3.5mm 耳机均正常出声，无明显启动异常。
+- 串口确认 `backend=A_M5SPEAKER`、`state=PLAYING`、`sample_rate=44100`、`error=none`。
+- 设备端文件 SHA-256 为 `4003b057b19ca95bae78e66b3536557e342d1105315c2a6217f4475c0db51d63`，与 PC 记录一致。
+- 两次周期记录：`free_heap=286044`、`minimum_heap=285764`；约 40–45 秒时保持一致。
+- `underrun=NA` 符合当前 API 限制；`backpressure` 已单独记录，未伪报 underrun 为 0。
+- B/C 仍只是占位；本结果只完成 P0-01，不代表 P0 Backend 最终选型完成。
 
 ---
 

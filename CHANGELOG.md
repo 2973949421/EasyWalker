@@ -50,6 +50,17 @@ Date: 2026-08-24
 - V1 产品侧设计达到可正式交付 Codex 的基线。
 - 下一正式开发阶段仍为 P0 Audio Backend Benchmark。
 
+### P0-01 Benchmark Harness
+
+- 建立 `bench-a`、`bench-b`、`bench-c` 三个 PlatformIO 环境。
+- Candidate A 采用 ESP8266Audio 1.9.7、三缓冲 M5.Speaker 输出与 32-bit Stereo → Mono 下混。
+- B / C 当前为明确的可编译占位，不伪装成已实现 Backend。
+- 增加串口指标、最小控制命令、SD 测试文件 SHA-256 与错误状态输出。
+- 增加只读 MP3 检查工具和 Launcher app 尺寸硬检查。
+- 三环境自动构建通过。
+- P0-01 已通过 M5Launcher、固定 320 kbps / 44.1 kHz / Stereo MP3、扬声器、3.5mm 耳机和串口指标真机验收。
+- 设备端测试文件 SHA-256 与 PC 记录一致；Candidate A 运行于 44.1 kHz 且无启动错误。
+
 ## V0.1.2 — Keymap Freeze
 
 Date: 2026-08-24

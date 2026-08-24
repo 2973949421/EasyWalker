@@ -21,7 +21,7 @@ DEFERRED
 
 ## P0-01 Benchmark Harness
 
-Status: DOING
+Status: DONE
 
 目标：
 
@@ -31,17 +31,19 @@ AC：
 
 ### Automatic Validation
 
-- [ ] PlatformIO 工程可以构建
-- [ ] 可选择 / 切换 A、B、C 实验环境或 Backend
-- [ ] 使用固定测试 MP3
-- [ ] 串口可输出 Backend、sample rate、heap、minimum heap、underrun 等必要信息
-- [ ] 不包含正式 UI
+- [x] PlatformIO 工程可以构建
+- [x] 可选择 / 切换 A、B、C 实验环境或 Backend
+- [x] 使用固定测试 MP3
+- [x] 串口可输出 Backend、sample rate、heap、minimum heap、underrun 等必要信息
+- [x] 不包含正式 UI
+
+自动构建与 2026-08-24 真机验收均已通过；固定测试 MP3 的设备端 SHA-256 与 PC 记录一致。
 
 ### Device Validation
 
-- [ ] Cardputer ADV 正常启动
-- [ ] 原生 3.5mm 能播放测试音频
-- [ ] 无明显启动异常
+- [x] Cardputer ADV 正常启动
+- [x] 原生 3.5mm 能播放测试音频
+- [x] 无明显启动异常
 
 ---
 
