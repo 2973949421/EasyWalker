@@ -61,6 +61,19 @@ Date: 2026-08-24
 - P0-01 已通过 M5Launcher、固定 320 kbps / 44.1 kHz / Stereo MP3、扬声器、3.5mm 耳机和串口指标真机验收。
 - 设备端测试文件 SHA-256 与 PC 记录一致；Candidate A 运行于 44.1 kHz 且无启动错误。
 
+### P0 Backend Route Refinement
+
+- 保持既有 A/B/C Benchmark 和 V1 产品路线不变，将三个候选明确落实为隔离的 M5Launcher App。
+- 删除低收益的 M4A 衍生、48 kHz / VBR 测试矩阵；P0 只使用已确认的 320 kbps / 44.1 kHz Fixture。
+- 将 Restart、Seek、UI Stress、SD Stress 和统一统计协议纳入 P0-02～P0-06。
+- Candidate C 固定为独立 pioarduino / IDF5 环境，不迁移或污染 A/B 稳定环境。
+- Candidate A 补齐 Restart、Seek、Loop 和真实 `playRaw()` backpressure 统计。
+- Candidate B 落实为 ESP8266Audio Direct I2S Port 1 + M5Unified 0.2.20 Cardputer ADV ES8311 官方初始化序列。
+- Candidate C 落实为 BackgroundAudio 1.4.4 + Arduino-ESP32 3.3.8 / ESP-IDF 5.5.4，并提供统一 Mono downmix 包装。
+- 增加统一串口控制、30 Hz UI Stress、第二只读文件句柄 SD Stress 和扩展统计字段。
+- Candidate C packages 独立放在 `B:\PlatformIO\isolated\adv-walkman-c\packages`，避免替换 A/B 的稳定 framework。
+- 三候选已通过自动构建和 Launcher 尺寸检查，状态进入 `DEVICE TEST`；最终 Backend 尚未选择。
+
 ## V0.1.2 — Keymap Freeze
 
 Date: 2026-08-24

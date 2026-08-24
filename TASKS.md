@@ -49,7 +49,7 @@ AC：
 
 ## P0-02 Candidate A — Cardio-style M5.Speaker
 
-Status: TODO
+Status: DEVICE TEST
 
 AC：
 
@@ -58,7 +58,8 @@ AC：
 - [ ] sample rate 处理正确
 - [ ] 使用合理 triple buffer / M5.Speaker 参数
 - [ ] Pause / Resume 可用
-- [ ] 切歌可用
+- [ ] 使用同一 Fixture 完成 Restart / Flush / Reopen 生命周期验证
+- [ ] 固定 320 kbps Fixture 的定点 Seek 可用
 - [ ] 记录 heap / underrun
 - [ ] 真机旧耳机听感记录
 
@@ -66,7 +67,7 @@ AC：
 
 ## P0-03 Candidate B — Direct I2S
 
-Status: TODO
+Status: DEVICE TEST
 
 AC：
 
@@ -75,7 +76,8 @@ AC：
 - [ ] Direct I2S 生命周期正常
 - [ ] 正确 L+R downmix
 - [ ] Pause / Resume 可用
-- [ ] 切歌可用
+- [ ] 使用同一 Fixture 完成 Restart / Flush / Reopen 生命周期验证
+- [ ] 固定 320 kbps Fixture 的定点 Seek 可用
 - [ ] 记录 heap / underrun
 - [ ] 真机旧耳机听感记录
 
@@ -83,7 +85,7 @@ AC：
 
 ## P0-04 Candidate C — BackgroundAudio
 
-Status: TODO
+Status: DEVICE TEST
 
 AC：
 
@@ -91,16 +93,17 @@ AC：
 - [ ] 不破坏当前稳定 PlatformIO 主环境
 - [ ] ADV + ES8311 可正常输出
 - [ ] MP3 320 kbps / 44.1 kHz 可播放
+- [ ] 使用同一 Fixture 完成 Restart / Flush / Reopen 与定点 Seek
 - [ ] 记录 heap / underrun
 - [ ] 真机旧耳机听感记录
 
-如果当前库 / IDF 兼容成本明显超过收益，可记录为 DEFERRED，不为了“必须三套都完成”强行迁移。
+使用独立 pioarduino / IDF5 环境，不改变 A/B 的稳定依赖。只有在官方固定版本仍要求污染 A/B、修改分区或突破 Launcher 安全边界时才停止，不为了“必须三套都完成”扩大风险。
 
 ---
 
 ## P0-05 Stress Test
 
-Status: TODO
+Status: DEVICE TEST
 
 AC：
 
@@ -109,7 +112,7 @@ AC：
 - [ ] UI Stress
 - [ ] SD Browse Stress
 - [ ] Pause / Resume 循环
-- [ ] 切歌循环
+- [ ] 同一 Fixture 的 Restart 循环
 - [ ] Seek
 - [ ] 记录明显爆音 / 卡顿 / 崩溃
 - [ ] 记录 Heap 是否持续下降
@@ -127,6 +130,12 @@ AC：
 - [ ] 更新 `docs/TECH_DESIGN.md`
 - [ ] 不因为“更底层”而自动选择复杂方案
 - [ ] 形成可进入 P1 的冻结 Audio Backend
+
+### 固定比较方式
+
+- 只使用 `/Music/ADVWalkmanBenchmark/benchmark.mp3`，不再派生 M4A、48 kHz 或 VBR 测试矩阵。
+- A/B/C 分别生成独立 M5Launcher App，一次性复制到 SD 后由 Launcher 顺序安装。
+- “Restart”只验证 Decoder / File / Output 生命周期，不能冒充正式 Player 的 Next / Previous 功能。
 
 ---
 

@@ -1,6 +1,6 @@
 # ADV Walkman Audio Backend Benchmark
 
-> 状态：P0-01 — DONE；Candidate A 最小播放基线已通过自动与真机验收，P0 后续候选和压力测试仍继续。
+> 状态：P0-01 — DONE；P0-02～P0-05 已完成自动构建并进入 DEVICE TEST，P0-06 最终选型仍待真机结果。
 > 目标：在正式播放器开发前，选出 V1 最合适的原生 3.5mm 音频底层。
 
 ## 1. 为什么先做 Benchmark
@@ -32,7 +32,7 @@
 
 ### Test Audio
 
-至少准备一首：
+固定使用一首：
 
 ```text
 MP3
@@ -41,13 +41,7 @@ MP3
 Stereo
 ```
 
-建议再增加：
-
-- 320 kbps / 48 kHz
-- VBR MP3
-- 一首左右声道差异明显的音乐，用于验证 Downmix
-
-测试文件路径固定，三个 Backend 使用同一文件。
+P0 Backend 选型只使用这一首固定文件。48 kHz、VBR 和额外版权音乐不再作为本阶段测试矩阵；未来遇到真实兼容问题时再按需验证。
 
 P0-01 固定路径：
 
@@ -61,7 +55,7 @@ P0-01 固定路径：
 B:\PlatformIO\penv\Scripts\python.exe tools\inspect_mp3.py D:\Music\ADVWalkmanBenchmark\benchmark.mp3
 ```
 
-将工具输出的大小、SHA-256、bitrate、sample rate 和 channel mode 记录到下表。测试文件由用户自有 M4A 转码生成，原始文件保留在 SD 卡，不进入 Git。
+将工具输出的大小、SHA-256、bitrate、sample rate 和 channel mode 记录到下表。测试文件来自用户自有音乐，原始 M4A 已由用户从 SD 删除，项目不依赖它。
 
 | Fixture Field | Value |
 |---|---|
@@ -184,21 +178,19 @@ Mono = (Left + Right) / 2
 
 | 指标 | A M5.Speaker | B Direct I2S | C BackgroundAudio |
 |---|---|---|---|
-| Build | PASS — baseline | PASS — placeholder | PASS — placeholder |
-| Boot | PASS — Launcher install | TBD | TBD |
+| Build | PASS — actual backend | PASS — actual backend | PASS — actual backend |
+| Boot | PASS — P0-01 baseline | DEVICE TEST | DEVICE TEST |
 | 320k / 44.1k 播放 | PASS | TBD | TBD |
-| 320k / 48k 播放 | TBD | TBD | TBD |
-| VBR | TBD | TBD | TBD |
 | 30 min 连续播放 | TBD | TBD | TBD |
 | 2 h 连续播放 | TBD | TBD | TBD |
 | Free Heap | 286,044 bytes（约 40–45 s） | TBD | TBD |
 | Minimum Heap | 285,764 bytes | TBD | TBD |
 | Heap 是否持续下降 | TBD | TBD | TBD |
-| Underrun / Dropout | Counter `NA`; user reported normal output | TBD | TBD |
+| Underrun / Dropout | Hardware counter `NA` | Hardware counter `NA` | Decoder / output counters available; runtime TBD |
 | 高频 UI 刷新 | TBD | TBD | TBD |
 | 播放中浏览 SD | TBD | TBD | TBD |
 | Pause / Resume 爆音 | TBD | TBD | TBD |
-| 切歌 | TBD | TBD | TBD |
+| Restart / flush / reopen | TBD | TBD | TBD |
 | Seek | TBD | TBD | TBD |
 | Sample rate 切换 | TBD | TBD | TBD |
 | 最大干净音量 | TBD | TBD | TBD |
@@ -207,7 +199,7 @@ Mono = (Left + Right) / 2
 | 实现复杂度 | TBD | TBD | TBD |
 | 维护成本 | TBD | TBD | TBD |
 
-### P0-01 Build Record
+### P0-01 Historical Build Record
 
 验证日期：2026-08-24
 
@@ -223,14 +215,33 @@ pio run -e bench-a -e bench-b -e bench-c
 
 三个环境均使用 Espressif32 6.7.0 / Arduino-ESP32 2.0.16。只有 `bench-a` 引入 ESP8266Audio 1.9.7；B/C 未迁移工具链，也不编译 A 的音频源文件。
 
-### P0-01 Runtime Contract
+### P0-02～P0-04 Current Build Record
+
+验证日期：2026-08-25
+
+```powershell
+.\tools\build_p0_backends.ps1
+```
+
+| Environment | Backend | Toolchain / Framework | Firmware Size | SHA-256 |
+|---|---|---|---:|---|
+| `bench-a` | M5.Speaker | Espressif32 6.7.0 / Arduino-ESP32 2.0.16 / ESP8266Audio 1.9.7 | 644,304 bytes | `325dc81e145084e82916e35a9952cac3d4da2b16af1a9911d0e7421c641069f4` |
+| `bench-b` | Direct I2S | Espressif32 6.7.0 / Arduino-ESP32 2.0.16 / ESP8266Audio 1.9.7 | 636,448 bytes | `d857713f9eb09c43b44ff5890726e93c53b9a0bbf698bef55047ba43ade7b250` |
+| `bench-c` | BackgroundAudio | pioarduino 55.03.38-1 / Arduino-ESP32 3.3.8 / ESP-IDF 5.5.4 / BackgroundAudio 1.4.4 | 693,856 bytes | `ab6681c570a1090ca97f88c74ff3644c488fd4eb5351a1e640951fdc7e490400` |
+
+三个生成物均通过 1,310,720 bytes 的 Launcher 保守尺寸检查。A/B 使用 `B:\PlatformIO\packages` 的稳定 packages；C 使用 `B:\PlatformIO\isolated\adv-walkman-c\packages`，未替换 A/B 的 framework。
+
+同日已将三个生成物复制到 microSD 的 `/firmware/`，复制后逐项重新计算 SHA-256，均与上表一致。旧的 `/firmware/ADV-Walkman-P0-A.bin` 保留未动。
+
+### Current Runtime Contract
 
 - 串口：115200 baud。
 - 自动尝试播放固定 MP3；SD 或文件缺失时进入 `ERROR`，不反复重启。
-- 每 5 秒输出 `backend`、`state`、`sample_rate`、`free_heap`、`minimum_heap`、`elapsed_ms`、`decode_calls`、`backpressure`、`underrun` 和 `error`。
-- 当前 M5.Speaker 路径无法可靠读取真实 DMA underrun，因此输出 `underrun=NA`，不会伪报 0。
-- 支持串口命令：`play`、`pause`、`resume`、`stop`、`status`。
-- 屏幕仅显示 Backend、状态和错误，不属于正式播放器 UI。
+- 每 5 秒输出 `backend`、`state`、`sample_rate`、`free_heap`、`minimum_heap`、`elapsed_ms`、`decode_calls`、`backpressure`、`bytes_read`、`track_loops`、`decoder_errors`、`decoder_underflows`、`output_underflows`、`service_max_us` 和错误状态。
+- 不可取得的计数统一输出 `NA`，不伪报为 0。
+- 支持串口命令：`play`、`pause`、`resume`、`stop`、`status`、`restart`、`seek <seconds>`、`loop on|off`、`stress ui on|off`、`stress sd on|off`。
+- UI Stress 固定约 30 Hz；SD Stress 使用第二个只读句柄循环读取同一 benchmark MP3，不创建文件。
+- 屏幕仅显示 Backend、状态、循环次数和错误，不属于正式播放器 UI。
 
 ### P0-01 Launcher Device Test Result
 
@@ -242,6 +253,13 @@ pio run -e bench-a -e bench-b -e bench-c
 - 两次周期记录：`free_heap=286044`、`minimum_heap=285764`；约 40–45 秒时保持一致。
 - `underrun=NA` 符合当前 API 限制；`backpressure` 已单独记录，未伪报 underrun 为 0。
 - B/C 仍只是占位；本结果只完成 P0-01，不代表 P0 Backend 最终选型完成。
+
+### P0-02～P0-06 落地方式
+
+- `bench-a`、`bench-b`、`bench-c` 是三个隔离的 Launcher App，不在运行时动态切换底层驱动。
+- 三个 App 使用相同 Fixture、串口命令、UI/SD 压力负载与指标格式。
+- Restart / Seek 使用同一 MP3 验证文件、Decoder、Buffer 与 I2S 生命周期，不复制音乐来伪造“切歌库”。
+- 自动构建通过后统一复制到 SD `/firmware/`；真机依次安装，每个有效候选完成 30 分钟测试，胜者完成 2 小时测试。
 
 ---
 
@@ -301,9 +319,10 @@ state
 Play
 Pause
 Resume
-Next
-Previous
+Restart
 Seek
+Loop on
+Loop off
 ```
 
 观察：

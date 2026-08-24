@@ -207,6 +207,14 @@ https://github.com/earlephilhower/BackgroundAudio
 - 与当前稳定 Cardputer 工具链存在环境差异
 - 当前项目 V1 只需要 MP3，不应因为“架构更现代”就提前迁移整个工具链
 
+### P0 固定实验版本
+
+- BackgroundAudio 1.4.4
+- pioarduino `55.03.38-1`
+- Arduino-ESP32 3.3.8
+- ESP-IDF 5.5.4
+- Candidate C packages 使用 `B:\PlatformIO\isolated\adv-walkman-c\packages`，不替换 A/B 的 Arduino-ESP32 2.0.16 packages
+
 ### 我们的结论
 
 作为 P0 Benchmark 的第三候选。

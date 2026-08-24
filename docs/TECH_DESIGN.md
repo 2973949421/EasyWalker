@@ -296,6 +296,16 @@ getStats()
 
 实际接口以最终代码最简单可用为准，不为了“完美抽象”增加复杂度。
 
+P0 比较采用三个隔离的 M5Launcher App，而不是在同一固件中同时装载三套驱动：
+
+```text
+ADV-Walkman-Bench-A.bin
+ADV-Walkman-Bench-B.bin
+ADV-Walkman-Bench-C.bin
+```
+
+三者共用固定 MP3、串口协议、压力负载和统计字段。Candidate C 使用独立 IDF5 / pioarduino environment；其 packages 固定隔离在 `B:\PlatformIO\isolated\adv-walkman-c\packages`，通过 `tools/build_p0_backends.ps1` 与 A/B 分步构建，避免 PlatformIO 因同名 framework package 来回替换版本。这只是 P0 技术实验边界，不代表 V1 主线已经迁移工具链。
+
 ### V1 候选 Backend
 
 #### A. M5.Speaker Backend

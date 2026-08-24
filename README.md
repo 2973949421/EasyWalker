@@ -83,6 +83,22 @@ V1 不以以下内容为目标：
 
 详见 [`docs/AUDIO_BENCHMARK.md`](docs/AUDIO_BENCHMARK.md)。
 
+### P0 三候选构建
+
+使用仓库提供的统一脚本：
+
+```powershell
+.\tools\build_p0_backends.ps1
+```
+
+脚本先在稳定的 Arduino-ESP32 2.0.16 环境构建 A/B，再把 C 的 Arduino-ESP32 3.3.8 / IDF5 packages 隔离到：
+
+```text
+B:\PlatformIO\isolated\adv-walkman-c\packages
+```
+
+共享 PlatformIO Core 仍位于 `B:\PlatformIO`。三个 app binary 生成后分别以 `ADV-Walkman-Bench-A.bin`、`ADV-Walkman-Bench-B.bin`、`ADV-Walkman-Bench-C.bin` 放入 microSD `/firmware/`，由 M5Launcher 安装；不使用普通 PlatformIO upload 覆盖 Launcher。
+
 ## 6. 文档入口
 
 | 文档 | 作用 |
