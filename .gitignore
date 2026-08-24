@@ -1,4 +1,5 @@
 .pio/
+artifacts/
 .vscode/
 .idea/
 
@@ -17,4 +18,3 @@ __pycache__/
 # Platform noise.
 .DS_Store
 Thumbs.db
-

@@ -27,7 +27,12 @@ struct BenchmarkStats {
     uint32_t elapsedMs;
     uint32_t decodeServiceCalls;
     uint32_t backpressureEvents;
-    int32_t underruns;
+    uint32_t bytesRead;
+    uint32_t trackLoops;
+    int32_t decoderErrors;
+    int32_t decoderUnderflows;
+    int32_t outputUnderflows;
+    uint32_t serviceMaxUs;
     const char* fileSha256;
     const char* error;
 };
@@ -40,6 +45,9 @@ class BenchmarkBackend {
     virtual bool pause() = 0;
     virtual bool resume() = 0;
     virtual void stop() = 0;
+    virtual bool restart() = 0;
+    virtual bool seekSeconds(uint32_t seconds) = 0;
+    virtual void setLoop(bool enabled) = 0;
     virtual BenchmarkStats stats() const = 0;
     virtual const char* name() const = 0;
 };

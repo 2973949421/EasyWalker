@@ -1,4 +1,4 @@
-#include "CandidateABackend.h"
+#include "CandidateBBackend.h"
 
 #include <SD.h>
 
@@ -8,77 +8,47 @@
 
 namespace adv_walkman {
 
-MonoM5SpeakerOutput::MonoM5SpeakerOutput(m5::Speaker_Class* speaker)
-    : speaker_(speaker) {}
-
-bool MonoM5SpeakerOutput::begin() {
-    bufferIndex_ = 0;
-    activeBuffer_ = 0;
-    sampleRate_ = 0;
-    return speaker_ != nullptr;
+MonoDirectI2SOutput::MonoDirectI2SOutput()
+    : AudioOutputI2S(1, AudioOutputI2S::EXTERNAL_I2S, 8,
+                     AudioOutputI2S::APLL_DISABLE) {
+    SetPinout(41, 43, 42);
+    SetGain(0.25f);
 }
 
-bool MonoM5SpeakerOutput::SetRate(int hz) {
+bool MonoDirectI2SOutput::SetRate(int hz) {
     if (hz <= 0) {
         return false;
     }
     sampleRate_ = static_cast<uint32_t>(hz);
-    return AudioOutput::SetRate(hz);
+    return AudioOutputI2S::SetRate(hz);
 }
 
-bool MonoM5SpeakerOutput::queueBuffer() {
-    if (bufferIndex_ == 0 || speaker_ == nullptr) {
-        return true;
-    }
-    if (!speaker_->playRaw(buffers_[activeBuffer_], bufferIndex_, sampleRate_,
-                           false, 1, kVirtualChannel)) {
+bool MonoDirectI2SOutput::ConsumeSample(int16_t sample[2]) {
+    const int16_t mono = downmixStereoToMono(sample[LEFTCHANNEL],
+                                             sample[RIGHTCHANNEL]);
+    int16_t monoPair[2] = {mono, mono};
+    const bool accepted = AudioOutputI2S::ConsumeSample(monoPair);
+    if (!accepted) {
         ++backpressureEvents_;
-        return false;
     }
-    activeBuffer_ = (activeBuffer_ + 1) % kBufferCount;
-    bufferIndex_ = 0;
-    return true;
+    return accepted;
 }
 
-bool MonoM5SpeakerOutput::ConsumeSample(int16_t sample[2]) {
-    if (bufferIndex_ >= kFramesPerBuffer && !queueBuffer()) {
-        return false;
-    }
-
-    MakeSampleStereo16(sample);
-    buffers_[activeBuffer_][bufferIndex_++] = downmixStereoToMono(
-        sample[LEFTCHANNEL], sample[RIGHTCHANNEL]);
-    return true;
-}
-
-void MonoM5SpeakerOutput::flush() {
-    queueBuffer();
-}
-
-bool MonoM5SpeakerOutput::stop() {
-    flush();
-    if (speaker_ != nullptr) {
-        speaker_->stop(kVirtualChannel);
-    }
-    bufferIndex_ = 0;
-    return true;
-}
-
-void MonoM5SpeakerOutput::resetStats() {
+void MonoDirectI2SOutput::resetStats() {
     backpressureEvents_ = 0;
 }
 
-uint32_t MonoM5SpeakerOutput::sampleRate() const {
+uint32_t MonoDirectI2SOutput::sampleRate() const {
     return sampleRate_;
 }
 
-uint32_t MonoM5SpeakerOutput::backpressureEvents() const {
+uint32_t MonoDirectI2SOutput::backpressureEvents() const {
     return backpressureEvents_;
 }
 
-CandidateABackend::CandidateABackend() : output_(&M5.Speaker) {}
+CandidateBBackend::CandidateBBackend() = default;
 
-bool CandidateABackend::begin(const char* path) {
+bool CandidateBBackend::begin(const char* path) {
     closePlayback();
     state_ = BackendState::BOOT;
     error_ = "none";
@@ -102,16 +72,15 @@ bool CandidateABackend::begin(const char* path) {
     if (!computeBenchmarkFileSha256(path_, fileSha256_)) {
         return fail("sha256_failed");
     }
-    if (!M5.Speaker.isRunning() && !M5.Speaker.begin()) {
-        return fail("speaker_begin_failed");
+    if (!codec_.begin()) {
+        return fail("es8311_init_failed");
     }
-    M5.Speaker.setVolume(kInitialVolume);
 
     startedAtMs_ = millis();
     return startFile(0, false);
 }
 
-bool CandidateABackend::startFile(uint32_t byteOffset, bool preservePause) {
+bool CandidateBBackend::startFile(uint32_t byteOffset, bool preservePause) {
     const bool wasPaused = preservePause && state_ == BackendState::PAUSED;
     closePlayback();
     if (!file_.open(path_)) {
@@ -131,7 +100,7 @@ bool CandidateABackend::startFile(uint32_t byteOffset, bool preservePause) {
     return true;
 }
 
-void CandidateABackend::updateBytesRead() {
+void CandidateBBackend::updateBytesRead() {
     if (!file_.isOpen()) {
         return;
     }
@@ -142,7 +111,7 @@ void CandidateABackend::updateBytesRead() {
     lastFilePosition_ = position;
 }
 
-void CandidateABackend::service() {
+void CandidateBBackend::service() {
     if (state_ != BackendState::PLAYING) {
         return;
     }
@@ -166,7 +135,7 @@ void CandidateABackend::service() {
     }
 }
 
-bool CandidateABackend::pause() {
+bool CandidateBBackend::pause() {
     if (state_ != BackendState::PLAYING) {
         return false;
     }
@@ -174,7 +143,7 @@ bool CandidateABackend::pause() {
     return true;
 }
 
-bool CandidateABackend::resume() {
+bool CandidateBBackend::resume() {
     if (state_ != BackendState::PAUSED) {
         return false;
     }
@@ -182,18 +151,19 @@ bool CandidateABackend::resume() {
     return true;
 }
 
-void CandidateABackend::stop() {
+void CandidateBBackend::stop() {
     updateBytesRead();
     closePlayback();
+    codec_.end();
     state_ = BackendState::STOPPED;
     error_ = "none";
 }
 
-bool CandidateABackend::restart() {
+bool CandidateBBackend::restart() {
     return startFile(0, state_ == BackendState::PAUSED);
 }
 
-bool CandidateABackend::seekSeconds(uint32_t seconds) {
+bool CandidateBBackend::seekSeconds(uint32_t seconds) {
     if (!file_.isOpen()) {
         return false;
     }
@@ -202,11 +172,11 @@ bool CandidateABackend::seekSeconds(uint32_t seconds) {
     return startFile(offset, state_ == BackendState::PAUSED);
 }
 
-void CandidateABackend::setLoop(bool enabled) {
+void CandidateBBackend::setLoop(bool enabled) {
     loopEnabled_ = enabled;
 }
 
-void CandidateABackend::closePlayback() {
+void CandidateBBackend::closePlayback() {
     if (decoder_.isRunning()) {
         decoder_.stop();
     }
@@ -216,16 +186,17 @@ void CandidateABackend::closePlayback() {
     }
 }
 
-bool CandidateABackend::fail(const char* error) {
+bool CandidateBBackend::fail(const char* error) {
     closePlayback();
+    codec_.end();
     error_ = error;
     state_ = BackendState::ERROR;
     return false;
 }
 
-BenchmarkStats CandidateABackend::stats() const {
+BenchmarkStats CandidateBBackend::stats() const {
     return {
-        BackendId::A_M5Speaker,
+        BackendId::B_DirectI2S,
         state_,
         output_.sampleRate(),
         startedAtMs_ == 0 ? 0 : millis() - startedAtMs_,
@@ -242,8 +213,8 @@ BenchmarkStats CandidateABackend::stats() const {
     };
 }
 
-const char* CandidateABackend::name() const {
-    return "A_M5SPEAKER";
+const char* CandidateBBackend::name() const {
+    return "B_DIRECT_I2S";
 }
 
 }  // namespace adv_walkman
