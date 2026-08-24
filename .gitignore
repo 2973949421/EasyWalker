@@ -1,0 +1,20 @@
+.pio/
+.vscode/
+.idea/
+
+# Local benchmark inputs and machine-specific configuration.
+benchmark.local.*
+test-data/local/
+
+# Local serial captures and generated logs.
+logs/*.log
+logs/*.txt
+
+# Python tooling caches.
+__pycache__/
+*.py[cod]
+
+# Platform noise.
+.DS_Store
+Thumbs.db
+
