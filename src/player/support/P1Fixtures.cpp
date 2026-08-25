@@ -12,9 +12,9 @@ const char* const kValidPaths[] = {
     "/Music/ADVWalkmanTest/cbr320-48000.mp3",
 };
 const char* const kValidHashes[] = {
-    "321c2e32214560c5328fa9d08d1961a6113ca02647bdf8116ae9536da443c8f9",
-    "d5372e555b1e3fe0aa8d6c1c278ce0fd3c43a024a02390671f8a5dcadc87b4bf",
-    "a83a3725cf1bad40decb22a4da2a4854d468700d219cd3eda2221573da3ab3a7",
+    "4d8743d2c6f65eba019ca0163f8a7c6bbc176be803297db524ec5454cf39525a",
+    "565a7068e4b2e2997a70a43f5615a45005825eae694a114f9277d905d7ff8478",
+    "691b7c6f9ec52cd3ee0fd6c2188650e276818799ddba51f7479d88230b159afc",
 };
 constexpr uint32_t kValidSampleRates[] = {44100, 44100, 48000};
 
@@ -25,7 +25,7 @@ const char* const kCorrupt[] = {
     "/Music/ADVWalkmanTest/corrupt-truncated.mp3",
 };
 constexpr char kCorruptHash[] =
-    "f3e164967fad1e502ba7979ae44fa626189c257b4cb58c6027fb6b1f89c98c7b";
+    "8d272c7e0c90a66aaa6b004976f0e894c3b0e19b67f2ead5d94bfc025dbbbbd9";
 const char* const kMissing[] = {
     "/Music/ADVWalkmanTest/missing-by-design.mp3",
 };

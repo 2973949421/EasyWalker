@@ -132,6 +132,7 @@ void P1DeviceTestRunner::startGateA() {
     minimumHeap_ = initialHeap_;
     runStartedAtMs_ = millis();
     fixtureIndex_ = 0;
+    failureSnapshotValid_ = false;
     std::strcpy(failure_, "none");
     if (!verifyAllFixtureHashes()) {
         fail("fixture_sha256_mismatch");
@@ -155,6 +156,7 @@ void P1DeviceTestRunner::startGateB() {
     initialHeap_ = ESP.getFreeHeap();
     minimumHeap_ = initialHeap_;
     runStartedAtMs_ = millis();
+    failureSnapshotValid_ = false;
     std::strcpy(failure_, "none");
     if (!verifyAllFixtureHashes()) {
         fail("fixture_sha256_mismatch");
@@ -725,6 +727,8 @@ void P1DeviceTestRunner::fail(const char* reason) {
     std::strncpy(failure_, reason == nullptr ? "unknown" : reason,
                  sizeof(failure_) - 1);
     failure_[sizeof(failure_) - 1] = '\0';
+    failureSnapshot_ = runtime_->snapshot();
+    failureSnapshotValid_ = true;
     runtime_->stop();
 #if P1_DEVICE_GATE == 2
     writeGateLog(phase_ == Phase::GateBResumeSilence ? kP104Log : kP103Log,
@@ -755,11 +759,12 @@ void P1DeviceTestRunner::passGateB() {
 }
 
 void P1DeviceTestRunner::render(bool force) {
-    const uint32_t now = millis();
-    if (!force && now - lastRenderAtMs_ < 250) {
+    // A full-screen clear is intentionally limited to phase transitions.
+    // Repainting it four times a second made the small TFT visibly flash and
+    // added display load unrelated to the Player Core gate.
+    if (!force) {
         return;
     }
-    lastRenderAtMs_ = now;
     auto& display = M5Cardputer.Display;
     display.fillScreen(BLACK);
     display.setCursor(6, 6);
@@ -772,7 +777,10 @@ void P1DeviceTestRunner::render(bool force) {
     display.setTextColor(WHITE, BLACK);
     display.printf("%s\n", phaseName());
     if (runtime_ != nullptr) {
-        const PlayerSnapshot snapshot = runtime_->snapshot();
+        const PlayerSnapshot snapshot =
+            phase_ == Phase::Failed && failureSnapshotValid_
+                ? failureSnapshot_
+                : runtime_->snapshot();
         display.printf("State %s Track %u/%u\n", playerStateName(snapshot.state),
                        static_cast<unsigned>(snapshot.currentIndex + 1),
                        static_cast<unsigned>(snapshot.queueCount));
@@ -805,9 +813,12 @@ bool P1DeviceTestRunner::writeGateLog(const char* path, const char* status,
     if (!log) {
         return false;
     }
-    const PlayerSnapshot snapshot = runtime_ == nullptr
-                                        ? PlayerSnapshot{}
-                                        : runtime_->snapshot();
+    const PlayerSnapshot snapshot =
+        failureSnapshotValid_ && status != nullptr &&
+                std::strcmp(status, "FAIL") == 0
+            ? failureSnapshot_
+            : (runtime_ == nullptr ? PlayerSnapshot{}
+                                   : runtime_->snapshot());
     log.printf("status=%s\n", status);
     log.printf("version=%s\n", ADV_WALKMAN_VERSION);
     log.printf("gate=%d\n", P1_DEVICE_GATE);
@@ -816,10 +827,18 @@ bool P1DeviceTestRunner::writeGateLog(const char* path, const char* status,
     log.printf("elapsed_ms=%lu\n",
                static_cast<unsigned long>(millis() - runStartedAtMs_));
     log.printf("state=%s\n", playerStateName(snapshot.state));
+    log.printf("player_error=%s\n", playerErrorName(snapshot.error));
+    log.printf("audio_error=%s\n", audioErrorName(snapshot.audioError));
     log.printf("position_ms=%lu\n",
                static_cast<unsigned long>(snapshot.positionMs));
+    log.printf("duration_ms=%lu\n",
+               static_cast<unsigned long>(snapshot.durationMs));
+    log.printf("source_offset=%lu\n",
+               static_cast<unsigned long>(snapshot.sourceByteOffset));
     log.printf("sample_rate=%lu\n",
                static_cast<unsigned long>(snapshot.sampleRateHz));
+    log.printf("bitrate_kbps=%u\n",
+               static_cast<unsigned>(snapshot.bitrateKbps));
     log.printf("track_ended_events=%lu\n",
                static_cast<unsigned long>(snapshot.trackEndedEvents));
     log.printf("audio_error_events=%lu\n",

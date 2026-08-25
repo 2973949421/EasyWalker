@@ -45,7 +45,7 @@ bool PlaybackMp3Decoder::loop() {
         // normal input-buffer refill therefore leaves stale BUFLEN behind.
         // Reaching our cooperative yield proves this loop invocation remains
         // healthy; clear the stale code so only a BUFLEN from the terminal
-        // invocation is classified as a truncated final frame.
+        // invocation is available for terminal classification.
         stream->error = MAD_ERROR_NONE;
     }
     return runningNow;
@@ -189,11 +189,13 @@ void Mp3PlaybackEngine::servicePlaying() {
         return;
     }
 
-    // Healthy service calls clear libmad's otherwise-stale error code. Any
-    // error surviving specifically on the terminal invocation is therefore a
-    // decode/truncation failure, not a natural track end.
+    // ESP8266Audio/libmad leaves MAD_ERROR_BUFLEN at an ordinary physical EOF.
+    // Mp3Probe rejects a stream whose Xing/Info/VBRI byte claim exceeds the
+    // available audio payload, so BUFLEN is expected here for a complete file.
+    // Other terminal errors still represent a decoder failure.
     const int terminalError = decoder_.streamErrorCode();
-    if (terminalError != -1 && terminalError != MAD_ERROR_NONE) {
+    if (terminalError != -1 && terminalError != MAD_ERROR_NONE &&
+        terminalError != MAD_ERROR_BUFLEN) {
         fail(AudioError::DecoderFailed);
         return;
     }

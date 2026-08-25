@@ -62,7 +62,6 @@ class P1DeviceTestRunner final {
     Phase phase_ = Phase::Idle;
     uint32_t phaseStartedAtMs_ = 0;
     uint32_t runStartedAtMs_ = 0;
-    uint32_t lastRenderAtMs_ = 0;
     uint32_t initialHeap_ = 0;
     uint32_t minimumHeap_ = 0;
     uint32_t maximumBackpressure_ = 0;
@@ -74,10 +73,12 @@ class P1DeviceTestRunner final {
     bool observedExpectedRate_ = false;
     bool restartResume_ = false;
     bool p101Passed_ = false;
+    bool failureSnapshotValid_ = false;
     bool fixtureHashesVerified_ = false;
     size_t fixtureHashFailureIndex_ = 0;
     char fixtureHashObserved_[65] = "none";
     char failure_[96] = "none";
+    PlayerSnapshot failureSnapshot_{};
 };
 
 }  // namespace player

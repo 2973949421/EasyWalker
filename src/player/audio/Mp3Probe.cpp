@@ -469,6 +469,16 @@ bool Mp3Probe::probe(fs::FS& filesystem, const char* path, Mp3Info& info,
     const bool hasXing =
         parseXing(file, info.firstFrameOffset, first, info, xingSaysVbr);
     const bool hasVbri = parseVbri(file, info.firstFrameOffset, first, info);
+    const uint32_t availableAudioBytes =
+        info.audioEndOffset - info.firstFrameOffset;
+    // A truncated file can retain the original Xing/Info/VBRI header. Reject
+    // it before playback when that header promises more audio than exists.
+    // This lets the decoder treat libmad's normal terminal BUFLEN as EOF
+    // without turning our deliberately truncated fixture into TrackEnded.
+    if (info.indexedAudioBytes > availableAudioBytes) {
+        error = Mp3ProbeError::Unsupported;
+        return false;
+    }
     info.variableBitrate = xingSaysVbr || hasVbri || bitrateChanged;
 
     if (info.totalFrames > 0) {

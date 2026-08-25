@@ -104,7 +104,9 @@ def generate_fixture(ffmpeg: Path, output: Path, spec: dict[str, object]) -> Non
         "-i",
         f"sine=frequency={spec['right_hz']}:duration={duration}:sample_rate={rate}",
         "-filter_complex",
-        "[0:a]volume=0.08[l];[1:a]volume=0.08[r];"
+        # FFmpeg's sine source is already about -18 dBFS. 0.8 keeps the test
+        # tone conservative while remaining audible through volume=128/255.
+        "[0:a]volume=0.8[l];[1:a]volume=0.8[r];"
         "[l][r]join=inputs=2:channel_layout=stereo[a]",
         "-map",
         "[a]",
