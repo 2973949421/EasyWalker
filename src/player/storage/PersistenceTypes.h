@@ -1,0 +1,57 @@
+#pragma once
+
+#include <Arduino.h>
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include "../core/CoreTypes.h"
+
+namespace adv_walkman {
+namespace player {
+
+constexpr size_t kPersistedQueueMaxTracks = kMaxQueueTracks;
+constexpr size_t kPersistedPathMaxBytes = kMaxTrackPathBytes;
+constexpr size_t kPersistedQueueMaxPayloadBytes = 256 * 1024;
+constexpr size_t kPersistedHistoryMaxTracks = kPreviousHistoryCapacity;
+constexpr uint16_t kPersistedInvalidTrackIndex = 0xFFFF;
+
+enum class PersistenceResult : uint8_t {
+    Ok,
+    Pending,
+    NotFound,
+    Busy,
+    InvalidArgument,
+    UnsupportedVersion,
+    Corrupt,
+    IoError,
+};
+
+enum class PersistenceRecordKind : uint8_t {
+    None,
+    Queue,
+    Session,
+};
+
+// Storage intentionally uses a byte for RepeatMode so the persistence layer
+// does not depend on PlayerController. Values are Off=0, All=1, One=2.
+struct PersistedSession {
+    uint32_t queueGeneration = 0;
+    uint16_t currentIndex = kPersistedInvalidTrackIndex;
+    uint32_t positionMs = 0;
+    uint32_t sourceOffset = 0;
+    uint8_t repeatMode = 0;
+    bool shuffleEnabled = false;
+
+    uint16_t orderCount = 0;
+    uint16_t orderCursor = 0;
+    uint16_t order[kPersistedQueueMaxTracks] = {};
+
+    uint8_t historyCount = 0;
+    uint16_t history[kPersistedHistoryMaxTracks] = {};
+};
+
+const char* persistenceResultName(PersistenceResult result);
+
+}  // namespace player
+}  // namespace adv_walkman

@@ -54,6 +54,7 @@ def parse_frame_header(header: bytes) -> dict[str, object] | None:
     layer_bits = (value >> 17) & 0x3
     bitrate_index = (value >> 12) & 0xF
     sample_rate_index = (value >> 10) & 0x3
+    padding = (value >> 9) & 0x1
     channel_mode_index = (value >> 6) & 0x3
 
     if version_bits == 1 or layer_bits != 1:
@@ -74,36 +75,89 @@ def parse_frame_header(header: bytes) -> dict[str, object] | None:
         table = "mpeg2"
         divisor = 4
 
+    bitrate_kbps = BITRATES_KBPS[table][bitrate_index]
+    sample_rate_hz = SAMPLE_RATES_HZ[sample_rate_index] // divisor
+    coefficient = 144_000 if version_bits == 3 else 72_000
+    frame_length = coefficient * bitrate_kbps // sample_rate_hz + padding
+
     return {
         "mpeg_version": version,
         "layer": "Layer III",
-        "bitrate_kbps": BITRATES_KBPS[table][bitrate_index],
-        "sample_rate_hz": SAMPLE_RATES_HZ[sample_rate_index] // divisor,
+        "bitrate_kbps": bitrate_kbps,
+        "sample_rate_hz": sample_rate_hz,
         "channel_mode": CHANNEL_MODES[channel_mode_index],
+        "frame_length_bytes": frame_length,
+        "samples_per_frame": 1_152 if version_bits == 3 else 576,
     }
+
+
+def detect_seek_header(data: bytes, frame_offset: int, frame_length: int) -> tuple[str, int | None]:
+    """Find the standard first-frame VBR seek marker without decoding audio."""
+    frame_end = min(len(data), frame_offset + frame_length)
+    frame = data[frame_offset:frame_end]
+    matches: list[tuple[int, str]] = []
+    for marker in (b"Xing", b"Info", b"VBRI"):
+        relative = frame.find(marker)
+        if relative >= 0:
+            matches.append((relative, marker.decode("ascii")))
+    if not matches:
+        return "none", None
+    relative, name = min(matches)
+    return name, frame_offset + relative
 
 
 def inspect(path: Path) -> dict[str, object]:
     if not path.is_file():
         raise FileNotFoundError(path)
 
-    with path.open("rb") as stream:
-        prefix = stream.read(10)
-        offset = id3v2_size(prefix)
-        stream.seek(offset)
-        scan = stream.read(1024 * 1024)
+    data = path.read_bytes()
+    offset = id3v2_size(data[:10])
+    first_frame: dict[str, object] | None = None
+    first_frame_offset = 0
+    bitrates: set[int] = set()
+    sample_rates: set[int] = set()
+    frame_count = 0
+    duration_seconds = 0.0
 
-    for index in range(max(0, len(scan) - 3)):
-        frame = parse_frame_header(scan[index : index + 4])
-        if frame is not None:
-            return {
-                "path": str(path.resolve()),
-                "size_bytes": path.stat().st_size,
-                "sha256": sha256_file(path),
-                "first_frame_offset": offset + index,
-                **frame,
-            }
-    raise ValueError("no valid MPEG Layer III frame found in the first 1 MiB")
+    cursor = offset
+    while cursor + 4 <= len(data):
+        frame = parse_frame_header(data[cursor : cursor + 4])
+        if frame is None:
+            cursor += 1
+            continue
+        frame_length = int(frame["frame_length_bytes"])
+        if frame_length < 4 or cursor + frame_length > len(data):
+            cursor += 1
+            continue
+        if first_frame is None:
+            first_frame = frame
+            first_frame_offset = cursor
+        bitrates.add(int(frame["bitrate_kbps"]))
+        sample_rate = int(frame["sample_rate_hz"])
+        sample_rates.add(sample_rate)
+        duration_seconds += int(frame["samples_per_frame"]) / sample_rate
+        frame_count += 1
+        cursor += frame_length
+
+    if first_frame is not None:
+        seek_header, seek_header_offset = detect_seek_header(
+            data, first_frame_offset, int(first_frame["frame_length_bytes"])
+        )
+        return {
+            "path": str(path.resolve()),
+            "size_bytes": path.stat().st_size,
+            "sha256": sha256_file(path),
+            "first_frame_offset": first_frame_offset,
+            **first_frame,
+            "frame_count": frame_count,
+            "bitrate_mode": "vbr" if len(bitrates) > 1 else "cbr",
+            "bitrates_kbps": sorted(bitrates),
+            "sample_rates_hz": sorted(sample_rates),
+            "duration_seconds_from_frames": round(duration_seconds, 6),
+            "seek_header": seek_header,
+            "seek_header_offset": seek_header_offset,
+        }
+    raise ValueError("no valid MPEG Layer III frame found")
 
 
 def self_test() -> None:
@@ -113,6 +167,9 @@ def self_test() -> None:
     assert frame["bitrate_kbps"] == 320
     assert frame["sample_rate_hz"] == 44_100
     assert frame["channel_mode"] == "stereo"
+    assert frame["frame_length_bytes"] == 1_044
+    sample = bytes.fromhex("FF FB E0 00") + (b"\x00" * 32) + b"Xing"
+    assert detect_seek_header(sample, 0, len(sample)) == ("Xing", 36)
 
 
 def main() -> int:
