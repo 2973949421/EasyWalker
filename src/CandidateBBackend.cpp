@@ -12,9 +12,9 @@ MonoDirectI2SOutput::MonoDirectI2SOutput()
     : AudioOutputI2S(1, AudioOutputI2S::EXTERNAL_I2S, 8,
                      AudioOutputI2S::APLL_DISABLE) {
     SetPinout(41, 43, 42);
-    // Match Candidate A's M5.Speaker volume=64 quadratic curve:
-    // (64 / 255)^2 is approximately 0.0625 linear amplitude.
-    SetGain(0.0625f);
+    // Match Candidate A's M5.Speaker volume=128 quadratic curve:
+    // (128 / 255)^2 is approximately 0.25 linear amplitude.
+    SetGain(0.25f);
 }
 
 bool MonoDirectI2SOutput::SetRate(int hz) {

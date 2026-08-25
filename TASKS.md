@@ -136,7 +136,7 @@ AC：
 
 - 只使用 `/Music/ADVWalkmanBenchmark/benchmark.mp3`，不再派生 M4A、48 kHz 或 VBR 测试矩阵。
 - A/B 分别生成独立 M5Launcher App；耳机线控保持最大，完整原曲各听一次，听完立即记录印象。
-- A 保持 M5.Speaker `64/255`；B 使用约等效的线性增益 `0.0625`。
+- 等响度基准采用用户已听过的原 B 响度：A 使用 M5.Speaker `128/255`，B 使用线性增益 `0.25`。此前向 A=`64/255` 下调的方案导致两者均不舒适，已放弃。
 - C 保留为 Deferred 备用，不参与本轮听感和压力测试。
 - “Restart”只验证 Decoder / File / Output 生命周期，不能冒充正式 Player 的 Next / Previous 功能。
 

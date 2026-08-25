@@ -54,7 +54,7 @@ class CandidateABackend final : public BenchmarkBackend {
     const char* name() const override;
 
   private:
-    static constexpr uint8_t kInitialVolume = 64;
+    static constexpr uint8_t kInitialVolume = 128;
     static constexpr size_t kPathCapacity = 128;
 
     bool startFile(uint32_t byteOffset, bool preservePause);

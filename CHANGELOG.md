@@ -74,7 +74,7 @@ Date: 2026-08-24
 - Candidate C packages 独立放在 `B:\PlatformIO\isolated\adv-walkman-c\packages`，避免替换 A/B 的稳定 framework。
 - 三候选已通过自动构建和 Launcher 尺寸检查，状态进入 `DEVICE TEST`；最终 Backend 尚未选择。
 - 根据首轮真机听感将 P0 收敛为 A/B 二选一；C 无明确听感收益且工具链、固件与维护成本最高，转为 `DEFERRED` 备用。
-- A 保持 M5.Speaker `64/255`，B 调整为约等效的 `0.0625` 线性增益；使用完整原曲各听一次，不引入切片。
+- 首次等响度固件将 B 向 A=`64/255` 下调，真机反馈两者均不舒适；改为以用户已听过的原 B 响度为基准，A=`128/255`、B=`0.25`，仍使用完整原曲各听一次。
 - 将人工验收缩短为听感胜者约 3–4 分钟的 UI/SD 联合压力测试；长期稳定性转入 P1 实际使用验证。
 
 ## V0.1.2 — Keymap Freeze

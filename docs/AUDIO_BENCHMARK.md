@@ -201,7 +201,7 @@ Mono = (Left + Right) / 2
 | 实现复杂度 | TBD | TBD | TBD |
 | 维护成本 | TBD | TBD | TBD |
 
-首轮听感使用了不同的 Backend 固定增益，因此只用于将范围收敛到 A/B，不能直接作为最终音质排名。耳机线控在非最大位置存在偏音，后续固定保持最大；A 使用 M5.Speaker `64/255`，B 改用约等效的 `0.0625` 线性增益，再各完整播放原曲一次。
+首轮听感使用了不同的 Backend 固定增益，因此只用于将范围收敛到 A/B，不能直接作为最终音质排名。耳机线控在非最大位置存在偏音，后续固定保持最大。首次等响度尝试将 B 降到 `0.0625`、对齐 A=`64/255`，真机反馈两者均不舒适，立即停止。正式 A/B 比较改为保留用户已听过的原 B=`0.25` 响度，并将 A 提升到 M5.Speaker `128/255`。
 
 ### P0-01 Historical Build Record
 
@@ -237,7 +237,7 @@ pio run -e bench-a -e bench-b -e bench-c
 
 同日已将三个生成物复制到 microSD 的 `/firmware/`，复制后逐项重新计算 SHA-256，均与上表一致。旧的 `/firmware/ADV-Walkman-P0-A.bin` 保留未动。
 
-### A/B Equal-Loudness Build Record
+### A/B Low-Reference Build Record（Rejected）
 
 验证日期：2026-08-25
 
@@ -245,7 +245,7 @@ pio run -e bench-a -e bench-b -e bench-c
 pio run -e bench-a -e bench-b
 ```
 
-本轮只重新构建 A/B；A 保持 M5.Speaker `64/255`，B 将 Direct I2S 线性增益从 `0.25` 调整为 `0.0625`，C 未重新构建。
+本轮只重新构建 A/B；A 保持 M5.Speaker `64/255`，B 将 Direct I2S 线性增益从 `0.25` 调整为 `0.0625`，C 未重新构建。真机发现该低响度基准令 A/B 均不舒适，以下固件不再用于最终比较；记录仅作为实验历史保留。
 
 | Environment | Firmware Size | `0xA0000` Slot Margin | SHA-256 |
 |---|---:|---:|---|
@@ -253,6 +253,19 @@ pio run -e bench-a -e bench-b
 | `bench-b` | 636,432 bytes | 18,928 bytes | `0bef3905fdc9e35d6e9e0f9dedde8f6661cb0d839c8c76e3f1f639963ab8bb93` |
 
 两者均小于现有 655,360 bytes App 槽。生成物已覆盖到 microSD 的 `/firmware/ADV-Walkman-Bench-A.bin` 与 `/firmware/ADV-Walkman-Bench-B.bin`；复制后重新计算的大小和 SHA-256 均与上表一致。测试音频仍为唯一 Fixture，SHA-256 为 `4003b057b19ca95bae78e66b3536557e342d1105315c2a6217f4475c0db51d63`。
+
+### A/B Original-B Reference Build Record（Current）
+
+验证日期：2026-08-25
+
+真机否决低响度基准后，依据 M5Unified 0.2.20 的 `_master_volume * _master_volume` 实现，将 A 提升为 M5.Speaker `128/255`，并将 B 恢复为用户已听过的 Direct I2S `0.25`。两者相对低响度版本均提高约 12 dB，目标是保持原 B 的可听响度再比较 Backend，而不是把 B 降到 A。
+
+| Environment | Firmware Size | `0xA0000` Slot Margin | SHA-256 |
+|---|---:|---:|---|
+| `bench-a` | 644,320 bytes | 11,040 bytes | `e8bbc09230ca45ced1f26bca19ad3526a6c730b77fccbde808f1b73b2d0c62b6` |
+| `bench-b` | 636,448 bytes | 18,912 bytes | `2b76d65feba68e0aa29125bc4e21009ad479ef7b4fddb209b425b3ba0b07ad46` |
+
+新版 A/B 已覆盖到 microSD `/firmware/` 并通过复制后 SHA-256 核对。按用户要求，SD 上的旧 `/firmware/ADV-Walkman-Bench-C.bin` 与 `/firmware/ADV-Walkman-P0-A.bin` 已删除；最终 `firmware` 目录只保留上表两个 Benchmark 固件。
 
 ### Current Runtime Contract
 
@@ -292,10 +305,14 @@ pio run -e bench-a -e bench-b
 | `advwa4` | Candidate C | 4032 KiB | Delete through Launcher |
 | `spiffs` | Ownership not fully confirmed | 448 KiB | Keep |
 | `advwal` | Old Candidate A baseline | 640 KiB | Delete through Launcher |
-| `advwa1` | Current Candidate B slot | 640 KiB | Keep / reuse for B |
-| `advwa2` | Current Candidate A slot | 640 KiB | Keep / reuse for A |
+| `advwa1` | Current Candidate B slot | 640 KiB | Delete for clean reinstall |
+| `advwa2` | Current Candidate A slot | 640 KiB | Delete for clean reinstall |
 
-只通过 Launcher 的已安装 App 删除流程清理 `advwa4` 和 `advwal`；不由 esptool 写分区表，不删除关联 SPIFFS/FAT，不移动或调整其他分区。清理完成后再次只读核对分区表并补充结果。
+用户决定从 SD 全新安装 A/B，因此只通过 Launcher 的已安装 App 删除流程清理全部四个 `advwa*` App；不由 esptool 写分区表，也不主动删除关联 SPIFFS/FAT。
+
+### Launcher Flash 清理结果
+
+删除后再次从 `0x8000` 只读取 4 KiB 分区表：`advwa4`、`advwal`、`advwa1`、`advwa2` 均已消失；`app0`、NVS、otadata、phy_init 与 coredump 保留。`spiffs` 标签和 448 KiB 大小仍在，Launcher 清理时将其表项从 `0x560000` 整理到 `0x170000`；未读取或推断其内容。当前 `spiffs` 结束于 `0x1E0000`，到 8 MiB Flash 末尾有 `0x620000`（6272 KiB）连续可用空间，足够全新创建两个 `0xA0000` A/B App 分区。
 
 ---
 
