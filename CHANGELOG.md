@@ -2,7 +2,7 @@
 
 ## V0.3 — P1 Player Core Development
 
-Date: 2026-08-25
+Date: 2026-08-25～2026-08-26
 
 ### Player / Audio
 
@@ -24,7 +24,11 @@ Date: 2026-08-25
 - 生成并归档到本地 / SD 的无版权 CBR 44.1 kHz、VBR 44.1 kHz、CBR 48 kHz 与真实截断 MP3 Fixture；Fixture 不提交 Git。
 - 新增 P1 Gate A / B 开发测试状态机、设备端 Fixture SHA-256 核验、VBR Seek 后实际解码验证、串口 Transport 命令和 `/ADVWalkman/logs/p1-01-last.txt`～`p1-04-last.txt`。
 - 新增只读 MP3 / 状态槽检查工具和统一 `ADV-Walkman-Dev.bin` 构建脚本。
-- Gate A / Gate B 构建环境均已完成自动构建与 Launcher 体积检查，当前等待 Gate A 真机验收；编译成功不代替 Device Validation。
+- Gate A / Gate B 构建环境均已完成自动构建与 Launcher 体积检查；编译成功不代替 Device Validation。
+- 首次 Gate A 真机运行暴露两个 Harness 问题：libmad 在正常 EOF 留下的 `MAD_ERROR_BUFLEN` 被误判为 Decoder Error；无版权 Fixture 约 `-40 dBFS`，叠加 `128/255` 平方音量曲线后几乎不可听。
+- `0.3.0-p1.gate-a2` 允许正常 EOF 的 terminal `BUFLEN`，通过 Xing/Info/VBRI 声明字节数提前拒绝本轮截断 Fixture，并将 Fixture 提升到保守但可听的约 `-20.4 dBFS` Mono Peak；正式 Player 音量仍保持 `128/255`。
+- Gate 测试画面改为仅在阶段切换时整屏刷新，消除原先每 250 ms 清屏造成的频闪；FAIL 日志在 Stop 前保存快照并增加 `player_error / audio_error`。
+- 2026-08-26 Gate A 真机通过：三份合法 MP3、截断/缺失错误处理、Pause/Resume、Stop/Replay、Next/Previous、CBR/VBR Seek 全部通过；Fixture Hash 全匹配，最大 Seek 误差 60 ms、Backpressure 0，用户确认声音正常。P1-01、P1-02 完成，进入 Gate B 的 P1-03、P1-04 真机验收。
 
 ## V0.2 — V1 Design Baseline
 

@@ -155,43 +155,47 @@ P0-06 已完成，正式 Player 固定沿用 Candidate A；P1 不重新选择 Ba
 
 ## P1-01 MP3 Playback Core
 
-Status: DEVICE TEST
+Status: DONE
 
 AC：
 
-- [ ] MP3 CBR
-- [ ] MP3 VBR
-- [ ] 最高目标 320 kbps
-- [ ] 44.1 kHz
-- [ ] 48 kHz
-- [ ] Track end 自动结束
-- [ ] 播放结束可通知 Player 进入下一首
-- [ ] 自然 EOF 先排空尾部 Buffer，且每首只发一次 TrackEnded
-- [ ] 缺文件、损坏文件和 Decoder 错误稳定进入 Error，不自动重启
-- [ ] 生成的 CBR 44.1 kHz、VBR 44.1 kHz、CBR 48 kHz Fixture 真机通过
-- [ ] Gate A 在设备端计算合法 / 截断 Fixture SHA-256，并与 Manifest 一致
+- [x] MP3 CBR
+- [x] MP3 VBR
+- [x] 最高目标 320 kbps
+- [x] 44.1 kHz
+- [x] 48 kHz
+- [x] Track end 自动结束
+- [x] 播放结束可通知 Player 进入下一首
+- [x] 自然 EOF 先排空尾部 Buffer，且每首只发一次 TrackEnded
+- [x] 缺文件、损坏文件和 Decoder 错误稳定进入 Error，不自动重启
+- [x] 生成的 CBR 44.1 kHz、VBR 44.1 kHz、CBR 48 kHz Fixture 真机通过
+- [x] Gate A 在设备端计算合法 / 截断 Fixture SHA-256，并与 Manifest 一致
+
+2026-08-26，`0.3.0-p1.gate-a2` 真机 Gate A 通过：三份合法 Fixture 产生三次且仅三次 `TrackEnded`，截断文件与故意缺失文件各产生一次预期 Error，四份 Fixture SHA-256 全部匹配。`p1-01-last.txt` 的最终 `state=ERROR / file_open_failed` 是缺失文件负向测试的通过现场，不是 Gate 残留故障。
 
 ---
 
 ## P1-02 Transport Controls
 
-Status: DEVICE TEST
+Status: DONE
 
 AC：
 
-- [ ] Play
-- [ ] Pause
-- [ ] Resume
-- [ ] Stop
-- [ ] Next
-- [ ] Previous
-- [ ] Seek
-- [ ] 不因连续操作崩溃
-- [ ] 无频繁明显爆音
-- [ ] Pause 中 Seek / Next / Previous 后仍保持 Pause
-- [ ] Previous 在播放超过 5 秒时回到本曲开头，否则进入上一首
-- [ ] CBR 与带 Xing/VBRI 的 VBR Seek 目标误差约不超过 1 秒
-- [ ] VBR Seek 后实际恢复 Decoder 并持续播放，不能只核对估算位置
+- [x] Play
+- [x] Pause
+- [x] Resume
+- [x] Stop
+- [x] Next
+- [x] Previous
+- [x] Seek
+- [x] 不因连续操作崩溃
+- [x] 无频繁明显爆音
+- [x] Pause 中 Seek / Next / Previous 后仍保持 Pause
+- [x] Previous 在播放超过 5 秒时回到本曲开头，否则进入上一首
+- [x] CBR 与带 Xing/VBRI 的 VBR Seek 目标误差约不超过 1 秒
+- [x] VBR Seek 后实际恢复 Decoder 并持续播放，不能只核对估算位置
+
+同一次 Gate A 完成 Transport 真机验收：最终 `STOPPED / NONE`，最大 Seek 误差 60 ms，Backpressure 0；用户确认测试音播放正常、无异常爆音或重启。测试音量刻意保守，偏小不代表正式音频链路异常。
 
 ---
 
