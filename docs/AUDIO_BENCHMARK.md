@@ -1,6 +1,6 @@
 # ADV Walkman Audio Backend Benchmark
 
-> 状态：P0-01 — DONE；P0-02～P0-05 已完成自动构建并进入 DEVICE TEST，P0-06 最终选型仍待真机结果。
+> 状态：P0-01 — DONE；P0-02 / P0-03 / P0-05 — DEVICE TEST；P0-04 Candidate C — DEFERRED；P0-06 最终选型仍待 A/B 等响度结果。
 > 目标：在正式播放器开发前，选出 V1 最合适的原生 3.5mm 音频底层。
 
 ## 1. 为什么先做 Benchmark
@@ -153,6 +153,10 @@ https://github.com/earlephilhower/BackgroundAudio
 - 不先升级 / 替换当前稳定主环境；
 - 先证明可以在 ADV 编译、运行、控制 ES8311。
 
+### P0 处理结论
+
+Candidate C 已通过独立构建并在 ADV 真机正常出声，但首轮听感没有体现相对 A/B 的明确收益；同时它需要 IDF5 隔离工具链并占用最大的 Launcher App 分区。C 保留代码与固件作为备用，本轮不再投入人工听感或压力测试。
+
 ---
 
 ## 6. 统一 Downmix
@@ -179,10 +183,8 @@ Mono = (Left + Right) / 2
 | 指标 | A M5.Speaker | B Direct I2S | C BackgroundAudio |
 |---|---|---|---|
 | Build | PASS — actual backend | PASS — actual backend | PASS — actual backend |
-| Boot | PASS — P0-01 baseline | DEVICE TEST | DEVICE TEST |
-| 320k / 44.1k 播放 | PASS | TBD | TBD |
-| 30 min 连续播放 | TBD | TBD | TBD |
-| 2 h 连续播放 | TBD | TBD | TBD |
+| Boot | PASS | PASS | PASS — then deferred |
+| 320k / 44.1k 播放 | PASS | PASS | PASS — then deferred |
 | Free Heap | 286,044 bytes（约 40–45 s） | TBD | TBD |
 | Minimum Heap | 285,764 bytes | TBD | TBD |
 | Heap 是否持续下降 | TBD | TBD | TBD |
@@ -195,9 +197,11 @@ Mono = (Left + Right) / 2
 | Sample rate 切换 | TBD | TBD | TBD |
 | 最大干净音量 | TBD | TBD | TBD |
 | 主观底噪 | TBD | TBD | TBD |
-| 主观声音 | PASS — speaker and 3.5mm headphone | TBD | TBD |
+| 主观声音 | 首轮：较平、音量最低 | 首轮：有空间感、音量居中 | 首轮：音量最高、无特别优势；Deferred |
 | 实现复杂度 | TBD | TBD | TBD |
 | 维护成本 | TBD | TBD | TBD |
+
+首轮听感使用了不同的 Backend 固定增益，因此只用于将范围收敛到 A/B，不能直接作为最终音质排名。耳机线控在非最大位置存在偏音，后续固定保持最大；A 使用 M5.Speaker `64/255`，B 改用约等效的 `0.0625` 线性增益，再各完整播放原曲一次。
 
 ### P0-01 Historical Build Record
 
@@ -233,6 +237,23 @@ pio run -e bench-a -e bench-b -e bench-c
 
 同日已将三个生成物复制到 microSD 的 `/firmware/`，复制后逐项重新计算 SHA-256，均与上表一致。旧的 `/firmware/ADV-Walkman-P0-A.bin` 保留未动。
 
+### A/B Equal-Loudness Build Record
+
+验证日期：2026-08-25
+
+```text
+pio run -e bench-a -e bench-b
+```
+
+本轮只重新构建 A/B；A 保持 M5.Speaker `64/255`，B 将 Direct I2S 线性增益从 `0.25` 调整为 `0.0625`，C 未重新构建。
+
+| Environment | Firmware Size | `0xA0000` Slot Margin | SHA-256 |
+|---|---:|---:|---|
+| `bench-a` | 644,320 bytes | 11,040 bytes | `dd1985d1bacce18a485d49146265a57f09a34153bf3750fb6c4b4a9da793b547` |
+| `bench-b` | 636,432 bytes | 18,928 bytes | `0bef3905fdc9e35d6e9e0f9dedde8f6661cb0d839c8c76e3f1f639963ab8bb93` |
+
+两者均小于现有 655,360 bytes App 槽。生成物已覆盖到 microSD 的 `/firmware/ADV-Walkman-Bench-A.bin` 与 `/firmware/ADV-Walkman-Bench-B.bin`；复制后重新计算的大小和 SHA-256 均与上表一致。测试音频仍为唯一 Fixture，SHA-256 为 `4003b057b19ca95bae78e66b3536557e342d1105315c2a6217f4475c0db51d63`。
+
 ### Current Runtime Contract
 
 - 串口：115200 baud。
@@ -256,10 +277,25 @@ pio run -e bench-a -e bench-b -e bench-c
 
 ### P0-02～P0-06 落地方式
 
-- `bench-a`、`bench-b`、`bench-c` 是三个隔离的 Launcher App，不在运行时动态切换底层驱动。
-- 三个 App 使用相同 Fixture、串口命令、UI/SD 压力负载与指标格式。
+- `bench-a`、`bench-b` 是两个独立 Launcher App，不在运行时动态切换底层驱动；`bench-c` 保留为 Deferred 备用。
+- A/B 使用相同 Fixture、串口命令、UI/SD 压力负载与指标格式。
 - Restart / Seek 使用同一 MP3 验证文件、Decoder、Buffer 与 I2S 生命周期，不复制音乐来伪造“切歌库”。
-- 自动构建通过后统一复制到 SD `/firmware/`；真机依次安装，每个有效候选完成 30 分钟测试，胜者完成 2 小时测试。
+- 等响度 A/B 使用完整原曲各听一次；听感胜者只执行约 3–4 分钟短压力测试。取消 A/B 各 30 分钟与胜者 2 小时的人工硬门槛，长期稳定性在 P1 实际使用中继续验证。
+
+### Launcher Flash 只读诊断（清理前）
+
+2026-08-25 从 `0x8000` 只读取 4 KiB 分区表，确认安装失败并非固件格式问题，而是当前只剩 320 KiB 未分配空间，无法再创建 `0xA0000`（640 KiB）App 分区。
+
+| Label | Role | Size | Action |
+|---|---|---:|---|
+| `app0` | M5Launcher | 1344 KiB | Keep |
+| `advwa4` | Candidate C | 4032 KiB | Delete through Launcher |
+| `spiffs` | Ownership not fully confirmed | 448 KiB | Keep |
+| `advwal` | Old Candidate A baseline | 640 KiB | Delete through Launcher |
+| `advwa1` | Current Candidate B slot | 640 KiB | Keep / reuse for B |
+| `advwa2` | Current Candidate A slot | 640 KiB | Keep / reuse for A |
+
+只通过 Launcher 的已安装 App 删除流程清理 `advwa4` 和 `advwal`；不由 esptool 写分区表，不删除关联 SPIFFS/FAT，不移动或调整其他分区。清理完成后再次只读核对分区表并补充结果。
 
 ---
 
@@ -288,11 +324,7 @@ state
 
 ### UI Stress
 
-播放期间：
-
-- 高频刷新简单动态图形；
-- 快速切换几个测试页面；
-- 连续按键。
+测试 Harness 约 30 Hz 重绘整块屏幕，模拟未来歌词、进度条和动画带来的显示负载；这不是正式 UI 或视觉验收。
 
 目标：
 
@@ -300,11 +332,7 @@ state
 
 ### SD Stress
 
-播放期间：
-
-- 打开目录；
-- 扫描数百文件目录；
-- 读取若干 Metadata。
+播放期间使用第二个只读文件句柄，每约 8 ms 读取 4 KiB 并循环读取同一个 Benchmark MP3，模拟未来目录浏览、Metadata、歌词和资源读取；不创建或修改文件。
 
 目标：
 
@@ -313,16 +341,13 @@ state
 
 ### State Stress
 
-重复：
+只对听感胜者执行一次：
 
 ```text
-Play
 Pause
 Resume
 Restart
 Seek
-Loop on
-Loop off
 ```
 
 观察：
@@ -331,6 +356,8 @@ Loop off
 - 崩溃；
 - Heap；
 - Driver 状态。
+
+短测顺序固定为：正常播放 30 s → UI Stress 60 s → UI + SD Stress 60 s → 两种压力下各执行一次 Pause/Resume、`seek 60`、Restart → 关闭压力并记录最终状态。用户只需听是否出现非预期卡音、爆音或断音，串口命令与日志由 Codex 负责。
 
 ---
 
@@ -379,7 +406,7 @@ Reason:
 TBD
 
 Rejected / Deferred:
-TBD
+Candidate C — Deferred unless A/B both fail
 ```
 
 

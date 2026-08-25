@@ -85,7 +85,7 @@ AC：
 
 ## P0-04 Candidate C — BackgroundAudio
 
-Status: DEVICE TEST
+Status: DEFERRED
 
 AC：
 
@@ -97,7 +97,7 @@ AC：
 - [ ] 记录 heap / underrun
 - [ ] 真机旧耳机听感记录
 
-使用独立 pioarduino / IDF5 环境，不改变 A/B 的稳定依赖。只有在官方固定版本仍要求污染 A/B、修改分区或突破 Launcher 安全边界时才停止，不为了“必须三套都完成”扩大风险。
+Candidate C 已完成独立环境构建和真机出声，但用户未听到相对 A/B 的明确收益，同时它占用最大 App 分区并引入 IDF5 工具链维护成本。P0 收敛为 A/B 二选一；C 代码与固件保留为备用，不继续投入人工测试。
 
 ---
 
@@ -107,15 +107,16 @@ Status: DEVICE TEST
 
 AC：
 
-- [ ] 每个可用候选完成 30 min 连续测试
-- [ ] 最优候选完成 2 h 连续测试
-- [ ] UI Stress
-- [ ] SD Browse Stress
-- [ ] Pause / Resume 循环
-- [ ] 同一 Fixture 的 Restart 循环
-- [ ] Seek
+- [ ] 只对等响度听感胜者执行约 3–4 min 短压力测试
+- [ ] UI Stress 约 60 s
+- [ ] UI + SD Stress 同时运行约 60 s
+- [ ] Pause / Resume 一次
+- [ ] 同一 Fixture 的 Restart 一次
+- [ ] Seek 一次
 - [ ] 记录明显爆音 / 卡顿 / 崩溃
 - [ ] 记录 Heap 是否持续下降
+
+取消 A/B 各 30 min 和胜者 2 h 的人工硬门槛。长期稳定性在 P1 实际开发与使用中继续验证；胜者短测失败时才测试另一候选。
 
 ---
 
@@ -134,7 +135,9 @@ AC：
 ### 固定比较方式
 
 - 只使用 `/Music/ADVWalkmanBenchmark/benchmark.mp3`，不再派生 M4A、48 kHz 或 VBR 测试矩阵。
-- A/B/C 分别生成独立 M5Launcher App，一次性复制到 SD 后由 Launcher 顺序安装。
+- A/B 分别生成独立 M5Launcher App；耳机线控保持最大，完整原曲各听一次，听完立即记录印象。
+- A 保持 M5.Speaker `64/255`；B 使用约等效的线性增益 `0.0625`。
+- C 保留为 Deferred 备用，不参与本轮听感和压力测试。
 - “Restart”只验证 Decoder / File / Output 生命周期，不能冒充正式 Player 的 Next / Previous 功能。
 
 ---
