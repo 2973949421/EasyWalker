@@ -113,9 +113,9 @@ AC：
 - [ ] 记录明显爆音 / 卡顿 / 崩溃
 - [ ] 记录 Heap 是否持续下降
 
-自动流程固定为：Baseline 30 s → UI Stress 60 s → UI + SD Stress 60 s → Pause 3 s → Resume 10 s → `seek 60` 后 10 s → Restart 后 10 s，总计约 3 分钟。压力测试只读取既有 Benchmark MP3，不写 microSD，也不写 Flash。
+自动流程固定为：Baseline 30 s → UI Stress 60 s → UI + SD Stress 60 s → Pause 3 s → Resume 10 s → `seek 60` 后 10 s → Restart 后 10 s，总计约 3 分钟。压力阶段只读取既有 Benchmark MP3，不写 Flash；流程开始前单次写入 `RUNNING` 标记，结束并关闭 SD Stress 后单次覆盖最终摘要 `/ADVWalkman/logs/p0-a-stress-last.txt`，测试负载期间不写日志。
 
-结果页显示 `PASS/FAIL`、state / sample rate、heap delta / minimum heap、backpressure、service max、UI frames 与 SD KiB。`Listen: manual` 明确表示自动结果不能判断主观听感；用户仍需人工报告声音是否正常。
+结果页显示 `PASS/FAIL`、state / sample rate、heap delta / sampled minimum heap、backpressure、service max、UI frames、SD KiB 与日志保存状态。`Listen: manual` 明确表示自动结果不能判断主观听感；用户仍需人工报告声音是否正常。
 
 取消 A/B 各 30 min 和胜者 2 h 的人工硬门槛。Candidate A 当前只是 provisional winner（暂定胜者），且一键压力固件目前仅 Build Success；P0-05 仍为 `DEVICE TEST`。真机短测失败时才测试 B，长期稳定性在 P1 实际开发与使用中继续验证。
 

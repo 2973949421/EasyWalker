@@ -29,6 +29,10 @@ using adv_walkman::BenchmarkStats;
 
 constexpr char kBenchmarkPath[] =
     "/Music/ADVWalkmanBenchmark/benchmark.mp3";
+constexpr char kAutoStressLogRoot[] = "/ADVWalkman";
+constexpr char kAutoStressLogDir[] = "/ADVWalkman/logs";
+constexpr char kAutoStressLogPath[] =
+    "/ADVWalkman/logs/p0-a-stress-last.txt";
 constexpr uint32_t kStatsIntervalMs = 5000;
 constexpr uint32_t kUiStressIntervalMs = 1000 / 30;
 constexpr uint32_t kSdStressIntervalMs = 8;
@@ -91,13 +95,22 @@ enum class AutoStressPhase : uint8_t {
 
 struct AutoStressRun {
     AutoStressPhase phase = AutoStressPhase::IDLE;
+    AutoStressPhase failedAtPhase = AutoStressPhase::IDLE;
     uint32_t phaseStartedAtMs = 0;
     uint32_t initialFreeHeap = 0;
+    uint32_t minimumFreeHeap = 0;
+    uint32_t finalFreeHeap = 0;
     uint32_t initialBackpressure = 0;
     uint32_t initialUiFrames = 0;
     uint32_t initialSdBytes = 0;
     uint32_t trackLoopsAtSeek = 0;
+    uint32_t runStartedAtMs = 0;
     bool previousLoopEnabled = false;
+    bool pauseOk = false;
+    bool resumeOk = false;
+    bool seekOk = false;
+    bool restartOk = false;
+    bool logSaved = false;
     const char* failure = "none";
 };
 
@@ -253,6 +266,76 @@ void serviceSdStress(uint32_t now) {
     sdStressBytes += static_cast<uint32_t>(count);
 }
 
+bool ensureAutoStressLogDirectory() {
+    if (!SD.exists(kAutoStressLogRoot) && !SD.mkdir(kAutoStressLogRoot)) {
+        return false;
+    }
+    return SD.exists(kAutoStressLogDir) || SD.mkdir(kAutoStressLogDir);
+}
+
+bool writeAutoStressLog(const char* result, const char* failure) {
+    const BenchmarkStats stats = backend.stats();
+    const uint32_t measuredFreeHeap = ESP.getFreeHeap();
+    const uint32_t freeHeap = autoStress.finalFreeHeap == 0
+                                  ? measuredFreeHeap
+                                  : autoStress.finalFreeHeap;
+    const uint32_t minimumFreeHeap = autoStress.minimumFreeHeap == 0
+                                         ? freeHeap
+                                         : autoStress.minimumFreeHeap;
+    const int32_t heapDelta = static_cast<int32_t>(freeHeap) -
+                              static_cast<int32_t>(autoStress.initialFreeHeap);
+    const uint32_t elapsed = autoStress.runStartedAtMs == 0
+                                 ? 0
+                                 : millis() - autoStress.runStartedAtMs;
+
+    if (!ensureAutoStressLogDirectory()) {
+        return false;
+    }
+
+    File logFile = SD.open(kAutoStressLogPath, FILE_WRITE);
+    if (!logFile) {
+        return false;
+    }
+
+    const size_t written = logFile.printf(
+        "format=adv_walkman_p0_auto_stress_v1\n"
+        "result=%s\nversion=%s\nbackend=%s\n"
+        "fixture_path=%s\nfixture_sha256=%s\n"
+        "failure=%s\nphase=%s\nfailed_at_phase=%s\n"
+        "state=%s\nsample_rate=%lu\n"
+        "elapsed_ms=%lu\nfree_heap_start=%lu\nfree_heap_end=%lu\n"
+        "minimum_heap_sampled=%lu\nheap_delta=%ld\n"
+        "backpressure_delta=%lu\n"
+        "service_max_us=%lu\nui_frames=%lu\nsd_bytes=%lu\n"
+        "track_loops=%lu\npause_ok=%u\nresume_ok=%u\nseek_ok=%u\n"
+        "restart_ok=%u\nlisten=manual\n",
+        result, ADV_WALKMAN_VERSION, backend.name(), kBenchmarkPath,
+        stats.fileSha256, failure, autoStressPhaseName(autoStress.phase),
+        autoStressPhaseName(autoStress.failedAtPhase),
+        adv_walkman::backendStateName(stats.state),
+        static_cast<unsigned long>(stats.sampleRate),
+        static_cast<unsigned long>(elapsed),
+        static_cast<unsigned long>(autoStress.initialFreeHeap),
+        static_cast<unsigned long>(freeHeap),
+        static_cast<unsigned long>(minimumFreeHeap),
+        static_cast<long>(heapDelta),
+        static_cast<unsigned long>(stats.backpressureEvents -
+                                   autoStress.initialBackpressure),
+        static_cast<unsigned long>(stats.serviceMaxUs),
+        static_cast<unsigned long>(uiStressFrames -
+                                   autoStress.initialUiFrames),
+        static_cast<unsigned long>(sdStressBytes - autoStress.initialSdBytes),
+        static_cast<unsigned long>(stats.trackLoops),
+        static_cast<unsigned>(autoStress.pauseOk),
+        static_cast<unsigned>(autoStress.resumeOk),
+        static_cast<unsigned>(autoStress.seekOk),
+        static_cast<unsigned>(autoStress.restartOk));
+    logFile.flush();
+    const bool success = written > 0 && logFile.getWriteError() == 0;
+    logFile.close();
+    return success;
+}
+
 void renderAutoStress() {
     if (uiStressEnabled && autoStressIsRunning()) {
         return;
@@ -263,7 +346,10 @@ void renderAutoStress() {
         stats.backpressureEvents - autoStress.initialBackpressure;
     const uint32_t uiFramesDelta = uiStressFrames - autoStress.initialUiFrames;
     const uint32_t sdBytesDelta = sdStressBytes - autoStress.initialSdBytes;
-    const int32_t heapDelta = static_cast<int32_t>(ESP.getFreeHeap()) -
+    const uint32_t resultFreeHeap = autoStress.finalFreeHeap == 0
+                                        ? ESP.getFreeHeap()
+                                        : autoStress.finalFreeHeap;
+    const int32_t heapDelta = static_cast<int32_t>(resultFreeHeap) -
                               static_cast<int32_t>(autoStress.initialFreeHeap);
 
     auto& display = M5Cardputer.Display;
@@ -287,18 +373,20 @@ void renderAutoStress() {
                    static_cast<unsigned long>(stats.sampleRate));
     if (autoStress.phase == AutoStressPhase::COMPLETE) {
         display.printf("Heap d=%ld min=%lu\n", static_cast<long>(heapDelta),
-                       static_cast<unsigned long>(ESP.getMinFreeHeap()));
+                       static_cast<unsigned long>(autoStress.minimumFreeHeap));
         display.printf("BP=%lu svc=%luus\n",
                        static_cast<unsigned long>(backpressureDelta),
                        static_cast<unsigned long>(stats.serviceMaxUs));
         display.printf("UI=%lu SD=%luKiB\n",
                        static_cast<unsigned long>(uiFramesDelta),
                        static_cast<unsigned long>(sdBytesDelta / 1024));
+        display.printf("Log: %s\n", autoStress.logSaved ? "saved" : "FAILED");
         display.println("Listen: manual");
         display.println("Press T to rerun");
     } else if (autoStress.phase == AutoStressPhase::FAILED) {
         display.printf("Reason: %s\n", autoStress.failure);
         display.printf("Error: %s\n", stats.error);
+        display.printf("Log: %s\n", autoStress.logSaved ? "saved" : "FAILED");
         display.println("Press T to rerun");
     } else {
         display.println("Please wait; no keys needed");
@@ -313,9 +401,17 @@ void stopAutoStressLoads() {
 }
 
 void failAutoStress(const char* reason) {
+    const AutoStressPhase failedAtPhase = autoStress.phase;
     stopAutoStressLoads();
+    autoStress.failedAtPhase = failedAtPhase;
+    autoStress.finalFreeHeap = ESP.getFreeHeap();
+    if (autoStress.minimumFreeHeap == 0 ||
+        autoStress.finalFreeHeap < autoStress.minimumFreeHeap) {
+        autoStress.minimumFreeHeap = autoStress.finalFreeHeap;
+    }
     autoStress.failure = reason;
     autoStress.phase = AutoStressPhase::FAILED;
+    autoStress.logSaved = writeAutoStressLog("FAIL", reason);
     Serial.printf("auto_stress result=FAIL reason=%s\n", reason);
     renderAutoStress();
 }
@@ -329,6 +425,10 @@ void advanceAutoStress(AutoStressPhase phase, uint32_t now) {
 
 void finishAutoStress() {
     stopAutoStressLoads();
+    autoStress.finalFreeHeap = ESP.getFreeHeap();
+    if (autoStress.finalFreeHeap < autoStress.minimumFreeHeap) {
+        autoStress.minimumFreeHeap = autoStress.finalFreeHeap;
+    }
     const BenchmarkStats stats = backend.stats();
     if (strcmp(stats.error, "none") != 0) {
         failAutoStress("backend_error");
@@ -353,6 +453,17 @@ void finishAutoStress() {
     }
 
     autoStress.phase = AutoStressPhase::COMPLETE;
+    autoStress.logSaved = writeAutoStressLog("PASS", "none");
+    if (!autoStress.logSaved) {
+        autoStress.failure = "log_final_write";
+        autoStress.failedAtPhase = AutoStressPhase::COMPLETE;
+        autoStress.phase = AutoStressPhase::FAILED;
+        autoStress.logSaved =
+            writeAutoStressLog("FAIL", autoStress.failure);
+        Serial.println("auto_stress result=FAIL reason=log_final_write");
+        renderAutoStress();
+        return;
+    }
     Serial.println("auto_stress result=PASS");
     renderAutoStress();
 }
@@ -365,6 +476,19 @@ void startAutoStress(uint32_t now) {
     autoStress.previousLoopEnabled = previousLoopEnabled;
     autoStress.phase = AutoStressPhase::BASELINE;
     autoStress.phaseStartedAtMs = now;
+    autoStress.runStartedAtMs = now;
+
+    const BenchmarkStats beforeRestartStats = backend.stats();
+    autoStress.initialFreeHeap = ESP.getFreeHeap();
+    autoStress.minimumFreeHeap = autoStress.initialFreeHeap;
+    autoStress.initialBackpressure = beforeRestartStats.backpressureEvents;
+    autoStress.initialUiFrames = uiStressFrames;
+    autoStress.initialSdBytes = sdStressBytes;
+    autoStress.logSaved = writeAutoStressLog("RUNNING", "none");
+    if (!autoStress.logSaved) {
+        failAutoStress("log_start_write");
+        return;
+    }
 
     loopEnabled = true;
     backend.setLoop(true);
@@ -375,9 +499,13 @@ void startAutoStress(uint32_t now) {
 
     const BenchmarkStats stats = backend.stats();
     autoStress.initialFreeHeap = ESP.getFreeHeap();
+    autoStress.minimumFreeHeap = autoStress.initialFreeHeap;
+    autoStress.finalFreeHeap = 0;
     autoStress.initialBackpressure = stats.backpressureEvents;
     autoStress.initialUiFrames = uiStressFrames;
     autoStress.initialSdBytes = sdStressBytes;
+    autoStress.runStartedAtMs = millis();
+    autoStress.phaseStartedAtMs = autoStress.runStartedAtMs;
     Serial.println("auto_stress start=1");
     renderAutoStress();
 }
@@ -385,6 +513,10 @@ void startAutoStress(uint32_t now) {
 void serviceAutoStress(uint32_t now) {
     if (!autoStressIsRunning()) {
         return;
+    }
+    const uint32_t freeHeap = ESP.getFreeHeap();
+    if (freeHeap < autoStress.minimumFreeHeap) {
+        autoStress.minimumFreeHeap = freeHeap;
     }
     const BenchmarkStats currentStats = backend.stats();
     if (currentStats.state == BackendState::ERROR) {
@@ -423,6 +555,7 @@ void serviceAutoStress(uint32_t now) {
                     failAutoStress("pause");
                     return;
                 }
+                autoStress.pauseOk = true;
                 advanceAutoStress(AutoStressPhase::PAUSE, now);
             }
             break;
@@ -433,6 +566,7 @@ void serviceAutoStress(uint32_t now) {
                     failAutoStress("resume");
                     return;
                 }
+                autoStress.resumeOk = true;
                 advanceAutoStress(AutoStressPhase::RESUME, now);
             }
             break;
@@ -444,6 +578,7 @@ void serviceAutoStress(uint32_t now) {
                     failAutoStress("seek_60");
                     return;
                 }
+                autoStress.seekOk = true;
                 advanceAutoStress(AutoStressPhase::SEEK, now);
             }
             break;
@@ -458,6 +593,7 @@ void serviceAutoStress(uint32_t now) {
                     failAutoStress("restart");
                     return;
                 }
+                autoStress.restartOk = true;
                 advanceAutoStress(AutoStressPhase::RESTART, now);
             }
             break;
