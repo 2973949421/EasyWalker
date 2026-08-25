@@ -1,7 +1,7 @@
 # ADV Walkman
 
 > 工作名：ADV Walkman  
-> 当前阶段：V0.2 V1 Design Baseline（V1 设计基线）  
+> 当前阶段：P1 Player Core（播放器核心）
 > 平台：M5Stack Cardputer ADV
 
 ## 1. 项目是什么
@@ -71,19 +71,55 @@ V1 不以以下内容为目标：
 
 ## 5. 当前最重要的技术任务
 
-正式播放器开发前，先完成 Audio Backend Benchmark（音频输出底层基准测试）。
+P0 Audio Backend Benchmark 已完成，V1 正式冻结 Candidate A：
 
-候选路线：
+```text
+ESP8266Audio 1.9.7
+→ 32-bit Stereo to Mono downmix
+→ 3 × 768-sample M5.Speaker buffer
+→ M5Unified Cardputer ADV / ES8311
+```
 
-1. ESP8266Audio → Cardio 风格 M5.Speaker → ES8311
-2. ESP8266Audio → Direct I2S（直接 I2S）→ ES8311
-3. BackgroundAudio → I2S → ES8311
+当前进入 P1 Player Core，只实现 MP3 Engine、Transport、Queue / Playback Mode 和 SD 状态恢复；Library、正式 UI、歌词、ASCII Cover 与 DSP 仍按 Backlog 后续阶段推进。选型证据见 [`docs/AUDIO_BENCHMARK.md`](docs/AUDIO_BENCHMARK.md)。
 
-先用同一首 320 kbps / 44.1 kHz MP3 和同一副旧耳机比较稳定性、内存、卡顿、爆音、主观声音和实现复杂度，再冻结 V1 音频底层。
+### P1 开发构建
 
-详见 [`docs/AUDIO_BENCHMARK.md`](docs/AUDIO_BENCHMARK.md)。
+默认 PlatformIO 环境为 `player-dev`：
 
-### P0 三候选构建
+```powershell
+.\tools\build_player.ps1
+```
+
+脚本每次都先重新构建，再生成并校验：
+
+```text
+artifacts/ADV-Walkman-Dev.bin
+```
+
+microSD 已挂载为例如 `D:\` 时，可一并复制并复核 SHA-256：
+
+```powershell
+.\tools\build_player.ps1 -SdRoot D:\
+```
+
+目标位置为 `/firmware/ADV-Walkman-Dev.bin`，由 M5Launcher 正常安装；不使用普通 PlatformIO upload 覆盖 Launcher。P1 本地测试 Fixture 由 `tools/prepare_p1_fixtures.py` 生成，文件本身不提交 Git。
+
+Gate A 固件启动后按一次物理 `T`，会先在 ADV 上核对合法 / 截断 Fixture 的 SHA-256，再自动验收 P1-01 / P1-02；全过程约 1 分钟，不要再按键。结果写入：
+
+```text
+/ADVWalkman/logs/p1-01-last.txt
+/ADVWalkman/logs/p1-02-last.txt
+```
+
+Gate A 真机通过后再构建 Gate B；Gate B 验收 Queue / Playback Mode 和双槽状态恢复。Gate B 只在首次启动时按一次 `T`，随后会自动软件重启；重启后不要再次按 `T`，固件会继续验证恢复为 Pause 且至少 3 秒完全静音。正常用时约半分钟，异常超时最多约 1 分钟。`T` 与串口测试命令只属于开发固件，不改变冻结的 V1 Keymap。
+
+Gate B 构建命令：
+
+```powershell
+.\tools\build_player.ps1 -Gate 2 -SdRoot D:\
+```
+
+### 历史 P0 三候选构建
 
 使用仓库提供的统一脚本：
 

@@ -151,11 +151,11 @@ V1 冻结选择 Candidate A：`ESP8266Audio 1.9.7 → triple-buffer M5.Speaker �
 
 # P1 — Player Core
 
-P0-06 完成后进入。
+P0-06 已完成，正式 Player 固定沿用 Candidate A；P1 不重新选择 Backend，也不提前实现 Library、正式 UI、歌词、ASCII Cover 或 DSP。
 
 ## P1-01 MP3 Playback Core
 
-Status: TODO
+Status: DEVICE TEST
 
 AC：
 
@@ -166,12 +166,16 @@ AC：
 - [ ] 48 kHz
 - [ ] Track end 自动结束
 - [ ] 播放结束可通知 Player 进入下一首
+- [ ] 自然 EOF 先排空尾部 Buffer，且每首只发一次 TrackEnded
+- [ ] 缺文件、损坏文件和 Decoder 错误稳定进入 Error，不自动重启
+- [ ] 生成的 CBR 44.1 kHz、VBR 44.1 kHz、CBR 48 kHz Fixture 真机通过
+- [ ] Gate A 在设备端计算合法 / 截断 Fixture SHA-256，并与 Manifest 一致
 
 ---
 
 ## P1-02 Transport Controls
 
-Status: TODO
+Status: DEVICE TEST
 
 AC：
 
@@ -184,12 +188,16 @@ AC：
 - [ ] Seek
 - [ ] 不因连续操作崩溃
 - [ ] 无频繁明显爆音
+- [ ] Pause 中 Seek / Next / Previous 后仍保持 Pause
+- [ ] Previous 在播放超过 5 秒时回到本曲开头，否则进入上一首
+- [ ] CBR 与带 Xing/VBRI 的 VBR Seek 目标误差约不超过 1 秒
+- [ ] VBR Seek 后实际恢复 Decoder 并持续播放，不能只核对估算位置
 
 ---
 
 ## P1-03 Queue & Playback Modes
 
-Status: TODO
+Status: DEVICE TEST
 
 AC：
 
@@ -200,12 +208,15 @@ AC：
 - [ ] Repeat All
 - [ ] 模式切换状态正确
 - [ ] 重启后可恢复
+- [ ] Repeat 与 Shuffle 独立；Repeat One 不阻止手动 Next / Previous
+- [ ] Shuffle 单轮不重复，Previous 按真实历史返回
+- [ ] 空队列、单曲、队首和队尾安全
 
 ---
 
 ## P1-04 Playback State Persistence
 
-Status: TODO
+Status: DEVICE TEST
 
 AC：
 
@@ -216,6 +227,10 @@ AC：
 - [ ] 重启恢复
 - [ ] 恢复后保持 Pause
 - [ ] 不自动出声
+- [ ] Queue / Session 使用 CRC32 与 A/B 双槽，新槽回读通过后才生效
+- [ ] 恢复时选择最新完整 Queue / Session 配对，并保留 order / cursor / Previous history
+- [ ] Session 播放中约每 10 秒 checkpoint，Queue 只在队列变化时重写
+- [ ] 未知版本、CRC 错误、截断文件和无 SD 时不重启循环
 
 ---
 

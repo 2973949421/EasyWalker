@@ -150,6 +150,52 @@ V1 不建立复杂数据库。
 - UI 绘制
 - 目录扫描实现
 
+### P1 正式模块
+
+```text
+Mp3PlaybackEngine
+→ 单首 MP3、Decoder、PCM Output、位置、EOF、错误
+
+PlayerController
+→ Transport、Queue、Repeat、Shuffle、自动下一首
+
+PlaybackQueue
+→ 有界顺序、Shuffle order、Previous history
+
+PlayerStateStore
+→ SD Queue / Session A/B 双槽保存
+
+PlayerRuntime / PlayerMain
+→ cooperative service、设备初始化、诊断与开发测试入口
+```
+
+`player-dev` 与 P0 Benchmark 源码通过 PlatformIO source filter 隔离。P0 A/B/C 保留为历史实验，不编入正式 Player。
+
+### 状态与行为
+
+Audio Engine 状态：
+
+```text
+Empty / Loading / Playing / Paused / Draining / Stopped / Error
+```
+
+Player 状态：
+
+```text
+Empty / Stopped / Playing / Paused / Error
+```
+
+规则：
+
+- `Repeat Off / All / One` 与 `Shuffle Off / On` 独立；
+- Repeat One 只接管自然 EOF，手动 Next / Previous 仍可离开当前歌曲；
+- Previous 在当前位置超过 5 秒时回到本曲开头，否则按真实历史进入上一首；
+- Pause 中 Seek / Next / Previous 后保持 Pause；
+- Stop 关闭音频、位置归零，但保留 Queue 和当前歌曲；
+- 文件或 Decoder Error 不自动重试，也不自动跳过。
+
+Queue 最多 1,024 首，单条 UTF-8 路径最多 511 bytes。RAM 只保存 source index、播放顺序、32 项 Previous history 和少量当前路径；完整路径由 `TrackSource` 按需读取。
+
 ---
 
 ## 4.3 Decoder
@@ -163,12 +209,15 @@ V1 只要求 MP3。
 - CBR / VBR 兼容
 - 输出 16-bit PCM
 
-Decoder 最终实现随 P0 音频选型确定。
+P0 已冻结 `ESP8266Audio 1.9.7`。P1 的 `Mp3Probe` 负责跳过 ID3v2、识别 MPEG Layer III、CBR / VBR、Xing / Info / VBRI，并为 Seek 提供有界 Frame resync。无 TOC 的 VBR 使用比例估算后在最多 64 KiB 范围内寻找连续合法 Frame，不做无限扫描。
 
-候选：
+`Mp3PlaybackEngine` 只管理单首歌曲，不包含 Queue / Repeat：
 
-- ESP8266Audio
-- BackgroundAudio
+- 播放位置按实际提交到 PCM Output 的 Frame 计算；
+- 自然 EOF 先进入 `Draining`，提交尾部 Buffer 并等待 M5.Speaker Channel 0 排空；
+- 每首自然结束只发送一次 `TrackEnded`；
+- 截断文件、SD Read Error 和 Decoder Error 发送 `Error`，不得伪装成 EOF；
+- CBR / VBR Seek 与恢复都从合法 MPEG Frame 开始；Session 同时保存最近 source offset 作为 VBR 重同步提示。
 
 ---
 
@@ -461,9 +510,17 @@ Artist/Album/Track
 
 ### 7.2 配置与状态
 
-建议项目自己的状态文件与音乐目录分离。
+项目自己的状态文件与音乐目录分离：
 
-V1 可采用类似：
+```text
+/ADVWalkman/state/
+  queue-a.bin
+  queue-b.bin
+  session-a.bin
+  session-b.bin
+```
+
+其他资源可采用：
 
 ```text
 /Music/
@@ -478,11 +535,18 @@ V1 可采用类似：
     kaiti_16.vlw
     times_12.vlw
   config.*
-  state.*
   cache/
 ```
 
-V1 在实现前不提前规定具体序列化格式，以最小可行实现和真机结果为准。
+P1 schema version 1 使用小端二进制。每个文件含 20-byte Header：magic、schema version、header size、generation、payload length、CRC32。
+
+- Queue payload：length-prefixed UTF-8 path，最多 1,024 首，总 payload 最多 256 KiB；
+- Session payload：Queue generation、当前 source index、position、source offset、Repeat、Shuffle、order / cursor 与 Previous history；
+- A/B 双槽交替写入；新槽 `write → flush → close → reopen → CRC` 通过后才成为当前版本；
+- 单次 cooperative write / verify read 不超过 1 KiB；
+- Queue 只在队列变化时保存，Session 播放中约每 10 秒 checkpoint，并在控制或模式变化后保存。
+
+恢复时不把 Queue 与 Session 各自独立取最新，而是选择最新且 generation 匹配的完整 pair；后续 A/B 写入以该 pair 为锚，优先覆盖孤儿槽，避免连续两次发布中断破坏最后一份可恢复状态。
 
 ### 7.3 恢复内容
 
@@ -500,6 +564,8 @@ V1 在实现前不提前规定具体序列化格式，以最小可行实现和�
 - 恢复状态；
 - 保持 Pause；
 - 不自动出声。
+
+启动恢复只读取 Queue / Session，不打开 Decoder、不向 Speaker 提交 PCM。当前歌曲缺失时沿当前 order 寻找下一首有效 MP3 并以 `Paused @ 0` 恢复；全部缺失则安全进入 Empty。CRC 错误、截断记录或未知 schema 不触发重启循环。
 
 ---
 
@@ -788,7 +854,6 @@ V1 要求：
 
 以下是实现 / 校准项，不是产品侧重新设计问题：
 
-- DMA / Buffer 参数
 - Core / Task 分配
 - 最终音量曲线
 - 各 Sound Preset 的小幅参数微调
@@ -796,6 +861,5 @@ V1 要求：
 - 歌词列宽与间距
 - ASCII Cover 最终网格密度
 - Header 滚动速度
-- 配置 / 状态文件具体序列化格式
 
 以最小可行实现和真机结果为准，不应扩大成重新设计 V1。

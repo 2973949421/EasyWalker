@@ -406,20 +406,17 @@ Codex 允许自主：
 
 ## 9. 当前阶段执行约束
 
-当前项目处于 V0.2 V1 Design Baseline。
+当前执行阶段和状态一律从 `TASKS.md` 路由，不在本文件维护容易过期的任务快照。
 
-第一技术主线是：
+P0 已经完成并冻结 V1 Audio Backend：
 
 ```text
-P0 Audio Backend Benchmark
+ESP8266Audio 1.9.7
+→ 32-bit Stereo to Mono downmix
+→ 3 × 768-sample M5.Speaker buffer
+→ M5Unified Cardputer ADV / ES8311
 ```
 
-在该任务完成前：
+除非后续真机证据证明该主路径不可用，否则不要重新开启 A/B/C 选型，也不要把 Candidate B/C 的实验工具链带入正式 Player。
 
-- 不抢先做大型 UI；
-- 不引入外置 DAC；
-- 不购买硬件作为解决软件问题的默认路径；
-- 不因为某个候选 backend 看起来“高级”就提前锁定；
-- 先完成 A/B/C 可比较的真机结果，再冻结 V1 音频底层。
-
-V1 Sound Preset、Keymap 与主要 UI/UX 已完成产品侧设计。字号、列宽、ASCII 网格与音效细节允许真机小范围校准，但不应被当作重新做产品设计的理由。
+V1 Sound Preset、Keymap 与主要 UI/UX 已完成产品侧设计。字号、列宽、ASCII 网格与音效细节允许真机小范围校准，但不应被当作重新做产品设计的理由。正式 Player Core 阶段不抢先实现大型 UI、Library、歌词、ASCII Cover 或 DSP。

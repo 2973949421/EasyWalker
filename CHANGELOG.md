@@ -1,5 +1,31 @@
 # Changelog
 
+## V0.3 — P1 Player Core Development
+
+Date: 2026-08-25
+
+### Player / Audio
+
+- 新增隔离的 `player-dev` PlatformIO 环境，正式 Player 不编译 P0 Candidate B/C 或 IDF5 实验源码。
+- 从 Candidate A 提取 `Mp3PlaybackEngine` 与 3×768-sample `M5SpeakerPcmOutput`，保持 32-bit Stereo → Mono downmix 和 `128/255` 音量。
+- 新增 CBR、Xing/Info、VBRI 与无 TOC VBR 的有界 Probe / Seek；保存 source offset 作为恢复重同步提示。
+- 自然 EOF 先排空 M5.Speaker 尾部 Buffer，再发送单次 `TrackEnded`；截断文件和 Decoder / Read Error 不再冒充自然结束。
+- 新增 Play / Pause / Resume / Stop / Next / Previous / Seek，以及冻结的 5 秒 Previous 行为。
+
+### Queue / Persistence
+
+- 新增最多 1,024 首的有界 Queue、Fisher–Yates Shuffle、Repeat Off / All / One 和 32 项 Previous history。
+- 新增按需 `TrackSource`，不把 1,024 条完整路径常驻 RAM。
+- 新增 Queue / Session schema v1 与 SD A/B 双槽、CRC32、完整 pair 回退、回读校验和每步不超过 1 KiB 的 cooperative 保存。
+- 恢复统一为 Paused；启动不打开 Decoder、不自动出声。缺失当前歌曲时寻找下一首有效 MP3。
+
+### Validation Harness
+
+- 生成并归档到本地 / SD 的无版权 CBR 44.1 kHz、VBR 44.1 kHz、CBR 48 kHz 与真实截断 MP3 Fixture；Fixture 不提交 Git。
+- 新增 P1 Gate A / B 开发测试状态机、设备端 Fixture SHA-256 核验、VBR Seek 后实际解码验证、串口 Transport 命令和 `/ADVWalkman/logs/p1-01-last.txt`～`p1-04-last.txt`。
+- 新增只读 MP3 / 状态槽检查工具和统一 `ADV-Walkman-Dev.bin` 构建脚本。
+- Gate A / Gate B 构建环境均已完成自动构建与 Launcher 体积检查，当前等待 Gate A 真机验收；编译成功不代替 Device Validation。
+
 ## V0.2 — V1 Design Baseline
 
 Date: 2026-08-24
