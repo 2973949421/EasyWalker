@@ -76,6 +76,10 @@ Date: 2026-08-24
 - 根据首轮真机听感将 P0 收敛为 A/B 二选一；C 无明确听感收益且工具链、固件与维护成本最高，转为 `DEFERRED` 备用。
 - 首次等响度固件将 B 向 A=`64/255` 下调，真机反馈两者均不舒适；改为以用户已听过的原 B 响度为基准，A=`128/255`、B=`0.25`，仍使用完整原曲各听一次。
 - 将人工验收缩短为听感胜者约 3–4 分钟的 UI/SD 联合压力测试；长期稳定性转入 P1 实际使用验证。
+- 因当前已安装应用串口没有返回可用响应，Candidate A 增加 `T` 键一键自动压力测试：Baseline 30 s → UI 60 s → UI+SD 60 s → Pause 3 s → Resume / Seek / Restart 各观察 10 s，总计约 3 分钟。
+- 自动测试只读既有 Benchmark MP3，不写 microSD 或 Flash；结果页显示 `PASS/FAIL`、state / SR、heap delta / minimum heap、backpressure、service max、UI frames 和 SD KiB，并以 `Listen: manual` 明确保留人工听感验收。
+- `0.2.0-p0.a-stress` 已构建成功，固件 646,752 bytes，在现有 640 KiB App 槽中余 8,608 bytes；已覆盖到 SD 并核对 SHA-256 `dfa357437f35ea77aeb0412af6c747d314052e88017df0e2e2c9316886cd9c3f`，尚未真机运行，P0-05 仍为 `DEVICE TEST`，A 仅为 provisional winner，未修改或冻结 PRD / TECH_DESIGN。
+- Launcher 尺寸检查改为按环境使用真实分区上限：A/B 为 `0xA0000`，Deferred C 为历史 `0x3F0000`，避免 A/B 超过 640 KiB 时仍被构建误放行。
 
 ## V0.1.2 — Keymap Freeze
 

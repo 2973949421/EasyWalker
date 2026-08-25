@@ -32,6 +32,15 @@ constexpr char kBenchmarkPath[] =
 constexpr uint32_t kStatsIntervalMs = 5000;
 constexpr uint32_t kUiStressIntervalMs = 1000 / 30;
 constexpr uint32_t kSdStressIntervalMs = 8;
+constexpr uint32_t kAutoBaselineMs = 30000;
+constexpr uint32_t kAutoUiMs = 60000;
+constexpr uint32_t kAutoUiSdMs = 60000;
+constexpr uint32_t kAutoPauseMs = 3000;
+constexpr uint32_t kAutoResumeMs = 10000;
+constexpr uint32_t kAutoSeekMs = 10000;
+constexpr uint32_t kAutoRestartMs = 10000;
+constexpr uint32_t kAutoMinimumUiFrames = 3600;
+constexpr uint32_t kAutoMinimumSdBytes = 1024 * 1024;
 constexpr size_t kCommandCapacity = 64;
 constexpr size_t kSdStressChunkSize = 4096;
 
@@ -66,6 +75,70 @@ bool uiStressEnabled = false;
 bool sdStressEnabled = false;
 File sdStressFile;
 uint8_t sdStressBuffer[kSdStressChunkSize]{};
+
+enum class AutoStressPhase : uint8_t {
+    IDLE,
+    BASELINE,
+    UI,
+    UI_SD,
+    PAUSE,
+    RESUME,
+    SEEK,
+    RESTART,
+    COMPLETE,
+    FAILED,
+};
+
+struct AutoStressRun {
+    AutoStressPhase phase = AutoStressPhase::IDLE;
+    uint32_t phaseStartedAtMs = 0;
+    uint32_t initialFreeHeap = 0;
+    uint32_t initialBackpressure = 0;
+    uint32_t initialUiFrames = 0;
+    uint32_t initialSdBytes = 0;
+    uint32_t trackLoopsAtSeek = 0;
+    bool previousLoopEnabled = false;
+    const char* failure = "none";
+};
+
+AutoStressRun autoStress;
+bool lastAutoStressTriggerDown = false;
+
+bool autoStressOwnsDisplay() {
+    return autoStress.phase != AutoStressPhase::IDLE;
+}
+
+bool autoStressIsRunning() {
+    return autoStress.phase != AutoStressPhase::IDLE &&
+           autoStress.phase != AutoStressPhase::COMPLETE &&
+           autoStress.phase != AutoStressPhase::FAILED;
+}
+
+const char* autoStressPhaseName(AutoStressPhase phase) {
+    switch (phase) {
+        case AutoStressPhase::IDLE:
+            return "IDLE";
+        case AutoStressPhase::BASELINE:
+            return "BASELINE 30s";
+        case AutoStressPhase::UI:
+            return "UI 60s";
+        case AutoStressPhase::UI_SD:
+            return "UI+SD 60s";
+        case AutoStressPhase::PAUSE:
+            return "PAUSE 3s";
+        case AutoStressPhase::RESUME:
+            return "RESUME 10s";
+        case AutoStressPhase::SEEK:
+            return "SEEK 60s";
+        case AutoStressPhase::RESTART:
+            return "RESTART 10s";
+        case AutoStressPhase::COMPLETE:
+            return "PASS";
+        case AutoStressPhase::FAILED:
+            return "FAIL";
+    }
+    return "UNKNOWN";
+}
 
 void formatOptionalMetric(int32_t value, char output[16]) {
     if (value < 0) {
@@ -111,7 +184,7 @@ void printStats() {
 }
 
 void renderState(bool force = false) {
-    if (uiStressEnabled) {
+    if (uiStressEnabled || autoStressOwnsDisplay()) {
         return;
     }
     const BenchmarkStats stats = backend.stats();
@@ -130,6 +203,7 @@ void renderState(bool force = false) {
     display.printf("Backend: %s\n", backend.name());
     display.printf("State: %s\n", adv_walkman::backendStateName(stats.state));
     display.printf("Loops: %lu\n", static_cast<unsigned long>(stats.trackLoops));
+    display.println("T: Auto Stress");
     if (strcmp(stats.error, "none") != 0) {
         display.setTextColor(ORANGE, BLACK);
         display.printf("Error: %s\n", stats.error);
@@ -177,6 +251,234 @@ void serviceSdStress(uint32_t now) {
         count = sdStressFile.read(sdStressBuffer, sizeof(sdStressBuffer));
     }
     sdStressBytes += static_cast<uint32_t>(count);
+}
+
+void renderAutoStress() {
+    if (uiStressEnabled && autoStressIsRunning()) {
+        return;
+    }
+
+    const BenchmarkStats stats = backend.stats();
+    const uint32_t backpressureDelta =
+        stats.backpressureEvents - autoStress.initialBackpressure;
+    const uint32_t uiFramesDelta = uiStressFrames - autoStress.initialUiFrames;
+    const uint32_t sdBytesDelta = sdStressBytes - autoStress.initialSdBytes;
+    const int32_t heapDelta = static_cast<int32_t>(ESP.getFreeHeap()) -
+                              static_cast<int32_t>(autoStress.initialFreeHeap);
+
+    auto& display = M5Cardputer.Display;
+    display.fillScreen(BLACK);
+    display.setCursor(6, 5);
+    display.setTextSize(1.0f);
+    if (autoStress.phase == AutoStressPhase::COMPLETE) {
+        display.setTextColor(GREEN, BLACK);
+        display.println("AUTO STRESS: PASS");
+    } else if (autoStress.phase == AutoStressPhase::FAILED) {
+        display.setTextColor(RED, BLACK);
+        display.println("AUTO STRESS: FAIL");
+    } else {
+        display.setTextColor(YELLOW, BLACK);
+        display.println("AUTO STRESS RUNNING");
+    }
+
+    display.setTextColor(WHITE, BLACK);
+    display.printf("Phase: %s\n", autoStressPhaseName(autoStress.phase));
+    display.printf("State=%s SR=%lu\n", adv_walkman::backendStateName(stats.state),
+                   static_cast<unsigned long>(stats.sampleRate));
+    if (autoStress.phase == AutoStressPhase::COMPLETE) {
+        display.printf("Heap d=%ld min=%lu\n", static_cast<long>(heapDelta),
+                       static_cast<unsigned long>(ESP.getMinFreeHeap()));
+        display.printf("BP=%lu svc=%luus\n",
+                       static_cast<unsigned long>(backpressureDelta),
+                       static_cast<unsigned long>(stats.serviceMaxUs));
+        display.printf("UI=%lu SD=%luKiB\n",
+                       static_cast<unsigned long>(uiFramesDelta),
+                       static_cast<unsigned long>(sdBytesDelta / 1024));
+        display.println("Listen: manual");
+        display.println("Press T to rerun");
+    } else if (autoStress.phase == AutoStressPhase::FAILED) {
+        display.printf("Reason: %s\n", autoStress.failure);
+        display.printf("Error: %s\n", stats.error);
+        display.println("Press T to rerun");
+    } else {
+        display.println("Please wait; no keys needed");
+    }
+}
+
+void stopAutoStressLoads() {
+    uiStressEnabled = false;
+    setSdStress(false);
+    loopEnabled = autoStress.previousLoopEnabled;
+    backend.setLoop(loopEnabled);
+}
+
+void failAutoStress(const char* reason) {
+    stopAutoStressLoads();
+    autoStress.failure = reason;
+    autoStress.phase = AutoStressPhase::FAILED;
+    Serial.printf("auto_stress result=FAIL reason=%s\n", reason);
+    renderAutoStress();
+}
+
+void advanceAutoStress(AutoStressPhase phase, uint32_t now) {
+    autoStress.phase = phase;
+    autoStress.phaseStartedAtMs = now;
+    Serial.printf("auto_stress phase=%s\n", autoStressPhaseName(phase));
+    renderAutoStress();
+}
+
+void finishAutoStress() {
+    stopAutoStressLoads();
+    const BenchmarkStats stats = backend.stats();
+    if (strcmp(stats.error, "none") != 0) {
+        failAutoStress("backend_error");
+        return;
+    }
+    if (stats.state != BackendState::PLAYING) {
+        failAutoStress("final_state");
+        return;
+    }
+    if (stats.sampleRate != 44100) {
+        failAutoStress("sample_rate");
+        return;
+    }
+    if (uiStressFrames - autoStress.initialUiFrames <
+        kAutoMinimumUiFrames) {
+        failAutoStress("ui_rate_low");
+        return;
+    }
+    if (sdStressBytes - autoStress.initialSdBytes < kAutoMinimumSdBytes) {
+        failAutoStress("sd_read_low");
+        return;
+    }
+
+    autoStress.phase = AutoStressPhase::COMPLETE;
+    Serial.println("auto_stress result=PASS");
+    renderAutoStress();
+}
+
+void startAutoStress(uint32_t now) {
+    const bool previousLoopEnabled = loopEnabled;
+    uiStressEnabled = false;
+    setSdStress(false);
+    autoStress = AutoStressRun{};
+    autoStress.previousLoopEnabled = previousLoopEnabled;
+    autoStress.phase = AutoStressPhase::BASELINE;
+    autoStress.phaseStartedAtMs = now;
+
+    loopEnabled = true;
+    backend.setLoop(true);
+    if (!backend.restart()) {
+        failAutoStress("initial_restart");
+        return;
+    }
+
+    const BenchmarkStats stats = backend.stats();
+    autoStress.initialFreeHeap = ESP.getFreeHeap();
+    autoStress.initialBackpressure = stats.backpressureEvents;
+    autoStress.initialUiFrames = uiStressFrames;
+    autoStress.initialSdBytes = sdStressBytes;
+    Serial.println("auto_stress start=1");
+    renderAutoStress();
+}
+
+void serviceAutoStress(uint32_t now) {
+    if (!autoStressIsRunning()) {
+        return;
+    }
+    const BenchmarkStats currentStats = backend.stats();
+    if (currentStats.state == BackendState::ERROR) {
+        failAutoStress("backend_error");
+        return;
+    }
+    const BackendState expectedState =
+        autoStress.phase == AutoStressPhase::PAUSE
+            ? BackendState::PAUSED
+            : BackendState::PLAYING;
+    if (currentStats.state != expectedState) {
+        failAutoStress("unexpected_state");
+        return;
+    }
+    const uint32_t elapsed = now - autoStress.phaseStartedAtMs;
+    switch (autoStress.phase) {
+        case AutoStressPhase::BASELINE:
+            if (elapsed >= kAutoBaselineMs) {
+                uiStressEnabled = true;
+                advanceAutoStress(AutoStressPhase::UI, now);
+            }
+            break;
+        case AutoStressPhase::UI:
+            if (elapsed >= kAutoUiMs) {
+                if (!setSdStress(true)) {
+                    failAutoStress("sd_stress_open");
+                    return;
+                }
+                advanceAutoStress(AutoStressPhase::UI_SD, now);
+            }
+            break;
+        case AutoStressPhase::UI_SD:
+            if (elapsed >= kAutoUiSdMs) {
+                if (!backend.pause() ||
+                    backend.stats().state != BackendState::PAUSED) {
+                    failAutoStress("pause");
+                    return;
+                }
+                advanceAutoStress(AutoStressPhase::PAUSE, now);
+            }
+            break;
+        case AutoStressPhase::PAUSE:
+            if (elapsed >= kAutoPauseMs) {
+                if (!backend.resume() ||
+                    backend.stats().state != BackendState::PLAYING) {
+                    failAutoStress("resume");
+                    return;
+                }
+                advanceAutoStress(AutoStressPhase::RESUME, now);
+            }
+            break;
+        case AutoStressPhase::RESUME:
+            if (elapsed >= kAutoResumeMs) {
+                autoStress.trackLoopsAtSeek = backend.stats().trackLoops;
+                if (!backend.seekSeconds(60) ||
+                    backend.stats().state != BackendState::PLAYING) {
+                    failAutoStress("seek_60");
+                    return;
+                }
+                advanceAutoStress(AutoStressPhase::SEEK, now);
+            }
+            break;
+        case AutoStressPhase::SEEK:
+            if (currentStats.trackLoops != autoStress.trackLoopsAtSeek) {
+                failAutoStress("seek_decode_loop");
+                return;
+            }
+            if (elapsed >= kAutoSeekMs) {
+                if (!backend.restart() ||
+                    backend.stats().state != BackendState::PLAYING) {
+                    failAutoStress("restart");
+                    return;
+                }
+                advanceAutoStress(AutoStressPhase::RESTART, now);
+            }
+            break;
+        case AutoStressPhase::RESTART:
+            if (elapsed >= kAutoRestartMs) {
+                finishAutoStress();
+            }
+            break;
+        case AutoStressPhase::IDLE:
+        case AutoStressPhase::COMPLETE:
+        case AutoStressPhase::FAILED:
+            break;
+    }
+}
+
+void serviceAutoStressKey(uint32_t now) {
+    const bool triggerDown = M5Cardputer.Keyboard.isKeyPressed('t');
+    if (triggerDown && !lastAutoStressTriggerDown && !autoStressIsRunning()) {
+        startAutoStress(now);
+    }
+    lastAutoStressTriggerDown = triggerDown;
 }
 
 bool parseOnOff(const char* value, bool& enabled) {
@@ -288,10 +590,12 @@ void setup() {
 
 void loop() {
     M5Cardputer.update();
+    serviceAutoStressKey(millis());
     serviceSerial();
     backend.service();
 
     const uint32_t now = millis();
+    serviceAutoStress(now);
     serviceUiStress(now);
     serviceSdStress(now);
     renderState();

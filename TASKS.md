@@ -107,16 +107,17 @@ Status: DEVICE TEST
 
 AC：
 
-- [ ] 只对等响度听感胜者执行约 3–4 min 短压力测试
-- [ ] UI Stress 约 60 s
-- [ ] UI + SD Stress 同时运行约 60 s
-- [ ] Pause / Resume 一次
-- [ ] 同一 Fixture 的 Restart 一次
-- [ ] Seek 一次
+- [x] Candidate A 固件提供 `T` 键一键自动压力测试；无需依赖当前无响应的应用串口
+- [ ] Candidate A 真机完成约 3 min 自动压力测试并显示 `PASS`
+- [ ] 用户人工确认测试期间没有非预期爆音、卡音、断音或异常偏音
 - [ ] 记录明显爆音 / 卡顿 / 崩溃
 - [ ] 记录 Heap 是否持续下降
 
-取消 A/B 各 30 min 和胜者 2 h 的人工硬门槛。长期稳定性在 P1 实际开发与使用中继续验证；胜者短测失败时才测试另一候选。
+自动流程固定为：Baseline 30 s → UI Stress 60 s → UI + SD Stress 60 s → Pause 3 s → Resume 10 s → `seek 60` 后 10 s → Restart 后 10 s，总计约 3 分钟。压力测试只读取既有 Benchmark MP3，不写 microSD，也不写 Flash。
+
+结果页显示 `PASS/FAIL`、state / sample rate、heap delta / minimum heap、backpressure、service max、UI frames 与 SD KiB。`Listen: manual` 明确表示自动结果不能判断主观听感；用户仍需人工报告声音是否正常。
+
+取消 A/B 各 30 min 和胜者 2 h 的人工硬门槛。Candidate A 当前只是 provisional winner（暂定胜者），且一键压力固件目前仅 Build Success；P0-05 仍为 `DEVICE TEST`。真机短测失败时才测试 B，长期稳定性在 P1 实际开发与使用中继续验证。
 
 ---
 

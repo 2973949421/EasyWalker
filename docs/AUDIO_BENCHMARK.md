@@ -1,6 +1,6 @@
 # ADV Walkman Audio Backend Benchmark
 
-> 状态：P0-01 — DONE；P0-02 / P0-03 / P0-05 — DEVICE TEST；P0-04 Candidate C — DEFERRED；P0-06 最终选型仍待 A/B 等响度结果。
+> 状态：P0-01 — DONE；P0-02 / P0-03 / P0-05 — DEVICE TEST；P0-04 Candidate C — DEFERRED；Candidate A 仅为 provisional winner，P0-06 尚未冻结最终 Backend。
 > 目标：在正式播放器开发前，选出 V1 最合适的原生 3.5mm 音频底层。
 
 ## 1. 为什么先做 Benchmark
@@ -267,6 +267,25 @@ pio run -e bench-a -e bench-b
 
 新版 A/B 已覆盖到 microSD `/firmware/` 并通过复制后 SHA-256 核对。按用户要求，SD 上的旧 `/firmware/ADV-Walkman-Bench-C.bin` 与 `/firmware/ADV-Walkman-P0-A.bin` 已删除；最终 `firmware` 目录只保留上表两个 Benchmark 固件。
 
+### Candidate A Auto Stress Build Record（DEVICE TEST）
+
+验证日期：2026-08-25
+
+当前已安装应用的串口没有返回可用响应，无法可靠地由 Codex 远程逐条发送压力命令。因此 Candidate A Benchmark 固件增加 `T` 键一键自动压力测试，让用户只需启动固件并按一次 `T`。
+
+| Field | Value |
+|---|---|
+| Firmware version | `0.2.0-p0.a-stress` |
+| Build | PASS |
+| Firmware size | 646,752 bytes |
+| Existing `0xA0000` slot margin | 8,608 bytes |
+| SHA-256 | `dfa357437f35ea77aeb0412af6c747d314052e88017df0e2e2c9316886cd9c3f` |
+| Device validation | PENDING |
+
+该记录只证明代码构建成功且没有超过现有 640 KiB App 槽；构建后的文件已覆盖到 microSD `/firmware/ADV-Walkman-Bench-A.bin`，复制前后大小与 SHA-256 一致。尚未证明真机自动流程通过，也不能作为主观声音正常的证据。Candidate A 当前只是 provisional winner，不在此阶段修改或冻结 `TECH_DESIGN.md` / `PRD.md`。
+
+Launcher 尺寸检查已按环境绑定到真实槽位：A/B 使用 `0xA0000`，Deferred 的 C 保留其历史 `0x3F0000` 上限。后续 A/B 若超过 640 KiB 将直接构建失败，不再被旧的 1,310,720-byte 通用上限漏过。
+
 ### Current Runtime Contract
 
 - 串口：115200 baud。
@@ -275,7 +294,10 @@ pio run -e bench-a -e bench-b
 - 不可取得的计数统一输出 `NA`，不伪报为 0。
 - 支持串口命令：`play`、`pause`、`resume`、`stop`、`status`、`restart`、`seek <seconds>`、`loop on|off`、`stress ui on|off`、`stress sd on|off`。
 - UI Stress 固定约 30 Hz；SD Stress 使用第二个只读句柄循环读取同一 benchmark MP3，不创建文件。
-- 屏幕仅显示 Backend、状态、循环次数和错误，不属于正式播放器 UI。
+- 普通状态页仅显示 Backend、状态、循环次数和错误；自动压力测试另有运行 / 结果页。两者都不属于正式播放器 UI。
+- Candidate A 的 `0.2.0-p0.a-stress` 固件可按一次 `T` 启动约 3 分钟自动压力流程；全程只读测试 MP3，不写 microSD 或 Flash。
+- 自动结果页显示 `PASS/FAIL`、state / sample rate、heap delta / minimum heap、backpressure、service max、UI frames 与 SD KiB。
+- 结果页的 `Listen: manual` 是明确边界：固件只能检查机器可观测状态，不能冒充用户对爆音、卡音、断音、偏音或音质的主观判断。
 
 ### P0-01 Launcher Device Test Result
 
@@ -293,7 +315,7 @@ pio run -e bench-a -e bench-b
 - `bench-a`、`bench-b` 是两个独立 Launcher App，不在运行时动态切换底层驱动；`bench-c` 保留为 Deferred 备用。
 - A/B 使用相同 Fixture、串口命令、UI/SD 压力负载与指标格式。
 - Restart / Seek 使用同一 MP3 验证文件、Decoder、Buffer 与 I2S 生命周期，不复制音乐来伪造“切歌库”。
-- 等响度 A/B 使用完整原曲各听一次；听感胜者只执行约 3–4 分钟短压力测试。取消 A/B 各 30 分钟与胜者 2 小时的人工硬门槛，长期稳定性在 P1 实际使用中继续验证。
+- 等响度 A/B 使用完整原曲各听一次；Candidate A 目前只是 provisional winner，只对它执行约 3 分钟的一键自动压力测试。取消 A/B 各 30 分钟与胜者 2 小时的人工硬门槛，长期稳定性在 P1 实际使用中继续验证。
 
 ### Launcher Flash 只读诊断（清理前）
 
@@ -358,14 +380,19 @@ state
 
 ### State Stress
 
-只对听感胜者执行一次：
+当前应用串口没有返回可用响应，因此不再要求 Codex 远程逐条发送命令。Candidate A 固件启动并正常播放后，用户按一次 `T`；其余流程由固件自动完成：
 
 ```text
-Pause
-Resume
-Restart
-Seek
+Baseline 30 s
+→ UI Stress 60 s
+→ UI + SD Stress 60 s
+→ Pause 3 s
+→ Resume 10 s
+→ Seek 60 s，继续 10 s
+→ Restart，继续 10 s
 ```
+
+总时长约 3 分钟。SD Stress 始终只读同一个 Benchmark MP3；流程不创建或修改 SD 文件，不写 Flash。
 
 观察：
 
@@ -374,7 +401,9 @@ Seek
 - Heap；
 - Driver 状态。
 
-短测顺序固定为：正常播放 30 s → UI Stress 60 s → UI + SD Stress 60 s → 两种压力下各执行一次 Pause/Resume、`seek 60`、Restart → 关闭压力并记录最终状态。用户只需听是否出现非预期卡音、爆音或断音，串口命令与日志由 Codex 负责。
+固件自动检查最终 state、44.1 kHz sample rate、Backend error、UI frame 数和 SD 读取量，并在屏幕显示 `PASS` 或 `FAIL`。结果页同时显示 state / SR、heap delta / minimum heap、backpressure、service max、UI frames 和 SD KiB。
+
+`PASS` 只代表这些自动条件通过。结果页固定显示 `Listen: manual`，因为固件不能自行判断用户是否听到爆音、卡音、断音、异常偏音或声音是否好听；这部分必须由用户人工报告。当前代码只有 Build Success，P0-05 仍为 `DEVICE TEST`，不得据此提前完成 P0-06 或冻结 V1 Backend。
 
 ---
 
