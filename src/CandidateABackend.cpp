@@ -41,7 +41,13 @@ bool MonoM5SpeakerOutput::queueBuffer() {
 }
 
 bool MonoM5SpeakerOutput::ConsumeSample(int16_t sample[2]) {
-    if (bufferIndex_ >= kFramesPerBuffer && !queueBuffer()) {
+    if (bufferIndex_ >= kFramesPerBuffer) {
+        if (!queueBuffer()) {
+            return false;
+        }
+        // M5.Speaker waits for a queue slot and normally returns true. Yield
+        // cooperatively after each submitted buffer so decoder.loop() returns
+        // control to the benchmark harness without counting backpressure.
         return false;
     }
 

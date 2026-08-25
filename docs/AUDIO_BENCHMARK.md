@@ -275,11 +275,11 @@ pio run -e bench-a -e bench-b
 
 | Field | Value |
 |---|---|
-| Firmware version | `0.2.0-p0.a-stresslog` |
+| Firmware version | `0.2.0-p0.a-stresslog2` |
 | Build | PASS |
 | Firmware size | 648,224 bytes |
 | Existing `0xA0000` slot margin | 7,136 bytes |
-| SHA-256 | `ff1411a70fa8fb6c3196e901ce1e73281d95376b109abb411d4a7713ab16b408` |
+| SHA-256 | `db2e2e76644ecaf40b04afb4a829fce77949a4edac70f7bc0f9bbf565c4d87eb` |
 | Device validation | PENDING |
 
 该记录只证明代码构建成功且没有超过现有 640 KiB App 槽；构建后的文件已覆盖到 microSD `/firmware/ADV-Walkman-Bench-A.bin`，复制前后大小与 SHA-256 一致。尚未证明真机自动流程通过，也不能作为主观声音正常的证据。Candidate A 当前只是 provisional winner，不在此阶段修改或冻结 `TECH_DESIGN.md` / `PRD.md`。
@@ -295,10 +295,18 @@ Launcher 尺寸检查已按环境绑定到真实槽位：A/B 使用 `0xA0000`，
 - 支持串口命令：`play`、`pause`、`resume`、`stop`、`status`、`restart`、`seek <seconds>`、`loop on|off`、`stress ui on|off`、`stress sd on|off`。
 - UI Stress 固定约 30 Hz；SD Stress 使用第二个只读句柄循环读取同一 benchmark MP3，不创建文件。
 - 普通状态页仅显示 Backend、状态、循环次数和错误；自动压力测试另有运行 / 结果页。两者都不属于正式播放器 UI。
-- Candidate A 的 `0.2.0-p0.a-stresslog` 固件可按一次 `T` 启动约 3 分钟自动压力流程；压力阶段只读测试 MP3，不写 Flash。
+- Candidate A 的 `0.2.0-p0.a-stresslog2` 固件可按一次 `T` 启动约 3 分钟自动压力流程；压力阶段只读测试 MP3，不写 Flash。
 - 启动流程先覆盖写入并关闭 `/ADVWalkman/logs/p0-a-stress-last.txt`，内容为 `result=RUNNING`；Restart 成功后才开始采集本轮指标。正常结束或已捕获失败时，关闭 SD Stress 句柄后再一次性覆盖最终摘要。压力负载期间不写日志；若意外重启，遗留的 `RUNNING` 可识别未完成测试。
 - 自动结果页显示 `PASS/FAIL`、state / sample rate、heap delta / sampled minimum heap、backpressure、service max、UI frames、SD KiB 与日志保存状态。日志额外记录版本、Fixture SHA-256、失败阶段和 Pause / Resume / Seek / Restart 结果。
 - 结果页的 `Listen: manual` 是明确边界：固件只能检查机器可观测状态，不能冒充用户对爆音、卡音、断音、偏音或音质的主观判断。
+
+### First Auto Stress Attempt and Cooperative Yield Fix
+
+首次真机运行 `0.2.0-p0.a-stresslog` 时，屏幕停留在 `BASELINE 30s / PLAYING / SR=0` 超过 60 s，且没有进入 UI Stress。SD 日志正确保留 `result=RUNNING`、`sample_rate=0`、`service_max_us=0`、`ui_frames=0`，证明 T 键、日志写入和 Restart 已完成，但第一次 Decoder service 没有归还主循环。
+
+只读核对 M5Unified 0.2.20 与 ESP8266Audio 1.9.7 后确认：`M5.Speaker.playRaw()` 在普通队列满时会等待空位并最终返回成功，而 `AudioGeneratorMP3::loop()` 会在 `ConsumeSample()` 持续返回 `true` 时继续解码。因此旧 A 输出层会将主循环长期留在单次 Decoder service 内，计时、UI 与串口无法运行。
+
+`0.2.0-p0.a-stresslog2` 在每成功提交一个 768-sample Buffer 后让 `ConsumeSample()` 返回 `false`，合作式地将控制权交还 Harness。ESP8266Audio 会在下一轮重新提交尚未消费的 `lastSample`，因此不丢样、不重复；只有 `playRaw()` 真正拒绝时才增加 Backpressure。修复后仍需重新真机验证，P0-05 保持 `DEVICE TEST`。
 
 ### P0-01 Launcher Device Test Result
 

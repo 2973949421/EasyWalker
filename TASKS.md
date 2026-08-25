@@ -119,6 +119,8 @@ AC：
 
 取消 A/B 各 30 min 和胜者 2 h 的人工硬门槛。Candidate A 当前只是 provisional winner（暂定胜者），且一键压力固件目前仅 Build Success；P0-05 仍为 `DEVICE TEST`。真机短测失败时才测试 B，长期稳定性在 P1 实际开发与使用中继续验证。
 
+首次自动短测暴露 Candidate A 的 Decoder service 不归还主循环：M5.Speaker 队列等待后持续返回成功，使 ESP8266Audio 单次 `loop()` 长期运行。`0.2.0-p0.a-stresslog2` 已改为每提交一个 768-sample Buffer 后合作式让出主循环，保留未消费样本并且不伪增 Backpressure；等待重新真机验证。
+
 ---
 
 ## P0-06 Select V1 Audio Backend
