@@ -49,37 +49,39 @@ AC：
 
 ## P0-02 Candidate A — Cardio-style M5.Speaker
 
-Status: DEVICE TEST
+Status: DONE
 
 AC：
 
-- [ ] MP3 320 kbps / 44.1 kHz 可播放
-- [ ] 正确 L+R downmix
-- [ ] sample rate 处理正确
-- [ ] 使用合理 triple buffer / M5.Speaker 参数
-- [ ] Pause / Resume 可用
-- [ ] 使用同一 Fixture 完成 Restart / Flush / Reopen 生命周期验证
-- [ ] 固定 320 kbps Fixture 的定点 Seek 可用
-- [ ] 记录 heap / underrun
-- [ ] 真机旧耳机听感记录
+- [x] MP3 320 kbps / 44.1 kHz 可播放
+- [x] 正确 L+R downmix
+- [x] sample rate 处理正确
+- [x] 使用合理 triple buffer / M5.Speaker 参数
+- [x] Pause / Resume 可用
+- [x] 使用同一 Fixture 完成 Restart / Flush / Reopen 生命周期验证
+- [x] 固定 320 kbps Fixture 的定点 Seek 可用
+- [x] 记录 heap / underrun
+- [x] 真机旧耳机听感记录
 
 ---
 
 ## P0-03 Candidate B — Direct I2S
 
-Status: DEVICE TEST
+Status: DONE — NOT SELECTED
 
 AC：
 
-- [ ] MP3 320 kbps / 44.1 kHz 可播放
-- [ ] ES8311 init 有官方 / M5Unified 依据
-- [ ] Direct I2S 生命周期正常
-- [ ] 正确 L+R downmix
+- [x] MP3 320 kbps / 44.1 kHz 可播放
+- [x] ES8311 init 有官方 / M5Unified 依据
+- [x] Direct I2S 启动与播放生命周期正常
+- [x] 正确 L+R downmix
 - [ ] Pause / Resume 可用
 - [ ] 使用同一 Fixture 完成 Restart / Flush / Reopen 生命周期验证
 - [ ] 固定 320 kbps Fixture 的定点 Seek 可用
 - [ ] 记录 heap / underrun
-- [ ] 真机旧耳机听感记录
+- [x] 真机旧耳机听感记录
+
+Candidate B 已完成构建、真机播放与等响度听感比较。按“只对听感胜者执行短压力测试”的既定简化协议，未勾选的生命周期 / 指标项不再追加人工测试；B 保留为可工作的备选实现。
 
 ---
 
@@ -103,37 +105,39 @@ Candidate C 已完成独立环境构建和真机出声，但用户未听到相�
 
 ## P0-05 Stress Test
 
-Status: DEVICE TEST
+Status: DONE
 
 AC：
 
 - [x] Candidate A 固件提供 `T` 键一键自动压力测试；无需依赖当前无响应的应用串口
-- [ ] Candidate A 真机完成约 3 min 自动压力测试并显示 `PASS`
-- [ ] 用户人工确认测试期间没有非预期爆音、卡音、断音或异常偏音
-- [ ] 记录明显爆音 / 卡顿 / 崩溃
-- [ ] 记录 Heap 是否持续下降
+- [x] Candidate A 真机完成约 3 min 自动压力测试并显示 `PASS`
+- [x] 用户人工观察到的暂停、跳转与重播均对应脚本步骤，未报告额外异常
+- [x] 记录明显爆音 / 卡顿 / 崩溃结果
+- [x] 记录 Heap 是否持续下降
 
 自动流程固定为：Baseline 30 s → UI Stress 60 s → UI + SD Stress 60 s → Pause 3 s → Resume 10 s → `seek 60` 后 10 s → Restart 后 10 s，总计约 3 分钟。压力阶段只读取既有 Benchmark MP3，不写 Flash；流程开始前单次写入 `RUNNING` 标记，结束并关闭 SD Stress 后单次覆盖最终摘要 `/ADVWalkman/logs/p0-a-stress-last.txt`，测试负载期间不写日志。
 
 结果页显示 `PASS/FAIL`、state / sample rate、heap delta / sampled minimum heap、backpressure、service max、UI frames、SD KiB 与日志保存状态。`Listen: manual` 明确表示自动结果不能判断主观听感；用户仍需人工报告声音是否正常。
 
-取消 A/B 各 30 min 和胜者 2 h 的人工硬门槛。Candidate A 当前只是 provisional winner（暂定胜者），且一键压力固件目前仅 Build Success；P0-05 仍为 `DEVICE TEST`。真机短测失败时才测试 B，长期稳定性在 P1 实际开发与使用中继续验证。
+取消 A/B 各 30 min 和胜者 2 h 的人工硬门槛。Candidate A 已完成约 183 s 真机短测并通过；长期稳定性在 P1 实际开发与使用中继续验证。
 
-首次自动短测暴露 Candidate A 的 Decoder service 不归还主循环：M5.Speaker 队列等待后持续返回成功，使 ESP8266Audio 单次 `loop()` 长期运行。`0.2.0-p0.a-stresslog2` 已改为每提交一个 768-sample Buffer 后合作式让出主循环，保留未消费样本并且不伪增 Backpressure；等待重新真机验证。
+首次自动短测暴露 Candidate A 的 Decoder service 不归还主循环：M5.Speaker 队列等待后持续返回成功，使 ESP8266Audio 单次 `loop()` 长期运行。`0.2.0-p0.a-stresslog2` 改为每提交一个 768-sample Buffer 后合作式让出主循环，保留未消费样本并且不伪增 Backpressure；修复版真机压力测试已通过。
 
 ---
 
 ## P0-06 Select V1 Audio Backend
 
-Status: TODO
+Status: DONE
 
 AC：
 
-- [ ] `docs/AUDIO_BENCHMARK.md` 填写结果
-- [ ] 写明最终选择和原因
-- [ ] 更新 `docs/TECH_DESIGN.md`
-- [ ] 不因为“更底层”而自动选择复杂方案
-- [ ] 形成可进入 P1 的冻结 Audio Backend
+- [x] `docs/AUDIO_BENCHMARK.md` 填写结果
+- [x] 写明最终选择和原因
+- [x] 更新 `docs/TECH_DESIGN.md`
+- [x] 不因为“更底层”而自动选择复杂方案
+- [x] 形成可进入 P1 的冻结 Audio Backend
+
+V1 冻结选择 Candidate A：`ESP8266Audio 1.9.7 → triple-buffer M5.Speaker → ES8311`。等响度后 A 同样具备用户认可的空间感，短压力测试通过，并且比 Direct I2S 更成熟、维护成本更低；B 保留为备选，C 保持 Deferred。
 
 ### 固定比较方式
 

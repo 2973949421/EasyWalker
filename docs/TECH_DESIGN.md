@@ -1,7 +1,7 @@
 # ADV Walkman Technical Design
 
 > 版本：V0.2  
-> 状态：基线架构；Audio Backend 最终选型待 P0 Benchmark
+> 状态：基线架构；V1 Audio Backend 已由 P0 Benchmark 冻结为 Candidate A
 
 ## 1. 设计目标
 
@@ -308,6 +308,17 @@ ADV-Walkman-Bench-C.bin
 
 ### V1 候选 Backend
 
+P0 最终选择 Candidate A：
+
+```text
+ESP8266Audio 1.9.7
+→ 32-bit L+R downmix
+→ 3 × 768-sample M5.Speaker buffer
+→ M5Unified Cardputer ADV / ES8311 board support
+```
+
+基准音量为 M5.Speaker `128/255`。真机等响度比较中 A 与 B 都表现出可接受的空间感，B 没有形成足以抵消额外 I2S / Codec 维护成本的优势；A 随后通过 UI、SD、Pause / Resume、Seek 和 Restart 联合短压力测试。因此 V1 Player 以 A 为正式底层，B 保留为故障时的可工作备选，C 保持 Deferred。长期稳定性继续在 P1 实际开发中验证，不重新打开产品路线。
+
 #### A. M5.Speaker Backend
 
 参考 Cardio：
@@ -325,12 +336,13 @@ ESP8266Audio
 - 已有成熟社区实现；
 - 维护成本较低。
 
-待验证：
+P0 已验证：
 
-- 320 kbps 稳定性；
-- UI 压力下 underrun；
-- 音量曲线；
-- 与 Direct I2S 的差异。
+- 固定 320 kbps / 44.1 kHz MP3 正常播放；
+- 约 120 s UI Stress 与 60 s 并行 SD Stress 通过；
+- Pause / Resume、Seek、Restart 通过；
+- Heap 起止一致，Backpressure delta 为 0；
+- 等响度后与 Direct I2S 没有决定性听感差距。
 
 #### B. Direct I2S Backend
 
@@ -772,12 +784,10 @@ V1 要求：
 
 ---
 
-## 13. 仍需通过 P0 / 真机原型确定的技术细节
+## 13. 仍需通过 P1 / 真机原型确定的技术细节
 
 以下是实现 / 校准项，不是产品侧重新设计问题：
 
-- 最终 Decoder
-- 最终 Audio Backend
 - DMA / Buffer 参数
 - Core / Task 分配
 - 最终音量曲线

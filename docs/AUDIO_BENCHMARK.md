@@ -1,6 +1,6 @@
 # ADV Walkman Audio Backend Benchmark
 
-> 状态：P0-01 — DONE；P0-02 / P0-03 / P0-05 — DEVICE TEST；P0-04 Candidate C — DEFERRED；Candidate A 仅为 provisional winner，P0-06 尚未冻结最终 Backend。
+> 状态：P0-01 / P0-02 / P0-03 / P0-05 / P0-06 — DONE；P0-04 Candidate C — DEFERRED；V1 Audio Backend 已冻结为 Candidate A。
 > 目标：在正式播放器开发前，选出 V1 最合适的原生 3.5mm 音频底层。
 
 ## 1. 为什么先做 Benchmark
@@ -185,21 +185,21 @@ Mono = (Left + Right) / 2
 | Build | PASS — actual backend | PASS — actual backend | PASS — actual backend |
 | Boot | PASS | PASS | PASS — then deferred |
 | 320k / 44.1k 播放 | PASS | PASS | PASS — then deferred |
-| Free Heap | 286,044 bytes（约 40–45 s） | TBD | TBD |
-| Minimum Heap | 285,764 bytes | TBD | TBD |
-| Heap 是否持续下降 | TBD | TBD | TBD |
-| Underrun / Dropout | Hardware counter `NA` | Hardware counter `NA` | Decoder / output counters available; runtime TBD |
-| 高频 UI 刷新 | TBD | TBD | TBD |
-| 播放中浏览 SD | TBD | TBD | TBD |
-| Pause / Resume 爆音 | TBD | TBD | TBD |
-| Restart / flush / reopen | TBD | TBD | TBD |
-| Seek | TBD | TBD | TBD |
-| Sample rate 切换 | TBD | TBD | TBD |
-| 最大干净音量 | TBD | TBD | TBD |
-| 主观底噪 | TBD | TBD | TBD |
-| 主观声音 | 首轮：较平、音量最低 | 首轮：有空间感、音量居中 | 首轮：音量最高、无特别优势；Deferred |
-| 实现复杂度 | TBD | TBD | TBD |
-| 维护成本 | TBD | TBD | TBD |
+| Free Heap | Stress start / end 280,800 bytes | Not run — not selected | Not run — Deferred |
+| Minimum Heap | 276,412 bytes | Not run — not selected | Not run — Deferred |
+| Heap 是否持续下降 | PASS — delta 0 | Not run — not selected | Not run — Deferred |
+| Underrun / Dropout | Hardware counter `NA`; backpressure delta 0 | Hardware counter `NA` | Counters available; not run — Deferred |
+| 高频 UI 刷新 | PASS — 3,870 frames / 120 s active stress | Not run — not selected | Not run — Deferred |
+| 播放中浏览 SD | PASS — 19,988,356 bytes extra read | Not run — not selected | Not run — Deferred |
+| Pause / Resume | PASS | Not run under final protocol | Not run — Deferred |
+| Restart / flush / reopen | PASS | Not run under final protocol | Not run — Deferred |
+| Seek | PASS | Not run under final protocol | Not run — Deferred |
+| Sample rate | PASS — 44,100 Hz | PASS — 44,100 Hz playback | PASS — 44,100 Hz playback, then Deferred |
+| 最大干净音量 | A/B 均以原 B 响度完成比较 | 同左 | Not pursued — Deferred |
+| 主观底噪 | 未发现决定性差异 | 未发现决定性差异 | 无特别优势；Deferred |
+| 主观声音 | 等响度后同样有空间感，整体表现获用户认可 | 有空间感，但相对 A 无决定性优势 | 无特别优势；Deferred |
+| 实现复杂度 | 较低；M5Unified 集成 | 较高；自管 I2S / Codec | 最高；额外 IDF5 隔离工具链 |
+| 维护成本 | 最低 | 高于 A | 最高 |
 
 首轮听感使用了不同的 Backend 固定增益，因此只用于将范围收敛到 A/B，不能直接作为最终音质排名。耳机线控在非最大位置存在偏音，后续固定保持最大。首次等响度尝试将 B 降到 `0.0625`、对齐 A=`64/255`，真机反馈两者均不舒适，立即停止。正式 A/B 比较改为保留用户已听过的原 B=`0.25` 响度，并将 A 提升到 M5.Speaker `128/255`。
 
@@ -267,7 +267,7 @@ pio run -e bench-a -e bench-b
 
 新版 A/B 已覆盖到 microSD `/firmware/` 并通过复制后 SHA-256 核对。按用户要求，SD 上的旧 `/firmware/ADV-Walkman-Bench-C.bin` 与 `/firmware/ADV-Walkman-P0-A.bin` 已删除；最终 `firmware` 目录只保留上表两个 Benchmark 固件。
 
-### Candidate A Auto Stress Build Record（DEVICE TEST）
+### Candidate A Auto Stress Build and Device Record（DONE）
 
 验证日期：2026-08-25
 
@@ -280,9 +280,9 @@ pio run -e bench-a -e bench-b
 | Firmware size | 648,224 bytes |
 | Existing `0xA0000` slot margin | 7,136 bytes |
 | SHA-256 | `db2e2e76644ecaf40b04afb4a829fce77949a4edac70f7bc0f9bbf565c4d87eb` |
-| Device validation | PENDING |
+| Device validation | PASS |
 
-该记录只证明代码构建成功且没有超过现有 640 KiB App 槽；构建后的文件已覆盖到 microSD `/firmware/ADV-Walkman-Bench-A.bin`，复制前后大小与 SHA-256 一致。尚未证明真机自动流程通过，也不能作为主观声音正常的证据。Candidate A 当前只是 provisional winner，不在此阶段修改或冻结 `TECH_DESIGN.md` / `PRD.md`。
+构建后的文件已覆盖到 microSD `/firmware/ADV-Walkman-Bench-A.bin`，复制前后大小与 SHA-256 一致；同一固件随后完成真机自动压力测试。用户此前已经完成等响度 A/B 听感比较，本结果用于完成 P0-05 并冻结 `TECH_DESIGN.md` 的 V1 Backend；`PRD.md` 产品范围不变。
 
 Launcher 尺寸检查已按环境绑定到真实槽位：A/B 使用 `0xA0000`，Deferred 的 C 保留其历史 `0x3F0000` 上限。后续 A/B 若超过 640 KiB 将直接构建失败，不再被旧的 1,310,720-byte 通用上限漏过。
 
@@ -306,7 +306,18 @@ Launcher 尺寸检查已按环境绑定到真实槽位：A/B 使用 `0xA0000`，
 
 只读核对 M5Unified 0.2.20 与 ESP8266Audio 1.9.7 后确认：`M5.Speaker.playRaw()` 在普通队列满时会等待空位并最终返回成功，而 `AudioGeneratorMP3::loop()` 会在 `ConsumeSample()` 持续返回 `true` 时继续解码。因此旧 A 输出层会将主循环长期留在单次 Decoder service 内，计时、UI 与串口无法运行。
 
-`0.2.0-p0.a-stresslog2` 在每成功提交一个 768-sample Buffer 后让 `ConsumeSample()` 返回 `false`，合作式地将控制权交还 Harness。ESP8266Audio 会在下一轮重新提交尚未消费的 `lastSample`，因此不丢样、不重复；只有 `playRaw()` 真正拒绝时才增加 Backpressure。修复后仍需重新真机验证，P0-05 保持 `DEVICE TEST`。
+`0.2.0-p0.a-stresslog2` 在每成功提交一个 768-sample Buffer 后让 `ConsumeSample()` 返回 `false`，合作式地将控制权交还 Harness。ESP8266Audio 会在下一轮重新提交尚未消费的 `lastSample`，因此不丢样、不重复；只有 `playRaw()` 真正拒绝时才增加 Backpressure。修复版随后通过真机验证。
+
+### Candidate A Auto Stress Device Result
+
+- 日志：microSD `/ADVWalkman/logs/p0-a-stress-last.txt`。
+- 结果：`PASS`；版本 `0.2.0-p0.a-stresslog2`；总时长 183,044 ms。
+- 最终状态 `PLAYING`，sample rate 44,100 Hz，`failure=none`。
+- Heap start / end 均为 280,800 bytes，采样最低值 276,412 bytes，delta 0。
+- Backpressure delta 0；最大单次 service 26,401 us。
+- UI Stress 产生 3,870 frames；UI 激活阶段约 120 s，约 32 frames/s。
+- SD Stress 额外只读 19,988,356 bytes。
+- Pause / Resume / Seek / Restart 全部为 1；用户观察到的短暂停顿、进度跳转和重新播放与规定脚本一致，没有报告额外崩溃或异常状态。
 
 ### P0-01 Launcher Device Test Result
 
@@ -324,7 +335,7 @@ Launcher 尺寸检查已按环境绑定到真实槽位：A/B 使用 `0xA0000`，
 - `bench-a`、`bench-b` 是两个独立 Launcher App，不在运行时动态切换底层驱动；`bench-c` 保留为 Deferred 备用。
 - A/B 使用相同 Fixture、串口命令、UI/SD 压力负载与指标格式。
 - Restart / Seek 使用同一 MP3 验证文件、Decoder、Buffer 与 I2S 生命周期，不复制音乐来伪造“切歌库”。
-- 等响度 A/B 使用完整原曲各听一次；Candidate A 目前只是 provisional winner，只对它执行约 3 分钟的一键自动压力测试。取消 A/B 各 30 分钟与胜者 2 小时的人工硬门槛，长期稳定性在 P1 实际使用中继续验证。
+- 等响度 A/B 使用完整原曲各听一次；Candidate A 胜出并完成约 3 分钟的一键自动压力测试。取消 A/B 各 30 分钟与胜者 2 小时的人工硬门槛，长期稳定性在 P1 实际使用中继续验证。
 
 ### Launcher Flash 只读诊断（清理前）
 
@@ -412,7 +423,7 @@ Baseline 30 s
 
 固件自动检查最终 state、44.1 kHz sample rate、Backend error、UI frame 数和 SD 读取量，并在屏幕显示 `PASS` 或 `FAIL`。结果页同时显示 state / SR、heap delta / minimum heap、backpressure、service max、UI frames 和 SD KiB。
 
-`PASS` 只代表这些自动条件通过。结果页固定显示 `Listen: manual`，因为固件不能自行判断用户是否听到爆音、卡音、断音、异常偏音或声音是否好听；这部分必须由用户人工报告。当前代码只有 Build Success，P0-05 仍为 `DEVICE TEST`，不得据此提前完成 P0-06 或冻结 V1 Backend。
+`PASS` 只代表这些自动条件通过。结果页固定显示 `Listen: manual`，因为固件不能自行判断用户是否听到爆音、卡音、断音、异常偏音或声音是否好听；这部分由用户的等响度听感和现场观察补足。本次自动日志与用户观察一致，P0-05 完成。
 
 ---
 
@@ -455,13 +466,14 @@ Baseline 30 s
 
 ```text
 V1 Audio Backend:
-TBD
+Candidate A — ESP8266Audio 1.9.7 → triple-buffer M5.Speaker → ES8311
 
 Reason:
-TBD
+Equal-loudness listening found no decisive B advantage; A passed the short UI/SD/state stress test with stable heap and zero backpressure, while retaining the lowest implementation and maintenance cost.
 
 Rejected / Deferred:
-Candidate C — Deferred unless A/B both fail
+Candidate B — working fallback, not selected
+Candidate C — Deferred unless A fails during P1 development
 ```
 
 

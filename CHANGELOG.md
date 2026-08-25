@@ -80,7 +80,9 @@ Date: 2026-08-24
 - 自动测试的压力阶段只读既有 Benchmark MP3、不写 Flash；测试前先写入并关闭 `RUNNING` 标记，结束并关闭 SD Stress 后再一次性覆盖 `/ADVWalkman/logs/p0-a-stress-last.txt`。结果页显示 `PASS/FAIL`、state / SR、heap delta / sampled minimum heap、backpressure、service max、UI frames、SD KiB 和日志状态，并以 `Listen: manual` 明确保留人工听感验收。
 - 首次 `0.2.0-p0.a-stresslog` 真机运行停在 `BASELINE / PLAYING / SR=0`；持久化 `RUNNING` 日志确认首次 Decoder service 未返回主循环。
 - 根因是 M5.Speaker 队列等待后通常返回成功，导致 ESP8266Audio 在 `ConsumeSample()` 持续为 `true` 时长期留在单次 `loop()`；A 改为每成功提交一个 768-sample Buffer 后合作式让出主循环，不丢样、不重复，也不伪增 Backpressure。
-- 修复版 `0.2.0-p0.a-stresslog2` 已构建成功，固件 648,224 bytes，在现有 640 KiB App 槽中余 7,136 bytes；已覆盖到 SD 并核对 SHA-256 `db2e2e76644ecaf40b04afb4a829fce77949a4edac70f7bc0f9bbf565c4d87eb`，等待重新真机运行，P0-05 仍为 `DEVICE TEST`，A 仅为 provisional winner，未修改或冻结 PRD / TECH_DESIGN。
+- 修复版 `0.2.0-p0.a-stresslog2` 构建为 648,224 bytes，在现有 640 KiB App 槽中余 7,136 bytes；SD 副本 SHA-256 为 `db2e2e76644ecaf40b04afb4a829fce77949a4edac70f7bc0f9bbf565c4d87eb`。
+- 修复版完成 183,044 ms 真机自动压力测试：44.1 kHz、Heap delta 0、Backpressure delta 0、UI 3,870 frames、SD 额外读取 19,988,356 bytes，Pause / Resume / Seek / Restart 全部通过。
+- 根据等响度听感、真机压力结果和维护成本，P0-06 冻结 Candidate A 为 V1 Audio Backend；B 保留为可工作备选，C 继续 Deferred，PRD 产品范围不变。
 - Launcher 尺寸检查改为按环境使用真实分区上限：A/B 为 `0xA0000`，Deferred C 为历史 `0x3F0000`，避免 A/B 超过 640 KiB 时仍被构建误放行。
 
 ## V0.1.2 — Keymap Freeze
