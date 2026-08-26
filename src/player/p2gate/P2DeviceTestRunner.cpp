@@ -21,6 +21,17 @@ constexpr const char* kFixtureManifest =
     "/Music/ADVWalkmanP2Test/manifest.json";
 constexpr const char* kPlaybackPath =
     "/Music/ADVWalkmanP2Test/playback.MP3";
+constexpr const char* kSecondPlaybackPath =
+    "/Music/ADVWalkmanP2Test/song 2.mp3";
+constexpr const char* kThirdPlaybackPath =
+    "/Music/ADVWalkmanP2Test/song 10.mp3";
+constexpr const char* kBenchmarkDirectory =
+    "/Music/ADVWalkmanBenchmark";
+constexpr const char* kBenchmarkPath =
+    "/Music/ADVWalkmanBenchmark/benchmark.mp3";
+constexpr uint32_t kBenchmarkSize = 11972484U;
+constexpr const char* kBenchmarkSha256 =
+    "4003b057b19ca95bae78e66b3536557e342d1105315c2a6217f4475c0db51d63";
 constexpr const char* kRecentSlotA =
     "/ADVWalkman/test/p2-state/recent-a.bin";
 constexpr const char* kRecentSlotB =
@@ -36,16 +47,23 @@ constexpr const char* kLogPaths[] = {
 };
 
 constexpr const char* kFixtureEntries[] = {
-    "Album 2", "Album 10", "Empty", "Large", "Metadata", "中文目录",
-    "playback.MP3", "song 2.mp3", "song 10.mp3",
+    "Album 2", "Album 10", "Empty", "Large", "LongSort", "Metadata",
+    "中文目录", "playback.MP3", "song 2.mp3", "song 10.mp3",
 };
 
 constexpr LibraryEntryType kFixtureEntryTypes[] = {
     LibraryEntryType::Directory, LibraryEntryType::Directory,
     LibraryEntryType::Directory, LibraryEntryType::Directory,
     LibraryEntryType::Directory, LibraryEntryType::Directory,
-    LibraryEntryType::Track, LibraryEntryType::Track,
+    LibraryEntryType::Directory, LibraryEntryType::Track,
     LibraryEntryType::Track,
+    LibraryEntryType::Track,
+};
+
+constexpr const char* kLongSortEntries[] = {
+    "common-prefix-abcdefghijklmnopqrst-track-2.mp3",
+    "common-prefix-abcdefghijklmnopqrst-track-10.mp3",
+    "common-prefix-abcdefghijklmnopqrst-track-100.mp3",
 };
 
 constexpr const char* kCacheVisitDirectories[] = {
@@ -93,10 +111,11 @@ constexpr size_t kCacheVisitCount =
     sizeof(kCacheVisitDirectories) / sizeof(kCacheVisitDirectories[0]);
 constexpr size_t kMetadataCaseCount =
     sizeof(kMetadataCases) / sizeof(kMetadataCases[0]);
-constexpr uint32_t kDirectoryTimeoutMs = 45000;
+constexpr uint32_t kDirectoryTimeoutMs = 60000;
 constexpr uint32_t kPlaybackTimeoutMs = 12000;
 constexpr uint32_t kMetadataTimeoutMs = 10000;
 constexpr uint32_t kRecentTimeoutMs = 15000;
+constexpr uint32_t kGateWatchdogMs = 240000;
 
 bool pathEquals(const char* left, const char* right) {
     return left != nullptr && right != nullptr && std::strcmp(left, right) == 0;
@@ -140,6 +159,10 @@ bool P2DeviceTestRunner::start() {
         fail("fixture_marker_or_manifest_invalid");
         return false;
     }
+    if (!verifyLongBenchmark()) {
+        fail("long_benchmark_size_or_hash_invalid");
+        return false;
+    }
 
     const LibraryResult result = libraryRuntime_->library().openRoot();
     if (result == LibraryResult::Error) {
@@ -156,6 +179,10 @@ void P2DeviceTestRunner::service() {
         return;
     }
     const uint32_t now = millis();
+    if (now - runStartedAtMs_ > kGateWatchdogMs) {
+        fail("gate_watchdog_240s");
+        return;
+    }
     monitorPlayback(now);
     if (phase_ != Phase::Failed) {
         servicePhase(now);
@@ -164,7 +191,7 @@ void P2DeviceTestRunner::service() {
 
 void P2DeviceTestRunner::recordLoopTimings(
     uint32_t inputUpdateUs, uint32_t playerServiceStartGapUs,
-    bool speakerChannelPlayingAtServiceStart,
+    bool speakerRequestSlotOccupiedAtServiceStart,
     uint32_t playerRuntimeServiceUs, uint32_t libraryRuntimeServiceUs,
     uint32_t preGateLoopBodyUs) {
     // Startup includes four log transactions and fixture verification before
@@ -201,8 +228,8 @@ void P2DeviceTestRunner::recordLoopTimings(
     // The first Playing loop after a planned Pause/Resume is allowed to refill
     // an empty channel. Only count emptiness during an already continuous
     // Playing interval.
-    if (!speakerChannelPlayingAtServiceStart) {
-        ++speakerChannelEmptyAtServiceStart_;
+    if (!speakerRequestSlotOccupiedAtServiceStart) {
+        ++speakerRequestSlotEmptySamples_;
     }
     if (playerServiceStartGapUs > playerServiceStartGapMaxUs_) {
         playerServiceStartGapMaxUs_ = playerServiceStartGapUs;
@@ -272,9 +299,11 @@ const char* P2DeviceTestRunner::phaseName() const {
         case Phase::ValidateFixture: return "P2-01 SORT/FILTER";
         case Phase::SelectPlayback: return "P2-01 BUILD QUEUE";
         case Phase::WaitPlayback: return "P2-01 START AUDIO";
-        case Phase::RecentPrePause: return "P2-04 RECENT BEFORE 5S";
-        case Phase::RecentPaused: return "P2-04 PAUSE EXCLUDED";
-        case Phase::RecentResumeWait: return "P2-04 PLAYING 5S";
+        case Phase::RecentPrePause: return "P2-01 RECENT BEFORE 5S";
+        case Phase::RecentPaused: return "P2-01 PAUSE EXCLUDED";
+        case Phase::RecentResumeWait: return "P2-01 WAIT RECENT PENDING";
+        case Phase::RecentRaceWait: return "P2-01 PENDING THEN NEXT";
+        case Phase::RecentRaceRestore: return "P2-01 RESTORE TRACK";
         case Phase::FindChinese: return "P2-01 CHINESE PATH";
         case Phase::ChineseReady: return "P2-01 LEVEL 1";
         case Phase::FindJapanese: return "P2-01 JAPANESE PATH";
@@ -283,11 +312,25 @@ const char* P2DeviceTestRunner::phaseName() const {
         case Phase::LevelThreeReady: return "P2-01 DEEP SCAN";
         case Phase::ValidateDeepTrack: return "P2-01 DEEP TRACK";
         case Phase::ReturnFromDeep: return "P2-01 QUEUE PIN";
+        case Phase::WaitShortRepeat: return "P2-01 FAST REPEAT";
+        case Phase::ReturnToMusicRootForBenchmark: return "P2-02 RETURN /Music";
+        case Phase::FindBenchmark: return "P2-02 FIND BENCHMARK";
+        case Phase::BenchmarkReady: return "P2-02 BENCHMARK READY";
+        case Phase::FindBenchmarkTrack: return "P2-02 FIND LONG TRACK";
+        case Phase::SelectBenchmark: return "P2-02 SELECT LONG TRACK";
+        case Phase::WaitBenchmark: return "P2-02 PRIME LONG TRACK";
+        case Phase::ReturnToMusicRootForFixture: return "P2-02 RETURN /Music";
+        case Phase::FindFixtureForStress: return "P2-02 FIND FIXTURE";
+        case Phase::FixtureStressReady: return "P2-02 FIXTURE READY";
         case Phase::FindLarge: return "P2-02 OPEN LARGE";
         case Phase::LargeReady: return "P2-02 LAZY SCAN";
         case Phase::ValidateLarge: return "P2-02 1000/PAGES";
         case Phase::ReturnFromLarge: return "P2-02 RETURN";
         case Phase::CacheVisits: return "P2-02 LRU/PIN";
+        case Phase::FindLongSort: return "P2-02 OPEN LONGSORT";
+        case Phase::LongSortReady: return "P2-02 LONGSORT READY";
+        case Phase::ValidateLongSort: return "P2-02 FULL NAME SORT";
+        case Phase::ReturnFromLongSort: return "P2-02 LONGSORT RETURN";
         case Phase::FindMetadata: return "P2-03 OPEN METADATA";
         case Phase::MetadataReady: return "P2-03 READY";
         case Phase::ReadMetadata: return "P2-03 ID3/UTF";
@@ -324,9 +367,7 @@ void P2DeviceTestRunner::resetRun() {
     metadataServiceMaxUs_ = 0;
     metadataBytesRead_ = 0;
     metadataCasesPassed_ = 0;
-    speakerSilentSinceMs_ = 0;
-    speakerStarvationCount_ = 0;
-    speakerChannelEmptyAtServiceStart_ = 0;
+    speakerRequestSlotEmptySamples_ = 0;
     unexpectedPlaybackStateOver100Ms_ = 0;
     playerServiceStartGapMaxUs_ = 0;
     playerServiceStartGapOver100Ms_ = 0;
@@ -347,11 +388,13 @@ void P2DeviceTestRunner::resetRun() {
     playerGapPreviousLoopBodyUs_ = 0;
     playerGapCurrentInputUs_ = 0;
     unexpectedPlaybackStateSinceMs_ = 0;
-    speakerStarvationReported_ = false;
     playerServiceGapArmed_ = false;
     pendingLoopTimingValid_ = false;
     lastLoopTimingValid_ = false;
     playbackSelected_ = false;
+    longMeasurementActive_ = false;
+    measurementStartedAtMs_ = runStartedAtMs_;
+    measurementHeapStart_ = initialHeap_;
     playbackPath_[0] = '\0';
     std::strcpy(pendingLoopPhaseFrom_, "none");
     std::strcpy(lastLoopPhaseFrom_, "none");
@@ -366,6 +409,7 @@ void P2DeviceTestRunner::resetRun() {
     playbackEntryIndex_ = 0;
     deepReturnCount_ = 0;
     largeIndex_ = 0;
+    longSortIndex_ = 0;
     cacheVisitIndex_ = 0;
     cacheVisitInside_ = false;
     metadataCaseIndex_ = 0;
@@ -374,11 +418,13 @@ void P2DeviceTestRunner::resetRun() {
     recentBulkIndex_ = 1;
     recentMissingStep_ = 0;
     recentWriteStarted_ = false;
-    finalPlayerSnapshot_ = PlayerSnapshot{};
-    finalPlayerSnapshotValid_ = false;
+    primaryFailureTaskIndex_ = 4;
+    std::strcpy(primaryFailurePhase_, "none");
     autoRecentTimingPassed_ = false;
-    for (bool& passed : taskPassed_) {
-        passed = false;
+    for (size_t index = 0; index < 4; ++index) {
+        taskPassed_[index] = false;
+        taskExecuted_[index] = index == 0;
+        taskSnapshots_[index] = TaskSnapshot{};
     }
     std::memset(taskDetail_, 0, sizeof(taskDetail_));
     SD.remove(kRecentSlotA);
@@ -424,7 +470,7 @@ void P2DeviceTestRunner::servicePhase(uint32_t now) {
             if (!waitForReady()) return;
             if (!pathEquals(library.currentPath(), kFixtureRoot) ||
                 library.entryCount() != kFixtureEntryCount ||
-                library.directoryCount() != 6 || library.trackCount() != 3) {
+                library.directoryCount() != 7 || library.trackCount() != 3) {
                 fail("fixture_filter_or_count_mismatch");
                 return;
             }
@@ -434,7 +480,7 @@ void P2DeviceTestRunner::servicePhase(uint32_t now) {
 
         case Phase::ValidateFixture: {
             if (validationIndex_ >= kFixtureEntryCount) {
-                playbackEntryIndex_ = 6;
+                playbackEntryIndex_ = 7;
                 enter(Phase::SelectPlayback);
                 return;
             }
@@ -521,23 +567,91 @@ void P2DeviceTestRunner::servicePhase(uint32_t now) {
             return;
 
         case Phase::RecentResumeWait: {
-            char recentPath[kTrackPathCapacity] = {};
-            const bool recorded = libraryRuntime_->recentCount() == 1 &&
-                libraryRuntime_->recentPathAt(0, recentPath,
-                                              sizeof(recentPath)) &&
-                pathEquals(recentPath, kPlaybackPath) &&
-                libraryRuntime_->recentResult() == RecentTracksResult::Ok;
             const uint32_t elapsed = now - phaseStartedAtMs_;
             if (elapsed < 4000) {
-                if (recorded) {
+                if (libraryRuntime_->recentCount() != 0) {
                     fail("recent_recorded_too_early_after_resume");
                 }
                 return;
             }
-            if (!recorded) {
-                if (elapsed > 7000) {
-                    fail("recent_five_second_rule_timeout");
+            if (!libraryRuntime_->recentRecordPending()) {
+                if (elapsed > 7000U) {
+                    fail("recent_pending_threshold_timeout");
                 }
+                return;
+            }
+            // LibraryRuntime deliberately keeps a newly queued record pending
+            // until its next service call.  Switch tracks in this same Gate
+            // loop to prove the copied path survives observation reset.
+            if (!player_->next()) {
+                fail("recent_race_next_failed");
+                return;
+            }
+            std::strcpy(playbackPath_, kSecondPlaybackPath);
+            enter(Phase::RecentRaceWait);
+            return;
+        }
+
+        case Phase::RecentRaceWait: {
+            char currentPath[kTrackPathCapacity] = {};
+            if (!player_->currentPath(currentPath, sizeof(currentPath)) ||
+                !pathEquals(currentPath, kSecondPlaybackPath) ||
+                player_->snapshot().state != PlayerState::Playing) {
+                fail("recent_race_new_track_not_playing");
+                return;
+            }
+            char recentPath[kTrackPathCapacity] = {};
+            if (libraryRuntime_->recentCount() == 0) {
+                if (now - phaseStartedAtMs_ > 3000U) {
+                    fail("recent_race_pending_path_lost");
+                }
+                return;
+            }
+            if (!libraryRuntime_->recentPathAt(0, recentPath,
+                                               sizeof(recentPath)) ||
+                !pathEquals(recentPath, kPlaybackPath)) {
+                fail("recent_race_pending_path_overwritten");
+                return;
+            }
+            const RecentTracksResult recentResult =
+                libraryRuntime_->recentResult();
+            if (recentResult == RecentTracksResult::Pending ||
+                recentResult == RecentTracksResult::Busy) {
+                if (now - phaseStartedAtMs_ > 3000U) {
+                    fail("recent_race_publish_timeout");
+                }
+                return;
+            }
+            if (recentResult != RecentTracksResult::Ok) {
+                fail("recent_race_publish_failed");
+                return;
+            }
+            if (!player_->previous()) {
+                fail("recent_race_restore_previous_failed");
+                return;
+            }
+            std::strcpy(playbackPath_, kPlaybackPath);
+            enter(Phase::RecentRaceRestore);
+            return;
+        }
+
+        case Phase::RecentRaceRestore: {
+            char currentPath[kTrackPathCapacity] = {};
+            if (!player_->currentPath(currentPath, sizeof(currentPath)) ||
+                !pathEquals(currentPath, kPlaybackPath) ||
+                player_->snapshot().state != PlayerState::Playing) {
+                if (now - phaseStartedAtMs_ > kPlaybackTimeoutMs) {
+                    fail("recent_race_source_restore_timeout");
+                }
+                return;
+            }
+            if (!waitForReady()) return;
+            char recentPath[kTrackPathCapacity] = {};
+            if (libraryRuntime_->recentCount() != 1 ||
+                !libraryRuntime_->recentPathAt(0, recentPath,
+                                               sizeof(recentPath)) ||
+                !pathEquals(recentPath, kPlaybackPath)) {
+                fail("recent_race_source_not_preserved");
                 return;
             }
             autoRecentTimingPassed_ = true;
@@ -623,20 +737,174 @@ void P2DeviceTestRunner::servicePhase(uint32_t now) {
 
         case Phase::ReturnFromDeep:
             if (!returnToFixtureStep()) return;
+            {
+                char queuePath0[kTrackPathCapacity] = {};
+                char queuePath1[kTrackPathCapacity] = {};
+                char queuePath2[kTrackPathCapacity] = {};
+                const PlaybackQueue& queue = player_->controller().queue();
+                if (!queue.pathAtSourceIndex(0, queuePath0,
+                                             sizeof(queuePath0)) ||
+                    !queue.pathAtSourceIndex(1, queuePath1,
+                                             sizeof(queuePath1)) ||
+                    !queue.pathAtSourceIndex(2, queuePath2,
+                                             sizeof(queuePath2)) ||
+                    !pathEquals(queuePath0, kPlaybackPath) ||
+                    !pathEquals(queuePath1, kSecondPlaybackPath) ||
+                    !pathEquals(queuePath2, kThirdPlaybackPath)) {
+                    fail("short_pinned_queue_source_invalid");
+                    return;
+                }
+            }
             if (player_->snapshot().state != PlayerState::Playing ||
                 !player_->currentPath(playbackPath_, sizeof(playbackPath_)) ||
                 !pathEquals(playbackPath_, kPlaybackPath)) {
                 fail("browsing_changed_playback");
                 return;
             }
+            enter(Phase::WaitShortRepeat);
+            return;
+
+        case Phase::WaitShortRepeat: {
+            const PlayerSnapshot snapshot = player_->snapshot();
+            if (snapshot.repeatRestartCount == 0) {
+                if (now - phaseStartedAtMs_ > 20000U) {
+                    fail("repeat_one_fast_restart_timeout");
+                }
+                return;
+            }
+            if (snapshot.repeatRestartMaxUs == 0 ||
+                snapshot.repeatRestartMaxUs > 100000U ||
+                snapshot.state != PlayerState::Playing ||
+                snapshot.sampleRateHz != 44100) {
+                fail("repeat_one_fast_restart_slow_or_invalid");
+                return;
+            }
             passTask(0,
-                     "root_guard=1 nested_utf8=1 hidden_filtered=1 non_mp3_filtered=1 natural_sort=1 current_folder_queue=3 browsing_kept_playing=1");
+                     "root_guard=1 nested_utf8=1 hidden_filtered=1 non_mp3_filtered=1 natural_sort=1 current_folder_queue=3 browsing_kept_playing=1 repeat_one_fast_restart=1");
             if (phase_ == Phase::Failed) return;
+            player_->setRepeatMode(RepeatMode::Off);
+            playbackSelected_ = false;
+            if (library.parent() == LibraryResult::Error) {
+                fail("benchmark_return_to_music_root_failed");
+                return;
+            }
+            enter(Phase::ReturnToMusicRootForBenchmark);
+            return;
+        }
+
+        case Phase::ReturnToMusicRootForBenchmark:
+            if (!waitForReady()) return;
+            if (!pathEquals(library.currentPath(), MusicLibrary::kMusicRoot)) {
+                fail("benchmark_music_root_mismatch");
+                return;
+            }
+            enter(Phase::FindBenchmark);
+            return;
+
+        case Phase::FindBenchmark:
+            search = findEntryStep("ADVWalkmanBenchmark",
+                                   LibraryEntryType::Directory, found);
+            if (search == SearchResult::Pending) return;
+            if (search != SearchResult::Found ||
+                library.enter(found) == LibraryResult::Error) {
+                fail("benchmark_directory_enter_failed");
+                return;
+            }
+            enter(Phase::BenchmarkReady);
+            return;
+
+        case Phase::BenchmarkReady:
+            if (!waitForReady()) return;
+            if (!pathEquals(library.currentPath(), kBenchmarkDirectory)) {
+                fail("benchmark_directory_path_mismatch");
+                return;
+            }
+            enter(Phase::FindBenchmarkTrack);
+            return;
+
+        case Phase::FindBenchmarkTrack:
+            search = findEntryStep("benchmark.mp3", LibraryEntryType::Track,
+                                   found);
+            if (search == SearchResult::Pending) return;
+            if (search != SearchResult::Found) {
+                fail("benchmark_track_missing");
+                return;
+            }
+            playbackEntryIndex_ = found;
+            enter(Phase::SelectBenchmark);
+            return;
+
+        case Phase::SelectBenchmark: {
+            player_->controller().resetDiagnostics();
+            const LibraryResult result =
+                libraryRuntime_->selectTrack(playbackEntryIndex_, true);
+            if (result == LibraryResult::Error) {
+                fail("benchmark_queue_selection_failed");
+                return;
+            }
+            enter(Phase::WaitBenchmark);
+            return;
+        }
+
+        case Phase::WaitBenchmark: {
+            const PlayerSnapshot snapshot = player_->snapshot();
+            char path[kTrackPathCapacity] = {};
+            const bool ready = !libraryRuntime_->selectionPending() &&
+                snapshot.state == PlayerState::Playing &&
+                snapshot.sampleRateHz == 44100 &&
+                snapshot.pcmBuffersSinceReset >= 10 &&
+                player_->currentPath(path, sizeof(path)) &&
+                pathEquals(path, kBenchmarkPath);
+            if (!ready) {
+                if (snapshot.state == PlayerState::Error) {
+                    fail("benchmark_playback_error");
+                } else if (now - phaseStartedAtMs_ > kPlaybackTimeoutMs) {
+                    fail("benchmark_playback_timeout");
+                }
+                return;
+            }
+            std::strcpy(playbackPath_, kBenchmarkPath);
+            resetMeasurementWindow(kBenchmarkPath);
+            playbackSelected_ = true;
+            longMeasurementActive_ = true;
+            playbackBackpressureStart_ = 0;
+            playbackAudioErrorsStart_ = 0;
             library.clearStats();
-            playbackBackpressureStart_ =
-                player_->snapshot().backpressureEvents;
-            playbackAudioErrorsStart_ =
-                player_->snapshot().audioErrorEvents;
+            if (library.parent() == LibraryResult::Error) {
+                fail("benchmark_parent_failed");
+                return;
+            }
+            enter(Phase::ReturnToMusicRootForFixture);
+            return;
+        }
+
+        case Phase::ReturnToMusicRootForFixture:
+            if (!waitForReady()) return;
+            if (!pathEquals(library.currentPath(), MusicLibrary::kMusicRoot)) {
+                fail("stress_music_root_mismatch");
+                return;
+            }
+            enter(Phase::FindFixtureForStress);
+            return;
+
+        case Phase::FindFixtureForStress:
+            search = findEntryStep("ADVWalkmanP2Test",
+                                   LibraryEntryType::Directory, found);
+            if (search == SearchResult::Pending) return;
+            if (search != SearchResult::Found ||
+                library.enter(found) == LibraryResult::Error) {
+                fail("stress_fixture_enter_failed");
+                return;
+            }
+            enter(Phase::FixtureStressReady);
+            return;
+
+        case Phase::FixtureStressReady:
+            if (!waitForReady()) return;
+            if (!pathEquals(library.currentPath(), kFixtureRoot)) {
+                fail("stress_fixture_path_mismatch");
+                return;
+            }
             enter(Phase::FindLarge);
             return;
 
@@ -698,29 +966,7 @@ void P2DeviceTestRunner::servicePhase(uint32_t now) {
                     fail("cache_visit_did_not_return_to_fixture");
                     return;
                 }
-                const LibraryStats stats = library.stats();
-                const PlayerSnapshot snapshot = player_->snapshot();
-                if (stats.cacheHits == 0 || stats.cacheMisses == 0 ||
-                    stats.cacheEvictions == 0 || stats.pageMisses == 0 ||
-                    snapshot.state != PlayerState::Playing ||
-                    snapshot.sampleRateHz != 44100 ||
-                    snapshot.audioErrorEvents != playbackAudioErrorsStart_ ||
-                    snapshot.backpressureEvents != playbackBackpressureStart_ ||
-                    speakerStarvationCount_ != 0 ||
-                    ESP.getFreeHeap() + 16384U < initialHeap_) {
-                    fail("lazy_cache_or_audio_stability_failed");
-                    return;
-                }
-                char detail[224] = {};
-                std::snprintf(
-                    detail, sizeof(detail),
-                    "large_tracks=1000 pagination=1 natural_sort=1 lru_eviction=1 pinned_queue=1 audio_stable=1 heap_tolerance_bytes=16384 player_gap_gt100=%lu player_gap_max_us=%lu",
-                    static_cast<unsigned long>(
-                        playerServiceStartGapOver100Ms_),
-                    static_cast<unsigned long>(playerServiceStartGapMaxUs_));
-                passTask(1, detail);
-                if (phase_ == Phase::Failed) return;
-                enter(Phase::FindMetadata);
+                enter(Phase::FindLongSort);
                 return;
             }
 
@@ -751,6 +997,92 @@ void P2DeviceTestRunner::servicePhase(uint32_t now) {
             cacheVisitInside_ = false;
             ++cacheVisitIndex_;
             searchActive_ = false;
+            return;
+        }
+
+        case Phase::FindLongSort:
+            search = findEntryStep("LongSort", LibraryEntryType::Directory,
+                                   found);
+            if (search == SearchResult::Pending) return;
+            if (search != SearchResult::Found ||
+                library.enter(found) == LibraryResult::Error) {
+                fail("long_sort_directory_enter_failed");
+                return;
+            }
+            enter(Phase::LongSortReady);
+            return;
+
+        case Phase::LongSortReady:
+            if (!waitForReady()) return;
+            if (library.entryCount() != 3 || library.directoryCount() != 0 ||
+                library.trackCount() != 3) {
+                fail("long_sort_directory_count_mismatch");
+                return;
+            }
+            longSortIndex_ = 0;
+            enter(Phase::ValidateLongSort);
+            return;
+
+        case Phase::ValidateLongSort: {
+            if (longSortIndex_ >= 3) {
+                if (library.parent() == LibraryResult::Error) {
+                    fail("long_sort_return_failed");
+                    return;
+                }
+                enter(Phase::ReturnFromLongSort);
+                return;
+            }
+            LibraryEntry entry;
+            const LibraryResult result = library.entryAt(longSortIndex_, entry);
+            if (result == LibraryResult::Pending) return;
+            if (result != LibraryResult::Ok ||
+                entry.type != LibraryEntryType::Track ||
+                std::strcmp(entry.name, kLongSortEntries[longSortIndex_]) != 0) {
+                fail("long_sort_full_name_fallback_mismatch");
+                return;
+            }
+            ++longSortIndex_;
+            return;
+        }
+
+        case Phase::ReturnFromLongSort: {
+            if (!waitForReady()) return;
+            if (!pathEquals(library.currentPath(), kFixtureRoot)) {
+                fail("long_sort_fixture_return_mismatch");
+                return;
+            }
+            const LibraryStats stats = library.stats();
+            const PlayerSnapshot snapshot = player_->snapshot();
+            char pinnedSourcePath[kTrackPathCapacity] = {};
+            const bool pinnedSourceHealthy =
+                player_->controller().queue().pathAtSourceIndex(
+                    0, pinnedSourcePath, sizeof(pinnedSourcePath)) &&
+                pathEquals(pinnedSourcePath, kBenchmarkPath);
+            if (stats.cacheHits == 0 || stats.cacheMisses == 0 ||
+                stats.cacheEvictions == 0 || stats.pageMisses == 0 ||
+                stats.sortMoves == 0 || stats.sortComparisons == 0 ||
+                stats.sortFallbackComparisons == 0 ||
+                stats.scratchBytes < 73728U ||
+                stats.scratchAllocationFailures != 0 ||
+                !pinnedSourceHealthy ||
+                snapshot.state != PlayerState::Playing ||
+                snapshot.sampleRateHz != 44100 ||
+                snapshot.audioErrorEvents != playbackAudioErrorsStart_ ||
+                snapshot.backpressureEvents != playbackBackpressureStart_ ||
+                minimumHeap_ < 80U * 1024U ||
+                ESP.getFreeHeap() + 16384U < measurementHeapStart_) {
+                fail("lazy_cache_sort_or_audio_stability_failed");
+                return;
+            }
+            char detail[224] = {};
+            std::snprintf(
+                detail, sizeof(detail),
+                "large_tracks=1000 pagination=1 natural_sort=1 full_name_fallback=1 lru_eviction=1 pinned_queue_source_resolved=1 audio_stable=1 heap_tolerance_bytes=16384 gap_gt100=%lu gap_max_us=%lu",
+                static_cast<unsigned long>(playerServiceStartGapOver100Ms_),
+                static_cast<unsigned long>(playerServiceStartGapMaxUs_));
+            passTask(1, detail);
+            if (phase_ == Phase::Failed) return;
+            enter(Phase::FindMetadata);
             return;
         }
 
@@ -868,7 +1200,7 @@ void P2DeviceTestRunner::servicePhase(uint32_t now) {
                 libraryRuntime_->recentCount() > 0 &&
                 libraryRuntime_->recentPathAt(0, recentPath,
                                                sizeof(recentPath)) &&
-                pathEquals(recentPath, kPlaybackPath) &&
+                pathEquals(recentPath, kBenchmarkPath) &&
                 libraryRuntime_->recentResult() == RecentTracksResult::Ok;
             if (!autoRecentTimingPassed_ || !automaticRecorded) {
                 if (now - phaseStartedAtMs_ > kRecentTimeoutMs) {
@@ -1037,7 +1369,7 @@ void P2DeviceTestRunner::servicePhase(uint32_t now) {
                 return;
             }
             passTask(3,
-                     "playing_5s=1 pause_excluded=1 no_early_record=1 aba_dedupe=1 maximum=32 eviction=1 missing_filtered=1 ab_slots=1 crc_reload=1 isolated_state=1");
+                     "playing_5s=1 pause_excluded=1 pending_path_survived_track_change=1 aba_dedupe=1 maximum=32 eviction=1 missing_filtered=1 ab_slots=1 crc_reload=1 isolated_state=1");
             if (phase_ == Phase::Failed) return;
             finalizePass();
             return;
@@ -1054,7 +1386,8 @@ void P2DeviceTestRunner::monitorPlayback(uint32_t now) {
         return;
     }
     const PlayerSnapshot snapshot = player_->snapshot();
-    const bool expectPaused = phase_ == Phase::RecentPaused;
+    const bool expectPaused = !longMeasurementActive_ &&
+        phase_ == Phase::RecentPaused;
     const bool expectPlaying = !expectPaused;
 
     if (snapshot.state == PlayerState::Error ||
@@ -1068,7 +1401,7 @@ void P2DeviceTestRunner::monitorPlayback(uint32_t now) {
     }
     char path[kTrackPathCapacity] = {};
     if (!snapshot.hasCurrent || !player_->currentPath(path, sizeof(path)) ||
-        !pathEquals(path, kPlaybackPath)) {
+        playbackPath_[0] == '\0' || !pathEquals(path, playbackPath_)) {
         fail("pinned_queue_path_changed");
         return;
     }
@@ -1091,21 +1424,33 @@ void P2DeviceTestRunner::monitorPlayback(uint32_t now) {
         unexpectedPlaybackStateSinceMs_ = 0;
     }
 
-    if (snapshot.state == PlayerState::Playing && snapshot.sampleRateHz > 0 &&
-        M5.Speaker.isPlaying(0) == 0) {
-        if (speakerSilentSinceMs_ == 0) {
-            speakerSilentSinceMs_ = now;
-            speakerStarvationReported_ = false;
-        } else if (!speakerStarvationReported_ &&
-                   now - speakerSilentSinceMs_ > 100) {
-            ++speakerStarvationCount_;
-            speakerStarvationReported_ = true;
-            fail("speaker_starvation_over_100ms");
-            return;
+    // M5.Speaker.isPlaying(0) exposes request-slot occupancy, not hardware
+    // DMA underrun.  It remains a diagnostic sampled by recordLoopTimings().
+    if (!longMeasurementActive_) return;
+
+    if (snapshot.trackEndedEvents != 0) {
+        fail("long_benchmark_ended_unexpectedly");
+        return;
+    }
+    if (snapshot.pcmSubmitGapOver100Ms != 0 ||
+        snapshot.pcmSubmitGapMaxUs > 100000U) {
+        fail("pcm_submit_gap_over_100ms");
+        return;
+    }
+    if (playerServiceStartGapOver100Ms_ != 0 ||
+        playerServiceStartGapMaxUs_ > 100000U) {
+        fail("player_service_gap_over_100ms");
+        return;
+    }
+    if (snapshot.pcmBuffersSinceReset == 0) {
+        if (now - measurementStartedAtMs_ > 2000U) {
+            fail("pcm_progress_start_timeout");
         }
-    } else {
-        speakerSilentSinceMs_ = 0;
-        speakerStarvationReported_ = false;
+        return;
+    }
+    if (snapshot.pcmLastSubmitAgeUs == UINT32_MAX ||
+        snapshot.pcmLastSubmitAgeUs > 2000000U) {
+        fail("pcm_progress_stalled_over_2s");
     }
 }
 
@@ -1256,7 +1601,6 @@ void P2DeviceTestRunner::enter(Phase phase) {
     phase_ = phase;
     phaseStartedAtMs_ = millis();
     searchActive_ = false;
-    render(true);
 }
 
 void P2DeviceTestRunner::passTask(size_t taskIndex, const char* detail) {
@@ -1264,7 +1608,99 @@ void P2DeviceTestRunner::passTask(size_t taskIndex, const char* detail) {
     std::strncpy(taskDetail_[taskIndex], detail == nullptr ? "none" : detail,
                  sizeof(taskDetail_[taskIndex]) - 1);
     taskDetail_[taskIndex][sizeof(taskDetail_[taskIndex]) - 1] = '\0';
+    taskExecuted_[taskIndex] = true;
+    captureTaskSnapshot(taskIndex);
     taskPassed_[taskIndex] = true;
+    if (taskIndex + 1 < 4) taskExecuted_[taskIndex + 1] = true;
+}
+
+void P2DeviceTestRunner::captureTaskSnapshot(size_t taskIndex) {
+    if (taskIndex >= 4) return;
+    TaskSnapshot& output = taskSnapshots_[taskIndex];
+    output = TaskSnapshot{};
+    output.valid = true;
+    output.player = player_ == nullptr ? PlayerSnapshot{} : player_->snapshot();
+    output.library = libraryRuntime_ == nullptr
+                         ? LibraryStats{}
+                         : libraryRuntime_->library().stats();
+    output.elapsedMs = millis() - runStartedAtMs_;
+    output.measurementElapsedMs = millis() - measurementStartedAtMs_;
+    output.heapStart = longMeasurementActive_ ? measurementHeapStart_
+                                              : initialHeap_;
+    output.heapNow = ESP.getFreeHeap();
+    output.heapMinimum = minimumHeap_;
+    output.playerServiceStartGapMaxUs = playerServiceStartGapMaxUs_;
+    output.playerServiceStartGapOver100Ms = playerServiceStartGapOver100Ms_;
+    output.speakerRequestSlotEmptySamples = speakerRequestSlotEmptySamples_;
+    output.unexpectedPlaybackStateOver100Ms =
+        unexpectedPlaybackStateOver100Ms_;
+    output.inputUpdateMaxUs = inputUpdateMaxUs_;
+    output.playerRuntimeServiceMaxUs = playerRuntimeServiceMaxUs_;
+    output.libraryRuntimeServiceMaxUs = libraryRuntimeServiceMaxUs_;
+    output.gateServiceMaxUs = gateServiceMaxUs_;
+    output.loopBodyMaxUs = loopBodyMaxUs_;
+    output.playerGapPreviousPlayerRuntimeUs =
+        playerGapPreviousPlayerRuntimeUs_;
+    output.playerGapPreviousLibraryRuntimeUs =
+        playerGapPreviousLibraryRuntimeUs_;
+    output.playerGapPreviousGateUs = playerGapPreviousGateUs_;
+    output.playerGapPreviousLoopBodyUs = playerGapPreviousLoopBodyUs_;
+    output.playerGapCurrentInputUs = playerGapCurrentInputUs_;
+    std::strncpy(output.measurementTrack,
+                 playbackPath_[0] == '\0' ? "none" : playbackPath_,
+                 sizeof(output.measurementTrack) - 1);
+    std::strncpy(output.gapFromPhase, playerServiceStartGapMaxFromPhase_,
+                 sizeof(output.gapFromPhase) - 1);
+    std::strncpy(output.gapToPhase, playerServiceStartGapMaxToPhase_,
+                 sizeof(output.gapToPhase) - 1);
+}
+
+void P2DeviceTestRunner::resetMeasurementWindow(const char* track) {
+    player_->controller().resetDiagnostics();
+    measurementStartedAtMs_ = millis();
+    measurementHeapStart_ = ESP.getFreeHeap();
+    minimumHeap_ = measurementHeapStart_;
+    speakerRequestSlotEmptySamples_ = 0;
+    unexpectedPlaybackStateOver100Ms_ = 0;
+    playerServiceStartGapMaxUs_ = 0;
+    playerServiceStartGapOver100Ms_ = 0;
+    inputUpdateMaxUs_ = 0;
+    playerRuntimeServiceMaxUs_ = 0;
+    libraryRuntimeServiceMaxUs_ = 0;
+    gateServiceMaxUs_ = 0;
+    loopBodyMaxUs_ = 0;
+    pendingLoopPlayerRuntimeUs_ = 0;
+    pendingLoopLibraryRuntimeUs_ = 0;
+    lastLoopPlayerRuntimeUs_ = 0;
+    lastLoopLibraryRuntimeUs_ = 0;
+    lastLoopGateUs_ = 0;
+    lastLoopBodyUs_ = 0;
+    playerGapPreviousPlayerRuntimeUs_ = 0;
+    playerGapPreviousLibraryRuntimeUs_ = 0;
+    playerGapPreviousGateUs_ = 0;
+    playerGapPreviousLoopBodyUs_ = 0;
+    playerGapCurrentInputUs_ = 0;
+    unexpectedPlaybackStateSinceMs_ = 0;
+    // The long track has already delivered ten buffers before this reset, so
+    // the very next Player-service interval is part of the measurement.
+    playerServiceGapArmed_ = true;
+    pendingLoopTimingValid_ = false;
+    lastLoopTimingValid_ = false;
+    std::strcpy(pendingLoopPhaseFrom_, "none");
+    std::strcpy(lastLoopPhaseFrom_, "none");
+    std::strcpy(lastLoopPhaseTo_, "none");
+    std::strcpy(playerServiceStartGapMaxFromPhase_, "none");
+    std::strcpy(playerServiceStartGapMaxToPhase_, "none");
+    std::strncpy(playbackPath_, track == nullptr ? "none" : track,
+                 sizeof(playbackPath_) - 1);
+    playbackPath_[sizeof(playbackPath_) - 1] = '\0';
+}
+
+size_t P2DeviceTestRunner::currentTaskIndex() const {
+    for (size_t index = 0; index < 4; ++index) {
+        if (!taskPassed_[index]) return index;
+    }
+    return 3;
 }
 
 bool P2DeviceTestRunner::finalizePass() {
@@ -1280,21 +1716,28 @@ bool P2DeviceTestRunner::finalizePass() {
         health.audioError != AudioError::None || health.sampleRateHz != 44100 ||
         health.audioErrorEvents != playbackAudioErrorsStart_ ||
         health.backpressureEvents != playbackBackpressureStart_ ||
-        speakerStarvationCount_ != 0) {
+        health.trackEndedEvents != 0 || health.pcmBuffersSinceReset == 0 ||
+        health.pcmSubmitGapOver100Ms != 0 ||
+        health.pcmSubmitGapMaxUs > 100000U ||
+        health.pcmLastSubmitAgeUs > 2000000U ||
+        playerServiceStartGapOver100Ms_ != 0) {
         fail("final_audio_health_failed");
         return false;
     }
-    finalPlayerSnapshot_ = player_->snapshot();
-    finalPlayerSnapshotValid_ = true;
     player_->stop();
     for (size_t index = 0; index < 4; ++index) {
         if (!writeLog(index, "PASS", taskDetail_[index])) {
-            taskPassed_[index] = false;
+            // Log publication is a final Gate concern.  Attribute a transient
+            // failure consistently to P2-04 so logs never contain PASS entries
+            // after the primary FAIL, regardless of which rewrite failed.
+            taskPassed_[3] = false;
             fail("pass_log_write_failed");
             return false;
         }
     }
-    enter(Phase::Passed);
+    phase_ = Phase::Passed;
+    phaseStartedAtMs_ = millis();
+    render(true);
     return true;
 }
 
@@ -1303,17 +1746,28 @@ void P2DeviceTestRunner::fail(const char* reason) {
     std::strncpy(failure_, reason == nullptr ? "unknown" : reason,
                  sizeof(failure_) - 1);
     failure_[sizeof(failure_) - 1] = '\0';
-    if (player_ != nullptr && !finalPlayerSnapshotValid_) {
-        finalPlayerSnapshot_ = player_->snapshot();
-        finalPlayerSnapshotValid_ = true;
-        player_->stop();
-    }
+    primaryFailureTaskIndex_ = currentTaskIndex();
+    std::strncpy(primaryFailurePhase_, phaseName(),
+                 sizeof(primaryFailurePhase_) - 1);
+    primaryFailurePhase_[sizeof(primaryFailurePhase_) - 1] = '\0';
+    taskExecuted_[primaryFailureTaskIndex_] = true;
+    captureTaskSnapshot(primaryFailureTaskIndex_);
+    if (player_ != nullptr) player_->stop();
     SD.remove(kMissingRecentPath);
     for (size_t index = 0; index < 4; ++index) {
-        writeLog(index, taskPassed_[index] ? "PASS" : "FAIL",
-                 taskPassed_[index] ? taskDetail_[index] : failure_);
+        const char* status = index == primaryFailureTaskIndex_
+                                 ? "FAIL"
+                                 : taskPassed_[index] ? "PASS" : "SKIPPED";
+        writeLog(index, status,
+                 index == primaryFailureTaskIndex_
+                     ? failure_
+                     : taskPassed_[index]
+                           ? taskDetail_[index]
+                           : "not_executed_after_primary_failure");
     }
-    enter(Phase::Failed);
+    phase_ = Phase::Failed;
+    phaseStartedAtMs_ = millis();
+    render(true);
 }
 
 void P2DeviceTestRunner::render(bool force) {
@@ -1363,24 +1817,54 @@ bool P2DeviceTestRunner::writeLog(size_t taskIndex, const char* status,
     File log = SD.open(path, FILE_WRITE);
     if (!log) return false;
 
-    const PlayerSnapshot snapshot = finalPlayerSnapshotValid_
-                                        ? finalPlayerSnapshot_
+    const bool captured = taskSnapshots_[taskIndex].valid;
+    const TaskSnapshot& task = taskSnapshots_[taskIndex];
+    const PlayerSnapshot snapshot = captured
+                                        ? task.player
                                         : player_ == nullptr
                                               ? PlayerSnapshot{}
                                               : player_->snapshot();
-    const MusicLibrary* library =
-        libraryRuntime_ == nullptr ? nullptr : &libraryRuntime_->library();
-    const LibraryStats stats =
-        library == nullptr ? LibraryStats{} : library->stats();
+    const MusicLibrary* library = libraryRuntime_ == nullptr
+                                      ? nullptr
+                                      : &libraryRuntime_->library();
+    const LibraryStats stats = captured
+                                   ? task.library
+                                   : library == nullptr ? LibraryStats{}
+                                                        : library->stats();
+    char failureTask[12] = "none";
+    if (primaryFailureTaskIndex_ < 4) {
+        std::snprintf(failureTask, sizeof(failureTask), "P2-0%u",
+                      static_cast<unsigned>(primaryFailureTaskIndex_ + 1));
+    }
+    const bool skipped = std::strcmp(status, "SKIPPED") == 0;
     log.printf("status=%s\n", status);
     log.printf("version=%s\n", ADV_WALKMAN_VERSION);
     log.printf("gate=P2\n");
     log.printf("task=P2-0%u\n", static_cast<unsigned>(taskIndex + 1));
+    log.printf("task_executed=%u\n",
+               skipped ? 0U : taskExecuted_[taskIndex] ? 1U : 0U);
     log.printf("phase=%s\n", phaseName());
+    log.printf("primary_failure_task=%s\n", failureTask);
+    log.printf("primary_failure_phase=%s\n",
+               primaryFailureTaskIndex_ < 4 ? primaryFailurePhase_ : "none");
+    log.printf("failure_reason=%s\n",
+               primaryFailureTaskIndex_ < 4 ? failure_ : "none");
     log.printf("detail=%s\n", detail == nullptr ? "none" : detail);
     log.printf("elapsed_ms=%lu\n",
-               static_cast<unsigned long>(millis() - runStartedAtMs_));
+               static_cast<unsigned long>(captured ? task.elapsedMs
+                                                   : millis() - runStartedAtMs_));
+    log.printf("measurement_elapsed_ms=%lu\n",
+               static_cast<unsigned long>(captured
+                                              ? task.measurementElapsedMs
+                                              : millis() - measurementStartedAtMs_));
     log.printf("fixture_manifest_sha256=%s\n", manifestSha256_);
+    log.printf("benchmark_path=%s\n", kBenchmarkPath);
+    log.printf("benchmark_size=%lu\n",
+               static_cast<unsigned long>(kBenchmarkSize));
+    log.printf("benchmark_sha256=%s\n", kBenchmarkSha256);
+    log.printf("measurement_track=%s\n",
+               captured ? task.measurementTrack
+                        : playbackPath_[0] == '\0' ? "none" : playbackPath_);
     log.printf("library_path=%s\n",
                library == nullptr ? "none" : library->currentPath());
     log.printf("library_state=%s\n",
@@ -1404,6 +1888,24 @@ bool P2DeviceTestRunner::writeLog(size_t taskIndex, const char* status,
                static_cast<unsigned long>(stats.entryReadMaxUs));
     log.printf("library_over_budget_steps=%lu\n",
                static_cast<unsigned long>(stats.overBudgetSteps));
+    log.printf("scan_max_us=%lu\n",
+               static_cast<unsigned long>(stats.scanMaxUs));
+    log.printf("sort_slice_max_us=%lu\n",
+               static_cast<unsigned long>(stats.sortSliceMaxUs));
+    log.printf("finalize_max_us=%lu\n",
+               static_cast<unsigned long>(stats.finalizeMaxUs));
+    log.printf("sort_moves=%lu\n",
+               static_cast<unsigned long>(stats.sortMoves));
+    log.printf("sort_comparisons=%lu\n",
+               static_cast<unsigned long>(stats.sortComparisons));
+    log.printf("sort_fallback_comparisons=%lu\n",
+               static_cast<unsigned long>(stats.sortFallbackComparisons));
+    log.printf("sort_fallback_max_us=%lu\n",
+               static_cast<unsigned long>(stats.sortFallbackMaxUs));
+    log.printf("scratch_bytes=%lu\n",
+               static_cast<unsigned long>(stats.scratchBytes));
+    log.printf("scratch_allocation_failures=%lu\n",
+               static_cast<unsigned long>(stats.scratchAllocationFailures));
     log.printf("player_state=%s\n", playerStateName(snapshot.state));
     log.printf("player_error=%s\n", playerErrorName(snapshot.error));
     log.printf("audio_error=%s\n", audioErrorName(snapshot.audioError));
@@ -1413,50 +1915,93 @@ bool P2DeviceTestRunner::writeLog(size_t taskIndex, const char* status,
                static_cast<unsigned long>(snapshot.backpressureEvents));
     log.printf("audio_error_events=%lu\n",
                static_cast<unsigned long>(snapshot.audioErrorEvents));
+    log.printf("track_ended_events=%lu\n",
+               static_cast<unsigned long>(snapshot.trackEndedEvents));
+    log.printf("pcm_frames_since_reset=%llu\n",
+               static_cast<unsigned long long>(snapshot.pcmFramesSinceReset));
+    log.printf("pcm_buffers_since_reset=%lu\n",
+               static_cast<unsigned long>(snapshot.pcmBuffersSinceReset));
+    log.printf("pcm_submit_gap_max_us=%lu\n",
+               static_cast<unsigned long>(snapshot.pcmSubmitGapMaxUs));
+    log.printf("pcm_submit_gap_over_100ms=%lu\n",
+               static_cast<unsigned long>(snapshot.pcmSubmitGapOver100Ms));
+    log.printf("pcm_last_submit_age_us=%lu\n",
+               static_cast<unsigned long>(snapshot.pcmLastSubmitAgeUs));
+    log.printf("open_max_us=%lu\n",
+               static_cast<unsigned long>(snapshot.openMaxUs));
+    log.printf("repeat_restart_max_us=%lu\n",
+               static_cast<unsigned long>(snapshot.repeatRestartMaxUs));
+    log.printf("repeat_restart_count=%lu\n",
+               static_cast<unsigned long>(snapshot.repeatRestartCount));
     log.printf("player_service_start_gap_over_100ms=%lu\n",
-               static_cast<unsigned long>(playerServiceStartGapOver100Ms_));
+               static_cast<unsigned long>(captured
+                    ? task.playerServiceStartGapOver100Ms
+                    : playerServiceStartGapOver100Ms_));
     log.printf("player_service_start_gap_max_us=%lu\n",
-               static_cast<unsigned long>(playerServiceStartGapMaxUs_));
+               static_cast<unsigned long>(captured
+                    ? task.playerServiceStartGapMaxUs
+                    : playerServiceStartGapMaxUs_));
     log.printf("player_service_start_gap_max_from_phase=%s\n",
-               playerServiceStartGapMaxFromPhase_);
+               captured ? task.gapFromPhase
+                        : playerServiceStartGapMaxFromPhase_);
     log.printf("player_service_start_gap_max_to_phase=%s\n",
-               playerServiceStartGapMaxToPhase_);
+               captured ? task.gapToPhase : playerServiceStartGapMaxToPhase_);
     log.printf("player_gap_previous_player_runtime_us=%lu\n",
                static_cast<unsigned long>(
-                   playerGapPreviousPlayerRuntimeUs_));
+                    captured ? task.playerGapPreviousPlayerRuntimeUs
+                             : playerGapPreviousPlayerRuntimeUs_));
     log.printf("player_gap_previous_library_runtime_us=%lu\n",
                static_cast<unsigned long>(
-                   playerGapPreviousLibraryRuntimeUs_));
+                    captured ? task.playerGapPreviousLibraryRuntimeUs
+                             : playerGapPreviousLibraryRuntimeUs_));
     log.printf("player_gap_previous_gate_us=%lu\n",
-               static_cast<unsigned long>(playerGapPreviousGateUs_));
+               static_cast<unsigned long>(captured
+                    ? task.playerGapPreviousGateUs
+                    : playerGapPreviousGateUs_));
     log.printf("player_gap_previous_loop_body_us=%lu\n",
-               static_cast<unsigned long>(playerGapPreviousLoopBodyUs_));
+               static_cast<unsigned long>(captured
+                    ? task.playerGapPreviousLoopBodyUs
+                    : playerGapPreviousLoopBodyUs_));
     log.printf("player_gap_current_input_us=%lu\n",
-               static_cast<unsigned long>(playerGapCurrentInputUs_));
-    log.printf("speaker_channel_empty_at_service_start=%lu\n",
-               static_cast<unsigned long>(speakerChannelEmptyAtServiceStart_));
+               static_cast<unsigned long>(captured
+                    ? task.playerGapCurrentInputUs
+                    : playerGapCurrentInputUs_));
+    log.printf("speaker_request_slot_empty_samples=%lu\n",
+               static_cast<unsigned long>(captured
+                    ? task.speakerRequestSlotEmptySamples
+                    : speakerRequestSlotEmptySamples_));
     log.printf("unexpected_playback_state_over_100ms=%lu\n",
-               static_cast<unsigned long>(
-                   unexpectedPlaybackStateOver100Ms_));
+               static_cast<unsigned long>(captured
+                    ? task.unexpectedPlaybackStateOver100Ms
+                    : unexpectedPlaybackStateOver100Ms_));
     log.printf("input_update_max_us=%lu\n",
-               static_cast<unsigned long>(inputUpdateMaxUs_));
+               static_cast<unsigned long>(captured ? task.inputUpdateMaxUs
+                                                   : inputUpdateMaxUs_));
     log.printf("player_runtime_service_max_us=%lu\n",
-               static_cast<unsigned long>(playerRuntimeServiceMaxUs_));
+               static_cast<unsigned long>(captured
+                    ? task.playerRuntimeServiceMaxUs
+                    : playerRuntimeServiceMaxUs_));
     log.printf("player_engine_service_max_us=%lu\n",
                static_cast<unsigned long>(snapshot.serviceMaxUs));
     log.printf("library_runtime_service_max_us=%lu\n",
-               static_cast<unsigned long>(libraryRuntimeServiceMaxUs_));
+               static_cast<unsigned long>(captured
+                    ? task.libraryRuntimeServiceMaxUs
+                    : libraryRuntimeServiceMaxUs_));
     log.printf("gate_service_max_us=%lu\n",
-               static_cast<unsigned long>(gateServiceMaxUs_));
+               static_cast<unsigned long>(captured ? task.gateServiceMaxUs
+                                                   : gateServiceMaxUs_));
     log.printf("loop_body_max_us=%lu\n",
-               static_cast<unsigned long>(loopBodyMaxUs_));
-    log.printf("speaker_starvation_over_100ms=%lu\n",
-               static_cast<unsigned long>(speakerStarvationCount_));
-    log.printf("heap_start=%lu\n", static_cast<unsigned long>(initialHeap_));
+               static_cast<unsigned long>(captured ? task.loopBodyMaxUs
+                                                   : loopBodyMaxUs_));
+    log.printf("heap_start=%lu\n",
+               static_cast<unsigned long>(captured ? task.heapStart
+                                                   : initialHeap_));
     log.printf("heap_now=%lu\n",
-               static_cast<unsigned long>(ESP.getFreeHeap()));
+               static_cast<unsigned long>(captured ? task.heapNow
+                                                   : ESP.getFreeHeap()));
     log.printf("heap_min_sampled=%lu\n",
-               static_cast<unsigned long>(minimumHeap_));
+               static_cast<unsigned long>(captured ? task.heapMinimum
+                                                   : minimumHeap_));
     log.printf("metadata_cases=%lu\n",
                static_cast<unsigned long>(metadataCasesPassed_));
     log.printf("metadata_cache_entries=%u\n",
@@ -1532,6 +2077,17 @@ bool P2DeviceTestRunner::verifyFixtureMarker() {
     std::memcpy(markerHash, quote, 64);
     if (!sha256File(kFixtureManifest, manifestSha256_)) return false;
     return equalsIgnoreAsciiCase(markerHash, manifestSha256_);
+}
+
+bool P2DeviceTestRunner::verifyLongBenchmark() {
+    File benchmark = SD.open(kBenchmarkPath, FILE_READ);
+    if (!benchmark) return false;
+    const bool sizeMatches = benchmark.size() == kBenchmarkSize;
+    benchmark.close();
+    if (!sizeMatches) return false;
+    char digest[65] = {};
+    return sha256File(kBenchmarkPath, digest) &&
+           equalsIgnoreAsciiCase(digest, kBenchmarkSha256);
 }
 
 bool P2DeviceTestRunner::sha256File(const char* path, char output[65]) {

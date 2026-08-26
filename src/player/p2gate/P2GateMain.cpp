@@ -115,7 +115,7 @@ void loop() {
                 ? 0
                 : playerStartedAtUs - previousPlayerServiceStartedAtUs;
         previousPlayerServiceStartedAtUs = playerStartedAtUs;
-        const bool speakerChannelPlayingAtServiceStart =
+        const bool speakerRequestSlotOccupiedAtServiceStart =
             M5.Speaker.isPlaying(0) != 0;
         player.service();
         const uint32_t playerRuntimeServiceUs = micros() - playerStartedAtUs;
@@ -126,7 +126,7 @@ void loop() {
         const uint32_t preGateLoopBodyUs = micros() - loopStartedAtUs;
         testRunner.recordLoopTimings(
             inputUpdateUs, playerServiceStartGapUs,
-            speakerChannelPlayingAtServiceStart, playerRuntimeServiceUs,
+            speakerRequestSlotOccupiedAtServiceStart, playerRuntimeServiceUs,
             libraryRuntimeServiceUs, preGateLoopBodyUs);
         const uint32_t gateStartedAtUs = micros();
         testRunner.service();

@@ -19,7 +19,7 @@ class P2DeviceTestRunner final {
     void service();
     void recordLoopTimings(uint32_t inputUpdateUs,
                            uint32_t playerServiceStartGapUs,
-                           bool speakerChannelPlayingAtServiceStart,
+                           bool speakerRequestSlotOccupiedAtServiceStart,
                            uint32_t playerRuntimeServiceUs,
                            uint32_t libraryRuntimeServiceUs,
                            uint32_t preGateLoopBodyUs);
@@ -42,6 +42,8 @@ class P2DeviceTestRunner final {
         RecentPrePause,
         RecentPaused,
         RecentResumeWait,
+        RecentRaceWait,
+        RecentRaceRestore,
         FindChinese,
         ChineseReady,
         FindJapanese,
@@ -50,11 +52,25 @@ class P2DeviceTestRunner final {
         LevelThreeReady,
         ValidateDeepTrack,
         ReturnFromDeep,
+        WaitShortRepeat,
+        ReturnToMusicRootForBenchmark,
+        FindBenchmark,
+        BenchmarkReady,
+        FindBenchmarkTrack,
+        SelectBenchmark,
+        WaitBenchmark,
+        ReturnToMusicRootForFixture,
+        FindFixtureForStress,
+        FixtureStressReady,
         FindLarge,
         LargeReady,
         ValidateLarge,
         ReturnFromLarge,
         CacheVisits,
+        FindLongSort,
+        LongSortReady,
+        ValidateLongSort,
+        ReturnFromLongSort,
         FindMetadata,
         MetadataReady,
         ReadMetadata,
@@ -92,12 +108,16 @@ class P2DeviceTestRunner final {
 
     void enter(Phase phase);
     void passTask(size_t taskIndex, const char* detail);
+    void captureTaskSnapshot(size_t taskIndex);
+    void resetMeasurementWindow(const char* track);
+    size_t currentTaskIndex() const;
     bool finalizePass();
     void fail(const char* reason);
     void render(bool force = false);
     bool writeLog(size_t taskIndex, const char* status, const char* detail);
     bool verifyFixtureMarker();
     bool sha256File(const char* path, char output[65]);
+    bool verifyLongBenchmark();
     static bool equalsIgnoreAsciiCase(const char* left, const char* right);
     static bool startsWith(const char* value, const char* prefix);
 
@@ -116,6 +136,7 @@ class P2DeviceTestRunner final {
     size_t playbackEntryIndex_ = 0;
     size_t deepReturnCount_ = 0;
     size_t largeIndex_ = 0;
+    size_t longSortIndex_ = 0;
     size_t cacheVisitIndex_ = 0;
     bool cacheVisitInside_ = false;
     size_t metadataCaseIndex_ = 0;
@@ -138,9 +159,7 @@ class P2DeviceTestRunner final {
     uint32_t metadataServiceMaxUs_ = 0;
     uint32_t metadataBytesRead_ = 0;
     uint32_t metadataCasesPassed_ = 0;
-    uint32_t speakerSilentSinceMs_ = 0;
-    uint32_t speakerStarvationCount_ = 0;
-    uint32_t speakerChannelEmptyAtServiceStart_ = 0;
+    uint32_t speakerRequestSlotEmptySamples_ = 0;
     uint32_t unexpectedPlaybackStateOver100Ms_ = 0;
     uint32_t playerServiceStartGapMaxUs_ = 0;
     uint32_t playerServiceStartGapOver100Ms_ = 0;
@@ -161,15 +180,46 @@ class P2DeviceTestRunner final {
     uint32_t playerGapPreviousLoopBodyUs_ = 0;
     uint32_t playerGapCurrentInputUs_ = 0;
     uint32_t unexpectedPlaybackStateSinceMs_ = 0;
-    bool speakerStarvationReported_ = false;
     bool playerServiceGapArmed_ = false;
     bool pendingLoopTimingValid_ = false;
     bool lastLoopTimingValid_ = false;
     bool playbackSelected_ = false;
+    bool longMeasurementActive_ = false;
+    uint32_t measurementStartedAtMs_ = 0;
+    uint32_t measurementHeapStart_ = 0;
     bool taskPassed_[4] = {};
+    bool taskExecuted_[4] = {};
     char taskDetail_[4][224] = {};
-    PlayerSnapshot finalPlayerSnapshot_{};
-    bool finalPlayerSnapshotValid_ = false;
+    struct TaskSnapshot {
+        bool valid = false;
+        PlayerSnapshot player{};
+        LibraryStats library{};
+        uint32_t elapsedMs = 0;
+        uint32_t measurementElapsedMs = 0;
+        uint32_t heapStart = 0;
+        uint32_t heapNow = 0;
+        uint32_t heapMinimum = 0;
+        uint32_t playerServiceStartGapMaxUs = 0;
+        uint32_t playerServiceStartGapOver100Ms = 0;
+        uint32_t speakerRequestSlotEmptySamples = 0;
+        uint32_t unexpectedPlaybackStateOver100Ms = 0;
+        uint32_t inputUpdateMaxUs = 0;
+        uint32_t playerRuntimeServiceMaxUs = 0;
+        uint32_t libraryRuntimeServiceMaxUs = 0;
+        uint32_t gateServiceMaxUs = 0;
+        uint32_t loopBodyMaxUs = 0;
+        uint32_t playerGapPreviousPlayerRuntimeUs = 0;
+        uint32_t playerGapPreviousLibraryRuntimeUs = 0;
+        uint32_t playerGapPreviousGateUs = 0;
+        uint32_t playerGapPreviousLoopBodyUs = 0;
+        uint32_t playerGapCurrentInputUs = 0;
+        char measurementTrack[kTrackPathCapacity] = "none";
+        char gapFromPhase[40] = "none";
+        char gapToPhase[40] = "none";
+    };
+    TaskSnapshot taskSnapshots_[4]{};
+    size_t primaryFailureTaskIndex_ = 4;
+    char primaryFailurePhase_[48] = "none";
     bool autoRecentTimingPassed_ = false;
     char playbackPath_[kTrackPathCapacity] = {};
     char pendingLoopPhaseFrom_[40] = "none";

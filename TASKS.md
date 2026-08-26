@@ -274,7 +274,7 @@ AC：
 - [ ] 约 1000 首库规模可正常使用
 - [ ] 播放中扫描不造成明显断音
 
-4 个 SD session cache slot、3×32 项 RAM LRU page 与 Queue pin 已实现；1,000 项目录和播放并行仍等待真机 Gate。
+4 个 SD session cache slot、3×32 项 RAM LRU page 与 Queue pin 已实现。首轮真机日志已确认旧的四路固定轮转与逐元素 SD 随机读取排序无法在既定时限内完成；当前正以 work-aware 调度和有界 RAM SortKey/Fallback 重做 1,000 项路径，完成新 Gate 前保持 `DEVICE TEST`。
 
 ---
 

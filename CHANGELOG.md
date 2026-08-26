@@ -18,14 +18,18 @@ Date: 2026-08-26
 - 新增以 `/Music` 为边界的多层目录浏览、隐藏项与非 MP3 过滤、文件夹优先自然排序，以及当前文件夹非递归 Queue。
 - 新增 cooperative `Open → Scan → Sort → Finalize` 扫描、4 个 SD session cache slot、3×32 项 RAM LRU page 与 Queue 生命周期 pin；不把整库路径常驻 RAM。
 - 新增 ID3v2.3 / v2.4 Metadata reader，支持 ISO-8859-1、UTF-16 BOM、UTF-16BE、UTF-8、unsynchronization、extended header 与安全 fallback；APIC 只跳过。
-- 新增 32 项 Recent Tracks 与 CRC32 A/B 双槽；累计 Playing 5 秒后记录，Pause 不计时，缺失路径读取时忽略。
-- 正式 Player 主循环采用四路轮转，一轮只执行一个有界 Library / Queue selection / Metadata / Recent 工作；当前曲目路径改为 RAM cache，避免播放中每轮读取 SD。
+- 新增 32 项 Recent Tracks 与 CRC32 A/B 双槽；累计 Playing 5 秒后记录，Pause 不计时，缺失路径读取时忽略；达到阈值后独立保留待发布路径，立即切歌也不会漏记或误记为新曲。
+- 正式 Player 主循环从固定四路轮转改为 work-aware 调度：活跃目录扫描至少获得四轮中的三轮，Metadata / Recent 只有实际工作时才占后台轮次；当前曲目路径继续使用 RAM cache。
+- 真机失败日志确认 1,000 项目录的旧实现存在确定性吞吐瓶颈：Library 每四轮前进一步，SD 随机读取名称的归并排序每轮仅移动一项，不能在原 Gate 时限内完成。排序改为扫描期动态 `SortKey` Scratch、24-byte prefix 快速比较、精确 SD fallback 和 750 µs 批量归并，缓存文件格式与 Queue pin 不变。
+- Repeat One 自然 EOF 改为复用已验证 `Mp3Info` 和首帧位置快速重启，不再对同一歌曲重复完整 Probe / Seek；Open、Restart、PCM 提交和 service 指标改为显式 reset 的累计诊断。
 
 ### Validation Harness
 
 - 新增 marker-owned P2 Fixture 和主机 validator，覆盖多层中文/日文路径、1,000 项大目录、自然排序、过滤、ID3 编码与 Recent/Cache binary CRC；测试数据与 MP3 不提交 Git。
-- 新增 `player-p2-gate`：一次按 `T` 自动覆盖 P2-01～P2-04，屏幕只在阶段变化时刷新，停止音频后再写四份完整日志。
-- 根据首轮真机日志修正 Gate 诊断口径：相邻 Player service 入口间隔与各主循环阶段耗时独立记录，不再把混合采样间隔误报为 Speaker starvation；最大间隔冻结上一轮阶段与耗时，Pause / Resume 后首轮空 channel 不计为异常，并补充 FAIL 日志主机端诊断输出。
+- 新增 `player-p2-gate`：一次按 `T` 自动覆盖 P2-01～P2-04，停止音频后再写四份完整日志。
+- 根据连续真机失败日志重构 Gate：P2-01 完成后经正式 Library Queue 切换到约 299 秒 benchmark，清零测量指标后再执行 P2-02～P2-04；测量期间不刷新屏幕，整轮 watchdog 为 240 秒。
+- `M5.Speaker.isPlaying(0)` 已确认只反映请求槽占用，不再作为硬件断音硬判据；Gate 改用 PCM Buffer 提交进度、PCM / Player service 间隔、Audio Error、Backpressure 与 TrackEnded，并把请求槽空样本仅保留为诊断。
+- 日志增加 task executed/skipped、唯一失败 task/phase/reason 和分任务指标快照；早期失败不再把未运行的任务和 Recent A/B 文件伪报成独立失败。
 - `player-dev`、P2 Gate 和两个历史 P1 Gate 均保留独立构建入口；P2 不改变 Candidate A Audio Backend、P1 Queue / Session 语义或 Launcher 分区。
 - PC Fixture、静态校验与自动构建已通过；P2-01～P2-04 当前统一处于 `DEVICE TEST`，必须以四份真机日志为准，尚未标记 `DONE`。
 

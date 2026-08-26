@@ -18,6 +18,17 @@ from pathlib import Path
 
 MARKER_NAME = ".adv-walkman-p2-fixture.json"
 FIXTURE_VERSION = 1
+FIXTURE_OWNER = "adv-walkman-p2-fixture"
+BENCHMARK_RELATIVE_PATH = Path("Music/ADVWalkmanBenchmark/benchmark.mp3")
+BENCHMARK_SIZE = 11_972_484
+BENCHMARK_SHA256 = (
+    "4003b057b19ca95bae78e66b3536557e342d1105315c2a6217f4475c0db51d63"
+)
+LONG_SORT_NAMES = (
+    "common-prefix-abcdefghijklmnopqrst-track-2.mp3",
+    "common-prefix-abcdefghijklmnopqrst-track-10.mp3",
+    "common-prefix-abcdefghijklmnopqrst-track-100.mp3",
+)
 
 
 def syncsafe(value: int) -> bytes:
@@ -91,13 +102,36 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def ensure_owned_or_absent(path: Path) -> None:
-    if not path.exists():
-        return
+def validate_owned_fixture(path: Path) -> dict:
+    """Return a validated ownership marker or refuse destructive work."""
+
     marker = path / MARKER_NAME
     if not marker.is_file():
         raise RuntimeError(
-            f"Refusing to replace unowned fixture directory: {path}")
+            f"Refusing to modify unowned fixture directory: {path}")
+    try:
+        data = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise RuntimeError(
+            f"Refusing to modify fixture with invalid marker: {path}: "
+            f"{error}") from error
+    if not isinstance(data, dict):
+        raise RuntimeError(
+            f"Refusing to modify fixture with non-object marker: {path}")
+    if data.get("owner") != FIXTURE_OWNER:
+        raise RuntimeError(
+            f"Refusing to modify fixture with unexpected owner: {path}")
+    schema = data.get("schema")
+    if type(schema) is not int or schema != FIXTURE_VERSION:
+        raise RuntimeError(
+            f"Refusing to modify fixture with unexpected schema: {path}")
+    return data
+
+
+def ensure_owned_or_absent(path: Path) -> None:
+    if not path.exists():
+        return
+    validate_owned_fixture(path)
     shutil.rmtree(path)
 
 
@@ -122,6 +156,8 @@ def write_fixture(source_mp3: Path, output: Path) -> dict:
     hidden.mkdir()
     large = output / "Large"
     large.mkdir()
+    long_sort = output / "LongSort"
+    long_sort.mkdir()
 
     (output / "playback.MP3").write_bytes(audio)
     (output / "song 2.mp3").write_bytes(audio)
@@ -216,6 +252,13 @@ def write_fixture(source_mp3: Path, output: Path) -> dict:
     for index in range(1, 1001):
         (large / f"track-{index:04d}.mp3").write_bytes(b"")
 
+    # Every distinguishing digit lies beyond the firmware's 24-byte cached
+    # sort prefix.  The device Gate therefore proves that the exact full-name
+    # fallback preserves natural ordering without relying on equal-key scan
+    # order, which can differ between NTFS and FAT.
+    for name in LONG_SORT_NAMES:
+        (long_sort / name).write_bytes(b"")
+
     files = []
     for path in sorted(item for item in output.rglob("*") if item.is_file()):
         if path.name == MARKER_NAME:
@@ -233,8 +276,8 @@ def write_fixture(source_mp3: Path, output: Path) -> dict:
         "large_track_count": 1000,
         "expected": {
             "root_directories_natural": [
-                "Album 2", "Album 10", "Empty", "Large", "Metadata",
-                "中文目录",
+                "Album 2", "Album 10", "Empty", "Large", "LongSort",
+                "Metadata", "中文目录",
             ],
             "root_tracks_natural": [
                 "playback.MP3", "song 2.mp3", "song 10.mp3",
@@ -248,6 +291,7 @@ def write_fixture(source_mp3: Path, output: Path) -> dict:
             "v24_extended_title": "Extended 24",
             "long_title_truncated": True,
             "fallback_title": "无标签中文歌曲",
+            "long_sort_natural": list(LONG_SORT_NAMES),
         },
         "files": files,
     }
@@ -256,7 +300,7 @@ def write_fixture(source_mp3: Path, output: Path) -> dict:
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8")
     marker = {
-        "owner": "adv-walkman-p2-fixture",
+        "owner": FIXTURE_OWNER,
         "schema": FIXTURE_VERSION,
         "manifest_sha256": sha256(manifest_path),
     }
@@ -282,16 +326,30 @@ def mirror_to_sd(local: Path, sd_root: Path) -> Path:
     return target
 
 
+def validate_benchmark(sd_root: Path) -> Path:
+    """Verify the existing user benchmark without copying or modifying it."""
+    benchmark = sd_root / BENCHMARK_RELATIVE_PATH
+    if not benchmark.is_file():
+        raise FileNotFoundError(
+            f"Required long benchmark is missing: {benchmark}")
+    actual_size = benchmark.stat().st_size
+    if actual_size != BENCHMARK_SIZE:
+        raise RuntimeError(
+            f"Benchmark size mismatch: expected {BENCHMARK_SIZE}, "
+            f"got {actual_size}")
+    actual_sha = sha256(benchmark)
+    if actual_sha != BENCHMARK_SHA256:
+        raise RuntimeError(
+            f"Benchmark SHA-256 mismatch: expected {BENCHMARK_SHA256}, "
+            f"got {actual_sha}")
+    return benchmark
+
+
 def cleanup_sd(sd_root: Path) -> None:
     target = sd_target(sd_root)
     if not target.exists():
         return
-    marker = target / MARKER_NAME
-    if not marker.is_file():
-        raise RuntimeError(f"Refusing to remove unowned SD directory: {target}")
-    data = json.loads(marker.read_text(encoding="utf-8"))
-    if data.get("owner") != "adv-walkman-p2-fixture":
-        raise RuntimeError(f"Unexpected SD marker owner: {target}")
+    validate_owned_fixture(target)
     shutil.rmtree(target)
 
 
@@ -319,6 +377,10 @@ def main() -> int:
     print(f"P2_FIXTURE={args.output}")
     print(f"P2_MANIFEST_SHA256={marker['manifest_sha256']}")
     if args.sd_root is not None:
+        benchmark = validate_benchmark(args.sd_root)
+        print(f"P2_BENCHMARK_VERIFIED={benchmark}")
+        print(f"P2_BENCHMARK_SIZE={BENCHMARK_SIZE}")
+        print(f"P2_BENCHMARK_SHA256={BENCHMARK_SHA256}")
         target = mirror_to_sd(args.output, args.sd_root)
         print(f"P2_SD_FIXTURE={target}")
     return 0

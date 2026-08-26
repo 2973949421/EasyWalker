@@ -138,16 +138,17 @@ V1 不建立复杂数据库。
 
 ### P2 扫描与缓存
 
-- 当前目录使用 `Open → Scan → Sort → Finalize → Ready / Error` cooperative 状态机；每轮只处理一个目录项或一个有界读写 / 排序步骤。
+- 当前目录使用 `Open → Scan → Sort → Finalize → Ready / Error` cooperative 状态机。目录扫描每轮只处理一个目录项；RAM 排序和 Finalize 使用 750 µs 软时间片。该预算约束可拆分的 CPU 工作，不把 `openNextFile`、SD read/write 等不可拆分调用伪装成确定的硬实时上限，超时调用必须按阶段记录。
 - SD session cache 位于 `/ADVWalkman/cache/library/`，使用 4 个目录索引槽；重启后重建，不建设持久化音乐数据库。
 - RAM 使用 3 个 32-entry page 做 LRU，最多驻留 96 个条目。扫描和排序仅保留数字 offset，不将整批路径常驻 RAM。
+- 扫描期临时分配 2,048 项 `SortKey` 和两组 16-bit order，总计 73,728 bytes；每项缓存 24-byte basename prefix，只有比较结果无法在 prefix 内确定时才回读完整名称。排序完成、取消或失败后立即释放 Scratch；`scratch_bytes` 记录本轮峰值而非当前占用，`.dat/.idx` 格式保持不变。
 - 当前 Queue 的索引槽保持 pinned；新 Queue 在 Player persistence 空闲后再切换，旧索引才可解除 pin。
 - 应用循环始终先 service Player，再做一次有界 Library / Metadata / Recent 工作；无需新增 RTOS task。
-- `LibraryRuntime` 采用四路轮转，每个主循环只推进一次 Directory、Queue selection、Metadata 或 Recent 工作；正式开发串口的目录 / Recent 输出同样使用逐项游标，不在一次命令中同步遍历整个目录。
+- `LibraryRuntime` 采用 work-aware 调度：活跃 Directory 工作至少获得四轮中的三轮；Metadata / Recent 仅在确有工作时占用后台轮次。Recent 的 Playing 时间每轮在 RAM 中累计，SD 发布仍 cooperative。正式开发串口的目录 / Recent 输出同样使用逐项游标，不在一次命令中同步遍历整个目录。
 - `PlayerController` 在 Queue / 当前曲目变化时缓存规范化完整路径；`PlayerRuntime::currentPath()` 只复制 RAM 缓存，Recent 与状态画面不得在每轮播放循环重新打开 Library index。
 - `LibraryRuntime` 与其 pinned `FolderQueueSource` 是单次绑定生命周期；禁止对仍被 Player 引用的实例执行重新 begin。Queue source 只有在没有异步 State Store 工作时才能解除 pin。
 - P2 Gate 使用独立 Recent 测试槽并暂停正式 Queue / Session persistence；四份日志在停止测试音频后一次写完并回读完整性标记，避免日志本身污染播放中断音指标。
-- P2 Gate 在完整 P2-01～P2-04 生命周期持续检查 Player state、44.1 kHz、Audio Error、Backpressure 与 Speaker channel 0。相邻 `player.service()` 入口间隔及 `M5Cardputer.update`、PlayerRuntime、LibraryRuntime、Gate 的分段最大耗时作为诊断指标记录；最大间隔同时冻结上一轮的阶段转换与分段耗时，避免把阻塞错归到下一阶段，不再把混合循环间隔直接冒充 Speaker starvation。Audio Error、Backpressure、非预期播放状态持续超过 100 ms，或连续采样观察到 Speaker channel 0 静默超过 100 ms，仍作为硬失败。Player service 前观察到 channel 0 为空会单独记录，但预期 Pause / Resume 后用于重新填充 channel 的第一轮不计入该指标。
+- P2 Gate 先用短 Fixture 验证 P2-01 Queue / Recent 语义，再通过正式 `MusicLibrary → FolderQueueSource` 切换到 `/Music/ADVWalkmanBenchmark/benchmark.mp3`，在该长曲持续播放期间执行 P2-02～P2-04。硬指标为 Player state、44.1 kHz、Audio Error、Backpressure、TrackEnded、PCM Buffer 提交进度及相邻 Player service / PCM 提交间隔；`M5.Speaker.isPlaying(0)` 只表示 M5Unified 请求槽占用，保留为诊断采样，不得命名或判定为硬件 underrun / starvation。测量期间不刷新屏幕，停止音频后再显示和写日志。
 
 ---
 
@@ -623,7 +624,7 @@ P2 的 Metadata Reader 按需、cooperative 解析 ID3v2.3 / v2.4 的 `TIT2 / TP
 
 ### 8.1 Recent Tracks
 
-- Recent 最多 32 首，最新在前，按规范化完整路径去重。
+- Recent 最多 32 首，最新在前，按规范化完整路径去重。歌曲达到 5 秒阈值时先复制一份待发布路径；即使紧接着切歌，后台 SD 发布也不得被新曲观察状态覆盖。
 - 同一 Track 累计处于 `Playing` 5 秒后记录；Pause 不计时，Seek / Repeat / Resume 不重复置顶。
 - 使用 `/ADVWalkman/state/recent-a.bin` 和 `recent-b.bin` 的 schema v1 / generation / CRC32 A/B 双槽，不为每首歌建独立文件。
 - 缺失路径在读取时安全忽略，下次保存时紧缩。Recent 不替代 P1 Queue / Session。

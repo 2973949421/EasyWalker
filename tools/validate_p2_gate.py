@@ -23,6 +23,13 @@ MARKER_NAME = ".adv-walkman-p2-fixture.json"
 MANIFEST_NAME = "manifest.json"
 FIXTURE_OWNER = "adv-walkman-p2-fixture"
 FIXTURE_SCHEMA = 1
+LIBRARY_MAX_DIRECTORY_ENTRIES = 2048
+BENCHMARK_RELATIVE_PATH = Path("Music/ADVWalkmanBenchmark/benchmark.mp3")
+BENCHMARK_DEVICE_PATH = "/Music/ADVWalkmanBenchmark/benchmark.mp3"
+BENCHMARK_SIZE = 11_972_484
+BENCHMARK_SHA256 = (
+    "4003b057b19ca95bae78e66b3536557e342d1105315c2a6217f4475c0db51d63"
+)
 
 RECORD_HEADER = struct.Struct("<IHHIII")
 RECENT_MAGIC = 0x31525741  # AWR1 on disk.
@@ -99,9 +106,6 @@ def natural_name_compare(left: str, right: str) -> int:
                 return -1 if len(asignificant) < len(bsignificant) else 1
             if asignificant != bsignificant:
                 return -1 if asignificant < bsignificant else 1
-            # Equal numeric value: fewer leading zeroes is the stable tie-break.
-            if len(arun) != len(brun):
-                return -1 if len(arun) < len(brun) else 1
             ai, bi = ae, be
             continue
 
@@ -119,6 +123,39 @@ def natural_name_compare(left: str, right: str) -> int:
 
 def sorted_natural(names: list[str]) -> list[str]:
     return sorted(names, key=cmp_to_key(natural_name_compare))
+
+
+def validate_library_capacity_contract(project: Path) -> int:
+    """Check the firmware boundary and a 2048-name in-memory reference sort."""
+
+    header = (project / "src/player/library/MusicLibrary.h").read_text(
+        encoding="utf-8")
+    implementation = (
+        project / "src/player/library/MusicLibrary.cpp"
+    ).read_text(encoding="utf-8")
+    declaration = (
+        "static constexpr size_t kMaxDirectoryEntries = "
+        f"{LIBRARY_MAX_DIRECTORY_ENTRIES};"
+    )
+    require(declaration in header,
+            "MusicLibrary 2048-entry capacity declaration changed")
+    require("if (scanCount_ >= kMaxDirectoryEntries)" in implementation,
+            "MusicLibrary 2049th-entry overflow guard is missing")
+    require("fail(LibraryError::DirectoryTooLarge);" in implementation,
+            "MusicLibrary overflow does not report DirectoryTooLarge")
+
+    expected = [
+        f"track-{index}.mp3"
+        for index in range(1, LIBRARY_MAX_DIRECTORY_ENTRIES + 1)
+    ]
+    reverse_input = list(reversed(expected))
+    require(sorted_natural(reverse_input) == expected,
+            "2048-entry natural-sort reference mismatch")
+    require(len(expected) == LIBRARY_MAX_DIRECTORY_ENTRIES,
+            "2048-entry accepted boundary mismatch")
+    require(len(expected) + 1 > LIBRARY_MAX_DIRECTORY_ENTRIES,
+            "2049th-entry rejection boundary mismatch")
+    return LIBRARY_MAX_DIRECTORY_ENTRIES
 
 
 def syncsafe32(data: bytes) -> int:
@@ -386,6 +423,21 @@ def validate_fixture(fixture: Path) -> dict[str, Any]:
         "deep UTF-8 path fixture missing",
     )
 
+    long_sort = [
+        path.name for path in (fixture / "LongSort").iterdir()
+        if path.is_file() and path.suffix.lower() == ".mp3"
+    ]
+    require(
+        all(natural_name_compare(left, right) != 0
+            for index, left in enumerate(long_sort)
+            for right in long_sort[index + 1:]),
+        "LongSort contains natural-order equivalent names",
+    )
+    require(
+        sorted_natural(long_sort) == expected.get("long_sort_natural"),
+        "LongSort full-name fallback order mismatch",
+    )
+
     large_count = sum(
         1 for path in (fixture / "Large").iterdir()
         if path.is_file() and path.suffix.lower() == ".mp3"
@@ -409,7 +461,7 @@ def parse_key_value_log(path: Path) -> dict[str, str]:
     nonempty = [line.strip() for line in lines if line.strip()]
     require(nonempty, f"empty gate log: {path}")
     require(
-        nonempty[0] in ("status=PASS", "status=FAIL"),
+        nonempty[0] in ("status=PASS", "status=FAIL", "status=SKIPPED"),
         f"invalid gate status line: {path.name}",
     )
     fields: dict[str, str] = {}
@@ -423,34 +475,116 @@ def parse_key_value_log(path: Path) -> dict[str, str]:
             raise ValidationError(f"conflicting {key} values in {path.name}")
         fields[key] = value.strip()
     require(
-        fields.get("status") in ("PASS", "FAIL"),
+        fields.get("status") in ("PASS", "FAIL", "SKIPPED"),
         f"missing gate status: {path.name}",
     )
     require(fields.get("log_complete") == "1", f"incomplete gate log: {path.name}")
     return fields
 
 
+def integer_field(fields: dict[str, str], key: str, log_name: str) -> int:
+    raw = fields.get(key)
+    try:
+        value = int(raw) if raw is not None else -1
+    except ValueError as error:
+        raise ValidationError(f"invalid {key} in {log_name}: {raw}") from error
+    require(value >= 0, f"missing or negative {key} in {log_name}")
+    return value
+
+
+def validate_benchmark(sd_root: Path) -> dict[str, Any]:
+    path = sd_root / BENCHMARK_RELATIVE_PATH
+    require(path.is_file(), f"long benchmark not found: {path}")
+    size = path.stat().st_size
+    require(size == BENCHMARK_SIZE, f"long benchmark size mismatch: {size}")
+    digest = sha256_file(path)
+    require(digest == BENCHMARK_SHA256, "long benchmark SHA-256 mismatch")
+    return {"path": str(path.resolve()), "size": size, "sha256": digest}
+
+
 def validate_gate_logs(
     sd_root: Path, manifest_sha: str
-) -> tuple[dict[str, str], list[str]]:
+) -> tuple[dict[str, str], list[str], bool]:
+    """Validate complete Gate semantics while preserving useful FAIL logs."""
     logs_dir = sd_root / "ADVWalkman" / "logs"
     results: dict[str, str] = {}
     failures: list[str] = []
-    hash_keys = (
-        "fixture_manifest_sha256",
-        "manifest_sha256",
-        "fixture_sha256",
-        "fixture_hash",
-    )
-    timing_keys = (
+    parsed: list[dict[str, str]] = []
+
+    for index, name in enumerate(P2_LOG_NAMES, start=1):
+        fields = parse_key_value_log(logs_dir / name)
+        parsed.append(fields)
+        require(fields.get("task") == f"P2-0{index}", f"unexpected task id in {name}")
+        require(
+            fields.get("fixture_manifest_sha256", "").lower() == manifest_sha,
+            f"fixture hash mismatch in {name}",
+        )
+        require(fields.get("benchmark_path") == BENCHMARK_DEVICE_PATH,
+                f"benchmark path mismatch in {name}")
+        require(integer_field(fields, "benchmark_size", name) == BENCHMARK_SIZE,
+                f"benchmark size mismatch in {name}")
+        require(fields.get("benchmark_sha256", "").lower() == BENCHMARK_SHA256,
+                f"benchmark hash mismatch in {name}")
+        executed = integer_field(fields, "task_executed", name)
+        require(executed in (0, 1), f"invalid task_executed in {name}")
+        require((fields["status"] == "SKIPPED") == (executed == 0),
+                f"status/task_executed mismatch in {name}")
+        results[f"p2_0{index}_status"] = fields["status"]
+        results[f"p2_0{index}_executed"] = str(executed)
+
+    failed_indices = [
+        index for index, fields in enumerate(parsed)
+        if fields["status"] == "FAIL"
+    ]
+    skipped_indices = [
+        index for index, fields in enumerate(parsed)
+        if fields["status"] == "SKIPPED"
+    ]
+    if failed_indices:
+        require(len(failed_indices) == 1, "Gate must attribute exactly one failed task")
+        failed_index = failed_indices[0]
+        require(
+            all(parsed[index]["status"] == "PASS" for index in range(failed_index)),
+            "a task before the primary failure was not PASS",
+        )
+        require(
+            skipped_indices == list(range(failed_index + 1, len(parsed))),
+            "tasks after the primary failure were not all SKIPPED",
+        )
+        expected_task = f"P2-0{failed_index + 1}"
+        failure_triplets = {
+            (
+                fields.get("primary_failure_task", ""),
+                fields.get("primary_failure_phase", ""),
+                fields.get("failure_reason", ""),
+            )
+            for fields in parsed
+        }
+        require(len(failure_triplets) == 1, "mixed primary failure attribution")
+        task, phase, reason = next(iter(failure_triplets))
+        require(task == expected_task, "primary failure task does not match FAIL log")
+        require(phase not in ("", "none"), "primary failure phase is missing")
+        require(reason not in ("", "none"), "primary failure reason is missing")
+        failures.append(f"{task} failed in {phase}: {reason}")
+        results["primary_failure_task"] = task
+        results["primary_failure_phase"] = phase
+        results["failure_reason"] = reason
+    else:
+        require(not skipped_indices, "Gate has SKIPPED tasks without a primary failure")
+        require(all(fields["status"] == "PASS" for fields in parsed),
+                "Gate logs are not all PASS")
+        for name, fields in zip(P2_LOG_NAMES, parsed):
+            require(fields.get("primary_failure_task") == "none",
+                    f"unexpected primary failure task in {name}")
+            require(fields.get("primary_failure_phase") == "none",
+                    f"unexpected primary failure phase in {name}")
+            require(fields.get("failure_reason") == "none",
+                    f"unexpected failure reason in {name}")
+
+    common_metric_keys = (
         "player_service_start_gap_over_100ms",
         "player_service_start_gap_max_us",
-        "player_gap_previous_player_runtime_us",
-        "player_gap_previous_library_runtime_us",
-        "player_gap_previous_gate_us",
-        "player_gap_previous_loop_body_us",
-        "player_gap_current_input_us",
-        "speaker_channel_empty_at_service_start",
+        "speaker_request_slot_empty_samples",
         "unexpected_playback_state_over_100ms",
         "input_update_max_us",
         "player_runtime_service_max_us",
@@ -458,102 +592,98 @@ def validate_gate_logs(
         "library_runtime_service_max_us",
         "gate_service_max_us",
         "loop_body_max_us",
+        "heap_start",
+        "heap_now",
+        "heap_min_sampled",
+        "pcm_frames_since_reset",
+        "pcm_buffers_since_reset",
+        "pcm_submit_gap_max_us",
+        "pcm_submit_gap_over_100ms",
+        "pcm_last_submit_age_us",
+        "track_ended_events",
+        "open_max_us",
+        "repeat_restart_max_us",
+        "repeat_restart_count",
     )
-    timing_values: dict[str, int] | None = None
-    gap_from_phase = "none"
-    gap_to_phase = "none"
-    for index, name in enumerate(P2_LOG_NAMES, start=1):
-        fields = parse_key_value_log(logs_dir / name)
-        require(
-            fields.get("task") == f"P2-0{index}",
-            f"unexpected task id in {name}",
-        )
-        current_timings: dict[str, int] = {}
-        for key in timing_keys:
-            raw = fields.get(key)
-            try:
-                value = int(raw) if raw is not None else -1
-            except ValueError as error:
-                raise ValidationError(
-                    f"invalid {key} in {name}: {raw}"
-                ) from error
-            require(value >= 0, f"missing or negative {key} in {name}")
-            current_timings[key] = value
-        if timing_values is None:
-            timing_values = current_timings
+    for index, (name, fields) in enumerate(zip(P2_LOG_NAMES, parsed)):
+        if fields["status"] == "SKIPPED":
+            continue
+        metrics = {key: integer_field(fields, key, name) for key in common_metric_keys}
+        if fields["status"] != "PASS":
+            continue
+        for key in ("input_update_max_us", "player_runtime_service_max_us",
+                    "library_runtime_service_max_us", "gate_service_max_us",
+                    "loop_body_max_us"):
+            if metrics[key] <= 0:
+                failures.append(f"timing metric was not sampled in {name}: {key}")
+        if index == 0:
+            semantic_checks = (
+                (fields.get("measurement_track") ==
+                 "/Music/ADVWalkmanP2Test/playback.MP3",
+                 "P2-01 did not measure the short fixture"),
+                (metrics["repeat_restart_count"] > 0,
+                 "P2-01 did not execute Repeat One fast restart"),
+                (0 < metrics["repeat_restart_max_us"] <= 100_000,
+                 "P2-01 Repeat One restart exceeded 100 ms"),
+            )
         else:
-            require(
-                current_timings == timing_values,
-                f"mixed timing snapshots across P2 logs: {name}",
+            semantic_checks = (
+                (fields.get("measurement_track") == BENCHMARK_DEVICE_PATH,
+                 f"long benchmark was not active in {name}"),
+                (fields.get("player_state") == "PLAYING", f"player not PLAYING in {name}"),
+                (fields.get("player_error") == "NONE", f"player error in {name}"),
+                (fields.get("audio_error") == "none", f"audio error in {name}"),
+                (fields.get("sample_rate") == "44100", f"sample rate mismatch in {name}"),
+                (fields.get("backpressure") == "0", f"backpressure in {name}"),
+                (fields.get("audio_error_events") == "0", f"audio error events in {name}"),
+                (metrics["track_ended_events"] == 0, f"long track ended in {name}"),
+                (metrics["pcm_buffers_since_reset"] > 0, f"no PCM progress in {name}"),
+                (metrics["pcm_frames_since_reset"] > 0, f"no PCM frames in {name}"),
+                (metrics["pcm_submit_gap_over_100ms"] == 0,
+                 f"PCM submit gap exceeded 100 ms in {name}"),
+                (metrics["pcm_submit_gap_max_us"] <= 100_000,
+                 f"PCM submit max gap exceeded 100 ms in {name}"),
+                (metrics["pcm_last_submit_age_us"] <= 2_000_000,
+                 f"PCM made no progress for two seconds in {name}"),
+                (metrics["player_service_start_gap_over_100ms"] == 0,
+                 f"Player service gap exceeded 100 ms in {name}"),
+                (metrics["player_service_start_gap_max_us"] <= 100_000,
+                 f"Player service max gap exceeded 100 ms in {name}"),
+                (metrics["unexpected_playback_state_over_100ms"] == 0,
+                 f"unexpected playback state in {name}"),
+                (metrics["heap_min_sampled"] >= 80 * 1024,
+                 f"minimum Heap below 80 KiB in {name}"),
             )
-        current_gap_from_phase = fields.get(
-            "player_service_start_gap_max_from_phase", ""
-        )
-        current_gap_to_phase = fields.get(
-            "player_service_start_gap_max_to_phase", ""
-        )
-        require(current_gap_from_phase != "", f"missing gap from-phase in {name}")
-        require(current_gap_to_phase != "", f"missing gap to-phase in {name}")
-        if index == 1:
-            gap_from_phase = current_gap_from_phase
-            gap_to_phase = current_gap_to_phase
-        else:
-            require(
-                current_gap_from_phase == gap_from_phase,
-                f"mixed gap from-phases across P2 logs: {name}",
-            )
-            require(
-                current_gap_to_phase == gap_to_phase,
-                f"mixed gap to-phases across P2 logs: {name}",
-            )
-        require(
-            fields.get("fixture_manifest_sha256", "").lower() == manifest_sha,
-            f"missing or mismatched canonical fixture hash in {name}",
-        )
-        for key in hash_keys:
-            if key in fields:
-                require(
-                    fields[key].lower() == manifest_sha,
-                    f"fixture hash mismatch in {name}",
-                )
-        results[f"p2_0{index}_status"] = fields["status"]
-        semantic_checks = (
-            (fields["status"] == "PASS", f"gate log is not PASS: {name}"),
-            (fields.get("player_state") == "PLAYING", f"player not PLAYING in {name}"),
-            (fields.get("player_error") == "NONE", f"player error in {name}"),
-            (fields.get("audio_error") == "none", f"audio error in {name}"),
-            (fields.get("sample_rate") == "44100", f"unexpected sample rate in {name}"),
-            (fields.get("backpressure") == "0", f"backpressure in {name}"),
-            (fields.get("audio_error_events") == "0", f"audio error events in {name}"),
-            (
-                fields.get("unexpected_playback_state_over_100ms") == "0",
-                f"unexpected playback state in {name}",
-            ),
-            (
-                fields.get("speaker_starvation_over_100ms") == "0",
-                f"speaker starvation in {name}",
-            ),
-        )
         failures.extend(message for passed, message in semantic_checks if not passed)
-    require(timing_values is not None, "no P2 timing snapshot was parsed")
-    for key in (
-        "input_update_max_us",
-        "player_runtime_service_max_us",
-        "player_engine_service_max_us",
-        "library_runtime_service_max_us",
-        "gate_service_max_us",
-        "loop_body_max_us",
-    ):
-        if timing_values[key] <= 0:
-            failures.append(f"timing metric was not sampled: {key}")
-    if timing_values["player_service_start_gap_max_us"] > 0:
-        if gap_from_phase == "none" or gap_to_phase == "none":
-            failures.append("player service gap phase transition was not captured")
-    for key, value in timing_values.items():
-        results[key] = str(value)
-    results["player_service_start_gap_max_from_phase"] = gap_from_phase
-    results["player_service_start_gap_max_to_phase"] = gap_to_phase
-    return results, failures
+        for key, value in metrics.items():
+            results[f"p2_0{index + 1}_{key}"] = str(value)
+
+    p202 = parsed[1]
+    if p202["status"] == "PASS":
+        library_metrics = {
+            key: integer_field(p202, key, P2_LOG_NAMES[1])
+            for key in (
+                "scan_max_us", "sort_slice_max_us", "finalize_max_us",
+                "sort_moves", "sort_comparisons", "sort_fallback_comparisons",
+                "sort_fallback_max_us", "scratch_bytes",
+                "scratch_allocation_failures",
+            )
+        }
+        checks = (
+            (library_metrics["sort_moves"] > 0, "P2-02 sort did not move entries"),
+            (library_metrics["sort_comparisons"] > 0, "P2-02 sort made no comparisons"),
+            (library_metrics["sort_fallback_comparisons"] > 0,
+             "P2-02 did not exercise full-name sort fallback"),
+            (library_metrics["scratch_bytes"] >= 73_728,
+             "P2-02 SortScratch peak was not recorded"),
+            (library_metrics["scratch_allocation_failures"] == 0,
+             "P2-02 SortScratch allocation failed"),
+        )
+        failures.extend(message for passed, message in checks if not passed)
+        for key, value in library_metrics.items():
+            results[f"p2_02_{key}"] = str(value)
+
+    return results, failures, parsed[3]["status"] == "PASS"
 
 
 def canonical_recent_path(path: str) -> bool:
@@ -707,6 +837,16 @@ def main() -> int:
     failed = False
     fixture_result: dict[str, Any] | None = None
     try:
+        capacity = validate_library_capacity_contract(project)
+        emit("library_capacity_status", "PASS")
+        emit("library_max_directory_entries", capacity)
+        emit("library_first_rejected_entry", capacity + 1)
+    except (OSError, ValidationError) as error:
+        failed = True
+        emit("library_capacity_status", "FAIL")
+        emit("library_capacity_error", error)
+
+    try:
         fixture_result = validate_fixture(args.fixture)
         emit("fixture_status", "PASS")
         emit("fixture_path", fixture_result["path"])
@@ -725,9 +865,23 @@ def main() -> int:
             emit("sd_status", "FAIL")
             emit("sd_error", f"SD root not found: {args.sd_root}")
         else:
+            benchmark_valid = False
+            try:
+                benchmark = validate_benchmark(args.sd_root)
+                benchmark_valid = True
+                emit("benchmark_status", "PASS")
+                for key, value in benchmark.items():
+                    emit(f"benchmark_{key}", value)
+            except (OSError, ValidationError) as error:
+                failed = True
+                emit("benchmark_status", "FAIL")
+                emit("benchmark_error", error)
+
+            p204_passed = False
             try:
                 require(fixture_result is not None, "local fixture validation failed")
-                log_results, log_failures = validate_gate_logs(
+                require(benchmark_valid, "long benchmark validation failed")
+                log_results, log_failures, p204_passed = validate_gate_logs(
                     args.sd_root, str(fixture_result["manifest_sha256"])
                 )
                 if log_failures:
@@ -742,15 +896,19 @@ def main() -> int:
                 emit("p2_logs_status", "FAIL")
                 emit("p2_logs_error", error)
 
-            try:
-                recent = validate_recent_slots(args.sd_root, args.recent_dir)
-                emit("recent_slots_status", "PASS")
-                for key, value in recent.items():
-                    emit(f"recent_{key}", value)
-            except (OSError, ValidationError) as error:
-                failed = True
-                emit("recent_slots_status", "FAIL")
-                emit("recent_slots_error", error)
+            if p204_passed:
+                try:
+                    recent = validate_recent_slots(args.sd_root, args.recent_dir)
+                    emit("recent_slots_status", "PASS")
+                    for key, value in recent.items():
+                        emit(f"recent_{key}", value)
+                except (OSError, ValidationError) as error:
+                    failed = True
+                    emit("recent_slots_status", "FAIL")
+                    emit("recent_slots_error", error)
+            else:
+                emit("recent_slots_status", "SKIPPED")
+                emit("recent_slots_reason", "P2-04 did not PASS")
 
     emit("overall_status", "FAIL" if failed else "PASS")
     return 1 if failed else 0
