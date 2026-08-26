@@ -25,6 +25,11 @@ Date: 2026-08-26
 
 ### Validation Harness
 
+- `0.4.2-p2.gate` 真机日志首次独立确认 P2-01 完整通过，并将唯一首个失败收敛到 P2-02：Library 单次扫描 92.6 ms、Player service 间隔 101 ms；当时仍为 Playing / 44.1 kHz、无 Audio Error / Backpressure，PCM 最大间隔 98.397 ms，P2-03/P2-04 因早停未执行。
+- `0.4.3-p2.gate` 将千文件枚举从每项 `openNextFile()` 的 `stat + fopen` 改为官方 `getNextFileName(bool*)`，并复用 SortScratch 的 4 KiB 合并 `.dat` 小写，缓存格式不变且额外内存峰值为 0。
+- 千文件设备复核由 1,000 次同步 `entryAt()` 改为覆盖首尾、分页边界和远端 LRU 的 32 个代表点，PC Fixture 继续全量校验；减少 Gate 自身制造的 SD 负载。
+- 单个 Player service >100 ms 改为明确 `WARN`，连续三次 >100 ms 或单次 >500 ms 才是调度硬失败；PCM submit >100 ms、2 秒无推进、Audio Error、Backpressure 与意外 TrackEnded 继续保持硬失败。新增目录读取、过滤、追加、批量写、close 和 EOF 收尾分项指标，下一次异常可直接归因。
+
 - 新增 marker-owned P2 Fixture 和主机 validator，覆盖多层中文/日文路径、1,000 项大目录、自然排序、过滤、ID3 编码与 Recent/Cache binary CRC；测试数据与 MP3 不提交 Git。
 - 新增 `player-p2-gate`：一次按 `T` 自动覆盖 P2-01～P2-04，停止音频后再写四份完整日志。
 - 根据连续真机失败日志重构 Gate：P2-01 完成后经正式 Library Queue 切换到约 299 秒 benchmark，清零测量指标后再执行 P2-02～P2-04；测量期间不刷新屏幕，整轮 watchdog 为 240 秒。

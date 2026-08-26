@@ -65,6 +65,18 @@ struct LibraryStats {
     uint32_t serviceMaxUs = 0;
     uint32_t overBudgetSteps = 0;
     uint32_t scanMaxUs = 0;
+    // Scan is intentionally split into observable SD/filesystem phases. These
+    // are diagnostics, not hard real-time guarantees: directory reads,
+    // write(), and close() are indivisible calls in the Arduino FS API.
+    uint32_t scanReadDirMaxUs = 0;
+    uint32_t scanAcceptMaxUs = 0;
+    uint32_t scanAppendMaxUs = 0;
+    uint32_t scanWriteMaxUs = 0;
+    uint32_t scanCloseMaxUs = 0;
+    uint32_t scanEofFlushMaxUs = 0;
+    uint32_t scanWriteFlushes = 0;
+    uint32_t scanBytesWritten = 0;
+    uint32_t scanWriteBufferBytes = 0;
     uint32_t sortSliceMaxUs = 0;
     uint32_t finalizeMaxUs = 0;
     uint32_t sortMoves = 0;
@@ -158,6 +170,7 @@ class MusicLibrary final {
     static constexpr size_t kSortPrefixBytes = 24;
     static constexpr size_t kSortMovesPerService = 128;
     static constexpr size_t kFinalizeBytesPerService = 512;
+    static constexpr size_t kScanWriteBufferBytes = 4096;
 
     struct SortKey {
         uint32_t recordOffset = 0;
@@ -177,6 +190,9 @@ class MusicLibrary final {
                   "SortKey must remain a compact 32-byte record");
     static_assert(sizeof(SortScratch) == 73728,
                   "SortScratch memory budget changed unexpectedly");
+    static_assert(sizeof(((SortScratch*)nullptr)->indicesB) ==
+                      kScanWriteBufferBytes,
+                  "Scan buffer must exactly reuse SortScratch::indicesB");
 
     bool ensureCacheDirectories();
     void clearSessionCacheFiles();
@@ -197,8 +213,10 @@ class MusicLibrary final {
     void servicePageRequest();
     bool allocateSortScratch();
     void releaseSortScratch();
+    bool flushScanWriteBuffer();
 
-    bool acceptEntry(fs::File& entry, const char*& basename,
+    bool acceptEntry(const char* entryPath, bool isDirectory,
+                     const char*& basename,
                      LibraryEntryType& type) const;
     bool appendScanRecord(LibraryEntryType type, const char* basename);
     bool readRecord(fs::File& dataFile, uint32_t offset,
@@ -245,6 +263,8 @@ class MusicLibrary final {
     fs::File indexFile_;
 
     SortScratch* sortScratch_ = nullptr;
+    size_t scanWriteBufferedBytes_ = 0;
+    uint32_t scanDataLogicalPosition_ = 0;
     size_t scanCount_ = 0;
     bool sortSourceIsA_ = true;
     size_t sortWidth_ = 1;

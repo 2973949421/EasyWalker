@@ -138,17 +138,18 @@ V1 不建立复杂数据库。
 
 ### P2 扫描与缓存
 
-- 当前目录使用 `Open → Scan → Sort → Finalize → Ready / Error` cooperative 状态机。目录扫描每轮只处理一个目录项；RAM 排序和 Finalize 使用 750 µs 软时间片。该预算约束可拆分的 CPU 工作，不把 `openNextFile`、SD read/write 等不可拆分调用伪装成确定的硬实时上限，超时调用必须按阶段记录。
+- 当前目录使用 `Open → Scan → Sort → Finalize → Ready / Error` cooperative 状态机。目录扫描每轮只处理一个目录项；Arduino-ESP32 2.0.16 使用官方 `getNextFileName(bool*)` 读取名称和类型，禁止为枚举目的通过 `openNextFile()` 对每个文件额外执行 `stat + fopen`。RAM 排序和 Finalize 使用 750 µs 软时间片。该预算约束可拆分的 CPU 工作，不把目录读取、SD read/write/close 等不可拆分调用伪装成确定的硬实时上限，超时调用必须按阶段记录。
 - SD session cache 位于 `/ADVWalkman/cache/library/`，使用 4 个目录索引槽；重启后重建，不建设持久化音乐数据库。
 - RAM 使用 3 个 32-entry page 做 LRU，最多驻留 96 个条目。扫描和排序仅保留数字 offset，不将整批路径常驻 RAM。
-- 扫描期临时分配 2,048 项 `SortKey` 和两组 16-bit order，总计 73,728 bytes；每项缓存 24-byte basename prefix，只有比较结果无法在 prefix 内确定时才回读完整名称。排序完成、取消或失败后立即释放 Scratch；`scratch_bytes` 记录本轮峰值而非当前占用，`.dat/.idx` 格式保持不变。
+- 扫描期临时分配 2,048 项 `SortKey` 和两组 16-bit order，总计 73,728 bytes；每项缓存 24-byte basename prefix，只有比较结果无法在 prefix 内确定时才回读完整名称。Scan 阶段复用尚未参与 merge 的 `indicesB` 作为 4 KiB `.dat` 写缓冲，将逐记录小写合并为少量批量写；进入 Sort 前必须完整落盘，`.dat/.idx` 格式和 record offset 语义不变，且不得增加额外内存峰值。排序完成、取消或失败后立即释放 Scratch；`scratch_bytes` 记录本轮峰值而非当前占用。
 - 当前 Queue 的索引槽保持 pinned；新 Queue 在 Player persistence 空闲后再切换，旧索引才可解除 pin。
 - 应用循环始终先 service Player，再做一次有界 Library / Metadata / Recent 工作；无需新增 RTOS task。
 - `LibraryRuntime` 采用 work-aware 调度：活跃 Directory 工作至少获得四轮中的三轮；Metadata / Recent 仅在确有工作时占用后台轮次。Recent 的 Playing 时间每轮在 RAM 中累计，SD 发布仍 cooperative。正式开发串口的目录 / Recent 输出同样使用逐项游标，不在一次命令中同步遍历整个目录。
 - `PlayerController` 在 Queue / 当前曲目变化时缓存规范化完整路径；`PlayerRuntime::currentPath()` 只复制 RAM 缓存，Recent 与状态画面不得在每轮播放循环重新打开 Library index。
 - `LibraryRuntime` 与其 pinned `FolderQueueSource` 是单次绑定生命周期；禁止对仍被 Player 引用的实例执行重新 begin。Queue source 只有在没有异步 State Store 工作时才能解除 pin。
 - P2 Gate 使用独立 Recent 测试槽并暂停正式 Queue / Session persistence；四份日志在停止测试音频后一次写完并回读完整性标记，避免日志本身污染播放中断音指标。
-- P2 Gate 先用短 Fixture 验证 P2-01 Queue / Recent 语义，再通过正式 `MusicLibrary → FolderQueueSource` 切换到 `/Music/ADVWalkmanBenchmark/benchmark.mp3`，在该长曲持续播放期间执行 P2-02～P2-04。硬指标为 Player state、44.1 kHz、Audio Error、Backpressure、TrackEnded、PCM Buffer 提交进度及相邻 Player service / PCM 提交间隔；`M5.Speaker.isPlaying(0)` 只表示 M5Unified 请求槽占用，保留为诊断采样，不得命名或判定为硬件 underrun / starvation。测量期间不刷新屏幕，停止音频后再显示和写日志。
+- P2 Gate 先用短 Fixture 验证 P2-01 Queue / Recent 语义，再通过正式 `MusicLibrary → FolderQueueSource` 切换到 `/Music/ADVWalkmanBenchmark/benchmark.mp3`，在该长曲持续播放期间执行 P2-02～P2-04。设备端确认千文件 count 后抽查 32 个首尾、分页边界和远端 LRU 代表点；PC Fixture 继续全量核对文件集合与参考排序，避免 Gate 为验证器本身重复执行 1,000 次同步 SD open/read/close。
+- 音频硬指标保持 Player state、44.1 kHz、Audio Error、Backpressure、TrackEnded、PCM Buffer 提交进度与 PCM 提交间隔；PCM 提交超过 100 ms 仍为硬失败。单个 Player service 间隔超过 100 ms 只记录 timing warning，不再因 101 ms 边界值提前跳过 P2-03/P2-04；连续三次超过 100 ms 或单次超过 500 ms 仍为硬失败。`M5.Speaker.isPlaying(0)` 只表示 M5Unified 请求槽占用，保留为诊断采样，不得命名或判定为硬件 underrun / starvation。测量期间不刷新屏幕，停止音频后再显示和写日志。
 
 ---
 

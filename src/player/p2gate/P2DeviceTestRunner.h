@@ -136,6 +136,7 @@ class P2DeviceTestRunner final {
     size_t playbackEntryIndex_ = 0;
     size_t deepReturnCount_ = 0;
     size_t largeIndex_ = 0;
+    uint32_t largeEntriesSampled_ = 0;
     size_t longSortIndex_ = 0;
     size_t cacheVisitIndex_ = 0;
     bool cacheVisitInside_ = false;
@@ -163,6 +164,9 @@ class P2DeviceTestRunner final {
     uint32_t unexpectedPlaybackStateOver100Ms_ = 0;
     uint32_t playerServiceStartGapMaxUs_ = 0;
     uint32_t playerServiceStartGapOver100Ms_ = 0;
+    uint32_t playerServiceGapCurrentConsecutiveOver100Ms_ = 0;
+    uint32_t playerServiceGapMaxConsecutiveOver100Ms_ = 0;
+    uint32_t playerServiceGapSevereOver500Ms_ = 0;
     uint32_t inputUpdateMaxUs_ = 0;
     uint32_t playerRuntimeServiceMaxUs_ = 0;
     uint32_t libraryRuntimeServiceMaxUs_ = 0;
@@ -201,6 +205,8 @@ class P2DeviceTestRunner final {
         uint32_t heapMinimum = 0;
         uint32_t playerServiceStartGapMaxUs = 0;
         uint32_t playerServiceStartGapOver100Ms = 0;
+        uint32_t playerServiceGapMaxConsecutiveOver100Ms = 0;
+        uint32_t playerServiceGapSevereOver500Ms = 0;
         uint32_t speakerRequestSlotEmptySamples = 0;
         uint32_t unexpectedPlaybackStateOver100Ms = 0;
         uint32_t inputUpdateMaxUs = 0;
@@ -213,6 +219,7 @@ class P2DeviceTestRunner final {
         uint32_t playerGapPreviousGateUs = 0;
         uint32_t playerGapPreviousLoopBodyUs = 0;
         uint32_t playerGapCurrentInputUs = 0;
+        uint32_t largeEntriesSampled = 0;
         char measurementTrack[kTrackPathCapacity] = "none";
         char gapFromPhase[40] = "none";
         char gapToPhase[40] = "none";

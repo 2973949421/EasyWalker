@@ -363,6 +363,9 @@ void MusicLibrary::clearStats() {
     stats_ = LibraryStats{};
     if (sortScratch_ != nullptr) {
         stats_.scratchBytes = sizeof(SortScratch);
+        if (state_ == LibraryState::Scan) {
+            stats_.scanWriteBufferBytes = kScanWriteBufferBytes;
+        }
     }
 }
 
@@ -407,6 +410,8 @@ void MusicLibrary::closeWorkFiles() {
     if (indexFile_) {
         indexFile_.close();
     }
+    scanWriteBufferedBytes_ = 0;
+    scanDataLogicalPosition_ = 0;
     releaseSortScratch();
 }
 
@@ -482,6 +487,8 @@ LibraryResult MusicLibrary::openDirectory(const char* path,
     mergeActive_ = false;
     finalizeIndex_ = 0;
     finalizeOpened_ = false;
+    scanWriteBufferedBytes_ = 0;
+    scanDataLogicalPosition_ = 0;
     error_ = LibraryError::None;
     state_ = LibraryState::Open;
     return LibraryResult::Pending;
@@ -611,6 +618,11 @@ void MusicLibrary::serviceOpen() {
         fail(LibraryError::OutOfMemory);
         return;
     }
+    // indicesB is not needed until merge sort starts. Reuse its exact 4096
+    // bytes as the scan write buffer, so batching adds no heap/static peak.
+    scanWriteBufferedBytes_ = 0;
+    scanDataLogicalPosition_ = 0;
+    stats_.scanWriteBufferBytes = kScanWriteBufferBytes;
     state_ = LibraryState::Scan;
 }
 
@@ -620,46 +632,86 @@ void MusicLibrary::serviceScan() {
         return;
     }
 
-    fs::File entry = directoryFile_.openNextFile();
-    if (!entry) {
+    bool isDirectory = false;
+    const uint32_t readDirStartedAt = micros();
+    const String entryPath = directoryFile_.getNextFileName(&isDirectory);
+    stats_.scanReadDirMaxUs = std::max(
+        stats_.scanReadDirMaxUs,
+        static_cast<uint32_t>(micros() - readDirStartedAt));
+    if (entryPath.isEmpty()) {
+        const uint32_t eofStartedAt = micros();
+        const uint32_t closeStartedAt = micros();
         directoryFile_.close();
-        scanDataFile_.flush();
+        stats_.scanCloseMaxUs = std::max(
+            stats_.scanCloseMaxUs,
+            static_cast<uint32_t>(micros() - closeStartedAt));
+        const bool bufferedWriteOk = flushScanWriteBuffer();
+        // This cache is session-only and is reopened only after close(). An
+        // explicit fsync here adds latency without improving its guarantees.
         scanDataFile_.close();
+        if (!bufferedWriteOk) {
+            stats_.scanEofFlushMaxUs = std::max(
+                stats_.scanEofFlushMaxUs,
+                static_cast<uint32_t>(micros() - eofStartedAt));
+            fail(LibraryError::IoError);
+            return;
+        }
         if (scanCount_ <= 1) {
             state_ = LibraryState::Finalize;
+            stats_.scanEofFlushMaxUs = std::max(
+                stats_.scanEofFlushMaxUs,
+                static_cast<uint32_t>(micros() - eofStartedAt));
             return;
         }
         char path[48];
         dataPath(workSlot_, path, sizeof(path));
         sortDataFile_ = fs_->open(path, FILE_READ);
         if (!sortDataFile_) {
+            stats_.scanEofFlushMaxUs = std::max(
+                stats_.scanEofFlushMaxUs,
+                static_cast<uint32_t>(micros() - eofStartedAt));
             fail(LibraryError::IoError);
             return;
         }
         state_ = LibraryState::Sort;
+        // This metric intentionally includes the indivisible final flush,
+        // close, and read-handle open needed to leave Scan. It identifies an
+        // EOF transition spike without pretending those FS calls are sliced.
+        stats_.scanEofFlushMaxUs = std::max(
+            stats_.scanEofFlushMaxUs,
+            static_cast<uint32_t>(micros() - eofStartedAt));
         return;
     }
 
     const char* basename = nullptr;
     LibraryEntryType type = LibraryEntryType::Track;
-    const bool accepted = acceptEntry(entry, basename, type);
+    const uint32_t acceptStartedAt = micros();
+    const bool accepted =
+        acceptEntry(entryPath.c_str(), isDirectory, basename, type);
+    stats_.scanAcceptMaxUs = std::max(
+        stats_.scanAcceptMaxUs,
+        static_cast<uint32_t>(micros() - acceptStartedAt));
     if (accepted) {
         if (scanCount_ >= kMaxDirectoryEntries) {
-            entry.close();
             fail(LibraryError::DirectoryTooLarge);
             return;
         }
+        const uint32_t appendStartedAt = micros();
         if (!appendScanRecord(type, basename)) {
-            entry.close();
+            stats_.scanAppendMaxUs = std::max(
+                stats_.scanAppendMaxUs,
+                static_cast<uint32_t>(micros() - appendStartedAt));
             if (state_ != LibraryState::Error) {
                 fail(LibraryError::IoError);
             }
             return;
         }
+        stats_.scanAppendMaxUs = std::max(
+            stats_.scanAppendMaxUs,
+            static_cast<uint32_t>(micros() - appendStartedAt));
     } else {
         ++stats_.filteredEntries;
     }
-    entry.close();
 }
 
 void MusicLibrary::serviceSort() {
@@ -788,6 +840,36 @@ bool MusicLibrary::allocateSortScratch() {
 void MusicLibrary::releaseSortScratch() {
     delete sortScratch_;
     sortScratch_ = nullptr;
+    scanWriteBufferedBytes_ = 0;
+    scanDataLogicalPosition_ = 0;
+}
+
+bool MusicLibrary::flushScanWriteBuffer() {
+    if (scanWriteBufferedBytes_ == 0) {
+        return true;
+    }
+    if (!scanDataFile_ || sortScratch_ == nullptr ||
+        scanWriteBufferedBytes_ > kScanWriteBufferBytes) {
+        return false;
+    }
+
+    // During Scan, indicesB is deliberately unused. It becomes the merge-sort
+    // destination only after this buffer has been completely flushed.
+    const uint8_t* buffer =
+        reinterpret_cast<const uint8_t*>(sortScratch_->indicesB);
+    const size_t bytes = scanWriteBufferedBytes_;
+    const uint32_t writeStartedAt = micros();
+    ++stats_.scanWriteFlushes;
+    const bool success = writeExact(scanDataFile_, buffer, bytes);
+    stats_.scanWriteMaxUs = std::max(
+        stats_.scanWriteMaxUs,
+        static_cast<uint32_t>(micros() - writeStartedAt));
+    if (!success) {
+        return false;
+    }
+    stats_.scanBytesWritten += static_cast<uint32_t>(bytes);
+    scanWriteBufferedBytes_ = 0;
+    return true;
 }
 
 void MusicLibrary::servicePageRequest() {
@@ -801,13 +883,14 @@ void MusicLibrary::servicePageRequest() {
     }
 }
 
-bool MusicLibrary::acceptEntry(fs::File& entry, const char*& basename,
+bool MusicLibrary::acceptEntry(const char* entryPath, bool isDirectory,
+                               const char*& basename,
                                LibraryEntryType& type) const {
-    basename = basenameOf(entry.name());
+    basename = basenameOf(entryPath);
     if (basename == nullptr || basename[0] == '\0' || basename[0] == '.') {
         return false;
     }
-    if (entry.isDirectory()) {
+    if (isDirectory) {
         type = LibraryEntryType::Directory;
         return true;
     }
@@ -835,21 +918,30 @@ bool MusicLibrary::appendScanRecord(LibraryEntryType type,
         return false;
     }
 
-    const size_t position = scanDataFile_.position();
-    if (position > UINT32_MAX) {
+    const size_t recordBytes =
+        library_cache::kDataRecordHeaderSize + nameLength;
+    if (recordBytes > kScanWriteBufferBytes ||
+        scanDataLogicalPosition_ > UINT32_MAX - recordBytes) {
         return false;
     }
-    uint8_t header[library_cache::kDataRecordHeaderSize] = {};
-    library_cache::writeLe16(header, static_cast<uint16_t>(nameLength));
-    header[2] = static_cast<uint8_t>(type);
-    if (!writeExact(scanDataFile_, header, sizeof(header)) ||
-        !writeExact(scanDataFile_,
-                    reinterpret_cast<const uint8_t*>(basename), nameLength)) {
+    if (scanWriteBufferedBytes_ + recordBytes > kScanWriteBufferBytes &&
+        !flushScanWriteBuffer()) {
         return false;
     }
 
+    const uint32_t position = scanDataLogicalPosition_;
+    uint8_t* const buffer =
+        reinterpret_cast<uint8_t*>(sortScratch_->indicesB);
+    uint8_t* const record = buffer + scanWriteBufferedBytes_;
+    library_cache::writeLe16(record, static_cast<uint16_t>(nameLength));
+    record[2] = static_cast<uint8_t>(type);
+    std::memcpy(record + library_cache::kDataRecordHeaderSize, basename,
+                nameLength);
+    scanWriteBufferedBytes_ += recordBytes;
+    scanDataLogicalPosition_ += static_cast<uint32_t>(recordBytes);
+
     SortKey& key = sortScratch_->keys[scanCount_];
-    key.recordOffset = static_cast<uint32_t>(position);
+    key.recordOffset = position;
     key.nameLength = static_cast<uint16_t>(nameLength);
     key.type = static_cast<uint8_t>(type);
     key.prefixLength = static_cast<uint8_t>(

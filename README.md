@@ -104,7 +104,7 @@ microSD 已挂载为例如 `D:\` 时，可一并复制并复核 SHA-256：
 
 目标位置为 `/firmware/ADV-Walkman-Dev.bin`，由 M5Launcher 正常安装；不使用普通 PlatformIO upload 覆盖 Launcher。`player-dev` 提供 P2 Library 串口开发入口，但不提前实现 P3 正式按键 UI。
 
-P2 本地 Fixture 由已有无版权 P1 音频派生，包含多层 UTF-8 路径、1,000 个 scan-only 文件、长 common-prefix 排序样本和 Metadata 边界样本。测试数据位于 Git 忽略目录，不提交仓库。Gate 还会只读使用已经验收的 `/Music/ADVWalkmanBenchmark/benchmark.mp3` 作为持续播放音频；准备脚本只核对其大小和 SHA-256，不复制、删除或改写该歌曲。microSD 例如挂载为 `D:\` 时：
+P2 本地 Fixture 由已有无版权 P1 音频派生，包含多层 UTF-8 路径、1,000 个 scan-only 文件、长 common-prefix 排序样本和 Metadata 边界样本。测试数据位于 Git 忽略目录，不提交仓库。千文件目录使用只读目录项枚举与 4 KiB 批量缓存写入；设备端抽查 32 个分页 / LRU / 首尾代表点，PC 端仍全量核对 Fixture。Gate 还会只读使用已经验收的 `/Music/ADVWalkmanBenchmark/benchmark.mp3` 作为持续播放音频；准备脚本只核对其大小和 SHA-256，不复制、删除或改写该歌曲。microSD 例如挂载为 `D:\` 时：
 
 ```powershell
 python .\tools\prepare_p2_library.py --sd-root D:\
@@ -117,7 +117,7 @@ python .\tools\prepare_p2_library.py --sd-root D:\
 /firmware/ADV-Walkman-P2-Gate.bin
 ```
 
-通过 M5Launcher 安装后启动，按一次物理 `T`，随后不要操作。Gate 目标约 60～120 秒完成，固件在 240 秒时自动判定超时；正常情况下用户等待不会超过 5 分钟。测量期间不刷新屏幕，只在开始和停止音频后的最终结果刷新，P2-01～P2-04 结果写入：
+通过 M5Launcher 安装后启动，按一次物理 `T`，随后不要操作。Gate 目标约 60～120 秒完成，固件在 240 秒时自动判定超时；正常情况下用户等待不会超过 5 分钟。单次 Player 调度超过 100 ms 会写入 `WARN` 但不会立即截断整轮；真实 PCM 超过 100 ms、连续调度阻塞、Audio Error、Backpressure 或 PCM 停止推进仍会失败。测量期间不刷新屏幕，只在开始和停止音频后的最终结果刷新，P2-01～P2-04 结果写入：
 
 ```text
 /ADVWalkman/logs/p2-01-last.txt

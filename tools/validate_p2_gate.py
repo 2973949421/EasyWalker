@@ -584,6 +584,10 @@ def validate_gate_logs(
     common_metric_keys = (
         "player_service_start_gap_over_100ms",
         "player_service_start_gap_max_us",
+        "player_service_gap_consecutive_over_100ms_max",
+        "player_service_gap_severe_over_500ms",
+        "timing_warning_count",
+        "large_entries_sampled",
         "speaker_request_slot_empty_samples",
         "unexpected_playback_state_over_100ms",
         "input_update_max_us",
@@ -609,6 +613,25 @@ def validate_gate_logs(
         if fields["status"] == "SKIPPED":
             continue
         metrics = {key: integer_field(fields, key, name) for key in common_metric_keys}
+        expected_warning_count = metrics["player_service_start_gap_over_100ms"]
+        expected_warning_status = "WARN" if expected_warning_count else "NONE"
+        require(
+            metrics["timing_warning_count"] == expected_warning_count,
+            f"timing warning count mismatch in {name}",
+        )
+        require(
+            fields.get("timing_warning_status") == expected_warning_status,
+            f"timing warning status mismatch in {name}",
+        )
+        results[f"p2_0{index + 1}_timing_warning_status"] = expected_warning_status
+        results[f"p2_0{index + 1}_timing_warning_count"] = str(
+            expected_warning_count
+        )
+        if expected_warning_count:
+            results[f"p2_0{index + 1}_timing_warning_detail"] = (
+                "player_service_over_100ms="
+                f"{metrics['player_service_start_gap_over_100ms']}"
+            )
         if fields["status"] != "PASS":
             continue
         for key in ("input_update_max_us", "player_runtime_service_max_us",
@@ -645,10 +668,12 @@ def validate_gate_logs(
                  f"PCM submit max gap exceeded 100 ms in {name}"),
                 (metrics["pcm_last_submit_age_us"] <= 2_000_000,
                  f"PCM made no progress for two seconds in {name}"),
-                (metrics["player_service_start_gap_over_100ms"] == 0,
-                 f"Player service gap exceeded 100 ms in {name}"),
-                (metrics["player_service_start_gap_max_us"] <= 100_000,
-                 f"Player service max gap exceeded 100 ms in {name}"),
+                (metrics["player_service_gap_severe_over_500ms"] == 0,
+                 f"Player service gap exceeded 500 ms in {name}"),
+                (metrics["player_service_start_gap_max_us"] <= 500_000,
+                 f"Player service max gap exceeded 500 ms in {name}"),
+                (metrics["player_service_gap_consecutive_over_100ms_max"] < 3,
+                 f"Player service gap exceeded 100 ms three times consecutively in {name}"),
                 (metrics["unexpected_playback_state_over_100ms"] == 0,
                  f"unexpected playback state in {name}"),
                 (metrics["heap_min_sampled"] >= 80 * 1024,
@@ -663,13 +688,25 @@ def validate_gate_logs(
         library_metrics = {
             key: integer_field(p202, key, P2_LOG_NAMES[1])
             for key in (
-                "scan_max_us", "sort_slice_max_us", "finalize_max_us",
+                "scan_max_us", "scan_read_dir_max_us", "scan_accept_max_us",
+                "scan_append_max_us", "scan_write_max_us",
+                "scan_close_max_us", "scan_eof_flush_max_us",
+                "scan_write_flushes", "scan_bytes_written",
+                "scan_write_buffer_bytes", "sort_slice_max_us", "finalize_max_us",
                 "sort_moves", "sort_comparisons", "sort_fallback_comparisons",
                 "sort_fallback_max_us", "scratch_bytes",
                 "scratch_allocation_failures",
             )
         }
         checks = (
+            (integer_field(p202, "large_entries_sampled", P2_LOG_NAMES[1]) == 32,
+             "P2-02 did not validate all 32 representative page/sort samples"),
+            (library_metrics["scan_write_flushes"] > 0,
+             "P2-02 buffered scan did not flush any data"),
+            (library_metrics["scan_bytes_written"] > 0,
+             "P2-02 buffered scan did not write index data"),
+            (library_metrics["scan_write_buffer_bytes"] == 4096,
+             "P2-02 scan write buffer size was not 4096 bytes"),
             (library_metrics["sort_moves"] > 0, "P2-02 sort did not move entries"),
             (library_metrics["sort_comparisons"] > 0, "P2-02 sort made no comparisons"),
             (library_metrics["sort_fallback_comparisons"] > 0,

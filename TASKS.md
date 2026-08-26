@@ -246,7 +246,7 @@ AC：
 
 ## P2-01 Recursive Folder Browser
 
-Status: DEVICE TEST
+Status: DONE
 
 AC：
 
@@ -255,9 +255,9 @@ AC：
 - [x] 中文路径
 - [x] 隐藏文件过滤
 - [x] 非 MP3 文件不进入 V1 可播放列表
-- [ ] 播放时浏览目录不主动 Stop Audio
+- [x] 播放时浏览目录不主动 Stop Audio
 
-实现与 PC Fixture 验收已通过；等待一次 P2 真机 Gate 验证播放中浏览。
+实现与 PC Fixture 验收已通过。2026-08-26 的 `0.4.2-p2.gate` 真机日志独立确认：根目录边界、多层中文路径、过滤、自然排序、当前文件夹 Queue、Queue pin 与播放中浏览全部通过；P2-02 后续失败不回滚该项结果。
 
 ---
 
@@ -274,7 +274,9 @@ AC：
 - [ ] 约 1000 首库规模可正常使用
 - [ ] 播放中扫描不造成明显断音
 
-4 个 SD session cache slot、3×32 项 RAM LRU page 与 Queue pin 已实现。首轮真机日志已确认旧的四路固定轮转与逐元素 SD 随机读取排序无法在既定时限内完成；当前正以 work-aware 调度和有界 RAM SortKey/Fallback 重做 1,000 项路径，完成新 Gate 前保持 `DEVICE TEST`。
+4 个 SD session cache slot、3×32 项 RAM LRU page 与 Queue pin 已实现。`0.4.2-p2.gate` 已把首个真实失败收敛到千文件扫描：单次 Library 调用 92.6 ms，使 Player service 间隔擦线达到 101 ms，但当时仍为 Playing / 44.1 kHz、无 Audio Error、无 Backpressure，PCM 最大间隔 98.397 ms。
+
+`0.4.3-p2.gate` 不再为每个目录项执行 `openNextFile()` 的 `stat + fopen`，改用官方 `getNextFileName(bool*)` 只读取目录项，并复用既有 SortScratch 将零碎 `.dat` 写入合并为 4 KiB 批量写，额外内存峰值为 0。设备端千文件复核改为 32 个分页 / LRU / 首尾代表点，PC Fixture 仍全量核对 1,000 个文件。等待新版真机 Gate；完成前保持 `DEVICE TEST`。
 
 ---
 
