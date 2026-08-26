@@ -54,10 +54,12 @@ void LibraryRuntime::shutdown() {
     latestMetadataStatus_ = Mp3MetadataStatus{};
     metadataPath_[0] = '\0';
     observedRecentPath_[0] = '\0';
+    pendingRecentPath_[0] = '\0';
     recentPlayingMs_ = 0;
     recentRecorded_ = false;
-    recentRecordFailed_ = false;
-    serviceLane_ = 0;
+    recentRecordPending_ = false;
+    libraryQuotaLane_ = 0;
+    backgroundLane_ = 0;
 }
 
 void LibraryRuntime::service() {
@@ -65,25 +67,32 @@ void LibraryRuntime::service() {
         return;
     }
 
-    // Exactly one bounded Library/Metadata/Recent lane runs per application
-    // loop. PlayerRuntime is serviced by the caller immediately beforehand.
-    switch (serviceLane_) {
-        case 0:
-            library_.service();
-            break;
-        case 1:
-            if (pendingSelection_) {
-                tryPendingSelection();
-            }
-            break;
-        case 2:
-            serviceMetadata();
-            break;
-        default:
-            serviceRecent(millis());
-            break;
+    const uint32_t now = millis();
+    // Playing-time observation is RAM-only and therefore safe every loop.
+    // SD validation/publication is scheduled separately below.
+    // A newly queued Recent record must remain observable for the rest of
+    // this service call.  The storage lane may consume it from the next call
+    // onward.  Besides making the lifecycle deterministic, this prevents a
+    // same-loop track change from racing the publication boundary.
+    const bool recentQueuedThisService = observeRecent(now);
+
+    const bool backgroundPending =
+        pendingSelection_ || metadataRequestActive_ ||
+        recentStoragePending(now);
+    if (library_.workPending() &&
+        (!backgroundPending || libraryQuotaLane_ < 3)) {
+        library_.service();
+        libraryQuotaLane_ = backgroundPending
+                                ? static_cast<uint8_t>(libraryQuotaLane_ + 1U)
+                                : 0;
+        return;
     }
-    serviceLane_ = static_cast<uint8_t>((serviceLane_ + 1U) & 0x03U);
+
+    libraryQuotaLane_ = 0;
+    if (!serviceBackgroundWork(now, recentQueuedThisService) &&
+        library_.workPending()) {
+        library_.service();
+    }
 }
 
 MusicLibrary& LibraryRuntime::library() {
@@ -312,6 +321,10 @@ bool LibraryRuntime::recentPathAt(size_t index, char* output,
     return recent_.loaded() && recent_.pathAt(index, output, outputCapacity);
 }
 
+bool LibraryRuntime::recentRecordPending() const {
+    return recentRecordPending_;
+}
+
 void LibraryRuntime::resetRecentObservation(const char* path, uint32_t now) {
     observedRecentPath_[0] = '\0';
     if (path != nullptr) {
@@ -322,13 +335,13 @@ void LibraryRuntime::resetRecentObservation(const char* path, uint32_t now) {
     }
     recentPlayingMs_ = 0;
     recentRecorded_ = false;
-    recentRecordFailed_ = false;
     recentLastTickMs_ = now;
 }
 
-void LibraryRuntime::serviceRecent(uint32_t now) {
+bool LibraryRuntime::observeRecent(uint32_t now) {
     if (player_ == nullptr || !recent_.loaded()) {
-        return;
+        recentLastTickMs_ = now;
+        return false;
     }
 
     char current[kTrackPathCapacity] = {};
@@ -343,35 +356,79 @@ void LibraryRuntime::serviceRecent(uint32_t now) {
     const uint32_t elapsed = now - recentLastTickMs_;
     recentLastTickMs_ = now;
     if (haveCurrent && snapshot.state == PlayerState::Playing &&
-        !recentRecorded_ && !recentRecordFailed_) {
+        !recentRecorded_) {
         const uint32_t room = UINT32_MAX - recentPlayingMs_;
         recentPlayingMs_ += elapsed > room ? room : elapsed;
-        if (recentPlayingMs_ >= kRecentThresholdMs && !recent_.pending()) {
-            const RecentTracksResult result = recent_.record(current);
-            recentResult_ = result;
-            if (result == RecentTracksResult::Ok ||
-                result == RecentTracksResult::Pending) {
-                recentRecorded_ = true;
-            } else {
-                // A missing/invalid path or unavailable storage is stable for
-                // this track observation. Do not repeat SD exists/open every
-                // loop; changing track resets this latch.
-                recentRecordFailed_ = true;
-            }
+        if (recentPlayingMs_ >= kRecentThresholdMs &&
+            !recentRecordPending_ && observedRecentPath_[0] != '\0') {
+            std::memcpy(pendingRecentPath_, observedRecentPath_,
+                        std::strlen(observedRecentPath_) + 1);
+            recentRecordPending_ = true;
+            // Mark this observation as scheduled. The copied pending path is
+            // independent of later track changes.
+            recentRecorded_ = true;
+            return true;
         }
+    }
+    return false;
+}
+
+bool LibraryRuntime::recentStoragePending(uint32_t now) const {
+    if (player_ == nullptr || !recent_.loaded() ||
+        !player_->persistenceIdle()) {
+        return false;
+    }
+    return recent_.pending() || recentRecordPending_ ||
+           (recent_.dirty() &&
+            static_cast<int32_t>(now - recentNextRetryAtMs_) >= 0);
+}
+
+void LibraryRuntime::serviceRecentStorage(uint32_t now) {
+    if (!recentStoragePending(now)) {
+        return;
     }
 
-    if (player_->persistenceIdle()) {
-        if (recent_.pending()) {
-            recent_.service();
-            recentResult_ = recent_.lastResult();
-            recentNextRetryAtMs_ = now + 1000;
-        } else if (recent_.dirty() &&
-                   static_cast<int32_t>(now - recentNextRetryAtMs_) >= 0) {
-            recentResult_ = recent_.retrySave();
-            recentNextRetryAtMs_ = now + 1000;
+    if (recent_.pending()) {
+        recent_.service();
+        recentResult_ = recent_.lastResult();
+        recentNextRetryAtMs_ = now + 1000;
+        return;
+    }
+
+    if (recentRecordPending_) {
+        const RecentTracksResult result = recent_.record(pendingRecentPath_);
+        recentResult_ = result;
+        recentRecordPending_ = false;
+        pendingRecentPath_[0] = '\0';
+        recentNextRetryAtMs_ = now + 1000;
+        return;
+    }
+
+    recentResult_ = recent_.retrySave();
+    recentNextRetryAtMs_ = now + 1000;
+}
+
+bool LibraryRuntime::serviceBackgroundWork(uint32_t now,
+                                           bool deferNewRecentRecord) {
+    for (uint8_t attempt = 0; attempt < 3; ++attempt) {
+        const uint8_t lane = backgroundLane_;
+        backgroundLane_ =
+            static_cast<uint8_t>((backgroundLane_ + 1U) % 3U);
+        if (lane == 0 && pendingSelection_) {
+            tryPendingSelection();
+            return true;
+        }
+        if (lane == 1 && metadataRequestActive_) {
+            serviceMetadata();
+            return true;
+        }
+        if (lane == 2 && !deferNewRecentRecord &&
+            recentStoragePending(now)) {
+            serviceRecentStorage(now);
+            return true;
         }
     }
+    return false;
 }
 
 bool LibraryRuntime::samePathAsciiCaseInsensitive(const char* left,

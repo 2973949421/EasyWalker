@@ -6,6 +6,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 #include "player/library/FolderQueueSource.h"
 #include "player/library/LibraryCacheFormat.h"
@@ -132,6 +133,7 @@ LibraryResult MusicLibrary::refreshCurrent() {
 }
 
 void MusicLibrary::service() {
+    const LibraryState servicedState = state_;
     const uint32_t startedAt = micros();
     switch (state_) {
         case LibraryState::Open:
@@ -154,6 +156,20 @@ void MusicLibrary::service() {
     }
     const uint32_t elapsed = micros() - startedAt;
     stats_.serviceMaxUs = std::max(stats_.serviceMaxUs, elapsed);
+    switch (servicedState) {
+        case LibraryState::Scan:
+            stats_.scanMaxUs = std::max(stats_.scanMaxUs, elapsed);
+            break;
+        case LibraryState::Sort:
+            stats_.sortSliceMaxUs =
+                std::max(stats_.sortSliceMaxUs, elapsed);
+            break;
+        case LibraryState::Finalize:
+            stats_.finalizeMaxUs = std::max(stats_.finalizeMaxUs, elapsed);
+            break;
+        default:
+            break;
+    }
     if (elapsed > kServiceBudgetUs) {
         ++stats_.overBudgetSteps;
     }
@@ -203,6 +219,12 @@ size_t MusicLibrary::trackCount() const {
     return state_ == LibraryState::Ready && currentSlot_ >= 0
                ? slots_[currentSlot_].trackCount
                : 0;
+}
+
+bool MusicLibrary::workPending() const {
+    return state_ == LibraryState::Open || state_ == LibraryState::Scan ||
+           state_ == LibraryState::Sort ||
+           state_ == LibraryState::Finalize || pageRequestPending_;
 }
 
 LibraryResult MusicLibrary::requestWindow(size_t firstIndex) {
@@ -339,6 +361,9 @@ LibraryStats MusicLibrary::stats() const {
 
 void MusicLibrary::clearStats() {
     stats_ = LibraryStats{};
+    if (sortScratch_ != nullptr) {
+        stats_.scratchBytes = sizeof(SortScratch);
+    }
 }
 
 bool MusicLibrary::ensureCacheDirectories() {
@@ -382,6 +407,7 @@ void MusicLibrary::closeWorkFiles() {
     if (indexFile_) {
         indexFile_.close();
     }
+    releaseSortScratch();
 }
 
 void MusicLibrary::fail(LibraryError error) {
@@ -581,6 +607,10 @@ void MusicLibrary::serviceOpen() {
         fail(LibraryError::IoError);
         return;
     }
+    if (!allocateSortScratch()) {
+        fail(LibraryError::OutOfMemory);
+        return;
+    }
     state_ = LibraryState::Scan;
 }
 
@@ -633,51 +663,61 @@ void MusicLibrary::serviceScan() {
 }
 
 void MusicLibrary::serviceSort() {
-    if (workSlot_ < 0 || !sortDataFile_) {
+    if (workSlot_ < 0 || !sortDataFile_ || sortScratch_ == nullptr) {
         fail(LibraryError::IoError);
         return;
     }
 
     const size_t count = scanCount_;
-    if (!mergeActive_) {
-        if (sortLeft_ >= count) {
-            sortSourceIsA_ = !sortSourceIsA_;
-            sortWidth_ *= 2;
-            sortLeft_ = 0;
-            if (sortWidth_ >= count) {
-                sortDataFile_.close();
-                state_ = LibraryState::Finalize;
+    const uint32_t sliceStartedAt = micros();
+    size_t moves = 0;
+    while (moves < kSortMovesPerService) {
+        if (!mergeActive_) {
+            if (sortLeft_ >= count) {
+                sortSourceIsA_ = !sortSourceIsA_;
+                sortWidth_ *= 2;
+                sortLeft_ = 0;
+                if (sortWidth_ >= count) {
+                    sortDataFile_.close();
+                    state_ = LibraryState::Finalize;
+                    return;
+                }
+            }
+
+            mergeLeft_ = sortLeft_;
+            mergeLeftEnd_ = std::min(sortLeft_ + sortWidth_, count);
+            mergeRight_ = mergeLeftEnd_;
+            mergeRightEnd_ = std::min(sortLeft_ + sortWidth_ * 2, count);
+            mergeOutput_ = sortLeft_;
+            mergeActive_ = true;
+        }
+
+        const uint16_t* source = sortSource();
+        uint16_t* destination = sortDestination();
+        if (mergeLeft_ < mergeLeftEnd_ && mergeRight_ < mergeRightEnd_) {
+            const int comparison =
+                compareRecords(source[mergeLeft_], source[mergeRight_]);
+            if (state_ == LibraryState::Error) {
                 return;
             }
+            destination[mergeOutput_++] = comparison <= 0
+                                                ? source[mergeLeft_++]
+                                                : source[mergeRight_++];
+        } else if (mergeLeft_ < mergeLeftEnd_) {
+            destination[mergeOutput_++] = source[mergeLeft_++];
+        } else if (mergeRight_ < mergeRightEnd_) {
+            destination[mergeOutput_++] = source[mergeRight_++];
         }
+        ++moves;
+        ++stats_.sortMoves;
 
-        mergeLeft_ = sortLeft_;
-        mergeLeftEnd_ = std::min(sortLeft_ + sortWidth_, count);
-        mergeRight_ = mergeLeftEnd_;
-        mergeRightEnd_ = std::min(sortLeft_ + sortWidth_ * 2, count);
-        mergeOutput_ = sortLeft_;
-        mergeActive_ = true;
-    }
-
-    const uint32_t* source = sortSource();
-    uint32_t* destination = sortDestination();
-    if (mergeLeft_ < mergeLeftEnd_ && mergeRight_ < mergeRightEnd_) {
-        const int comparison =
-            compareRecords(source[mergeLeft_], source[mergeRight_]);
-        if (state_ == LibraryState::Error) {
-            return;
+        if (mergeOutput_ >= mergeRightEnd_) {
+            sortLeft_ = mergeRightEnd_;
+            mergeActive_ = false;
         }
-        destination[mergeOutput_++] =
-            comparison <= 0 ? source[mergeLeft_++] : source[mergeRight_++];
-    } else if (mergeLeft_ < mergeLeftEnd_) {
-        destination[mergeOutput_++] = source[mergeLeft_++];
-    } else if (mergeRight_ < mergeRightEnd_) {
-        destination[mergeOutput_++] = source[mergeRight_++];
-    }
-
-    if (mergeOutput_ >= mergeRightEnd_) {
-        sortLeft_ = mergeRightEnd_;
-        mergeActive_ = false;
+        if (micros() - sliceStartedAt >= kServiceBudgetUs) {
+            break;
+        }
     }
 }
 
@@ -701,13 +741,13 @@ void MusicLibrary::serviceFinalize() {
         return;
     }
 
-    const uint32_t* sorted = sortSource();
-    uint8_t bytes[kPageEntries * sizeof(uint32_t)];
+    uint8_t bytes[kFinalizeBytesPerService];
     const size_t remaining = scanCount_ - finalizeIndex_;
-    const size_t count = std::min(remaining, kPageEntries);
+    const size_t count = std::min(
+        remaining, kFinalizeBytesPerService / sizeof(uint32_t));
     for (size_t index = 0; index < count; ++index) {
         library_cache::writeLe32(bytes + index * sizeof(uint32_t),
-                                 sorted[finalizeIndex_ + index]);
+                                 sortedRecordOffset(finalizeIndex_ + index));
     }
     if (count != 0 &&
         !writeExact(indexFile_, bytes, count * sizeof(uint32_t))) {
@@ -726,7 +766,28 @@ void MusicLibrary::serviceFinalize() {
     slot.lastUse = ++useCounter_;
     const size_t completedSlot = workSlot_;
     finalizeOpened_ = false;
+    releaseSortScratch();
     setCurrentReady(completedSlot);
+}
+
+bool MusicLibrary::allocateSortScratch() {
+    if (sortScratch_ != nullptr) {
+        return true;
+    }
+    sortScratch_ = new (std::nothrow) SortScratch;
+    if (sortScratch_ == nullptr) {
+        ++stats_.scratchAllocationFailures;
+        return false;
+    }
+    stats_.scratchBytes =
+        std::max(stats_.scratchBytes,
+                 static_cast<uint32_t>(sizeof(SortScratch)));
+    return true;
+}
+
+void MusicLibrary::releaseSortScratch() {
+    delete sortScratch_;
+    sortScratch_ = nullptr;
 }
 
 void MusicLibrary::servicePageRequest() {
@@ -759,7 +820,7 @@ bool MusicLibrary::acceptEntry(fs::File& entry, const char*& basename,
 
 bool MusicLibrary::appendScanRecord(LibraryEntryType type,
                                     const char* basename) {
-    if (workSlot_ < 0 || basename == nullptr) {
+    if (workSlot_ < 0 || basename == nullptr || sortScratch_ == nullptr) {
         return false;
     }
     const size_t nameLength = std::strlen(basename);
@@ -787,7 +848,16 @@ bool MusicLibrary::appendScanRecord(LibraryEntryType type,
         return false;
     }
 
-    offsetsA_[scanCount_++] = static_cast<uint32_t>(position);
+    SortKey& key = sortScratch_->keys[scanCount_];
+    key.recordOffset = static_cast<uint32_t>(position);
+    key.nameLength = static_cast<uint16_t>(nameLength);
+    key.type = static_cast<uint8_t>(type);
+    key.prefixLength = static_cast<uint8_t>(
+        std::min(nameLength, static_cast<size_t>(kSortPrefixBytes)));
+    std::memcpy(key.prefix, basename, key.prefixLength);
+    sortScratch_->indicesA[scanCount_] =
+        static_cast<uint16_t>(scanCount_);
+    ++scanCount_;
     CacheSlot& slot = slots_[workSlot_];
     if (type == LibraryEntryType::Directory) {
         ++slot.directoryCount;
@@ -822,20 +892,139 @@ bool MusicLibrary::readRecord(fs::File& dataFile, uint32_t offset,
     return true;
 }
 
-int MusicLibrary::compareRecords(uint32_t leftOffset, uint32_t rightOffset) {
-    LibraryEntryType leftType = LibraryEntryType::Track;
-    LibraryEntryType rightType = LibraryEntryType::Track;
-    if (!readRecord(sortDataFile_, leftOffset, leftType, leftName_,
-                    sizeof(leftName_)) ||
-        !readRecord(sortDataFile_, rightOffset, rightType, rightName_,
-                    sizeof(rightName_))) {
+int MusicLibrary::compareRecords(uint16_t leftIndex, uint16_t rightIndex) {
+    ++stats_.sortComparisons;
+    if (sortScratch_ == nullptr || leftIndex >= scanCount_ ||
+        rightIndex >= scanCount_) {
         fail(LibraryError::CacheCorrupt);
         return 0;
     }
-    if (leftType != rightType) {
-        return leftType == LibraryEntryType::Directory ? -1 : 1;
+
+    const SortKey& leftKey = sortScratch_->keys[leftIndex];
+    const SortKey& rightKey = sortScratch_->keys[rightIndex];
+    int cachedResult = 0;
+    if (compareCachedKeys(leftKey, rightKey, cachedResult)) {
+        return cachedResult;
     }
-    return naturalCompare(leftName_, rightName_);
+
+    ++stats_.sortFallbackComparisons;
+    const uint32_t fallbackStartedAt = micros();
+    LibraryEntryType leftType = LibraryEntryType::Track;
+    LibraryEntryType rightType = LibraryEntryType::Track;
+    if (!readRecord(sortDataFile_, leftKey.recordOffset, leftType, leftName_,
+                    sizeof(leftName_)) ||
+        !readRecord(sortDataFile_, rightKey.recordOffset, rightType, rightName_,
+                    sizeof(rightName_))) {
+        const uint32_t failedElapsed =
+            static_cast<uint32_t>(micros() - fallbackStartedAt);
+        stats_.sortFallbackMaxUs = std::max(
+            stats_.sortFallbackMaxUs, failedElapsed);
+        fail(LibraryError::CacheCorrupt);
+        return 0;
+    }
+    const int result = leftType != rightType
+                           ? leftType == LibraryEntryType::Directory ? -1 : 1
+                           : naturalCompare(leftName_, rightName_);
+    const uint32_t elapsed = micros() - fallbackStartedAt;
+    stats_.sortFallbackMaxUs =
+        std::max(stats_.sortFallbackMaxUs, elapsed);
+    return result;
+}
+
+bool MusicLibrary::compareCachedKeys(const SortKey& left,
+                                     const SortKey& right,
+                                     int& result) const {
+    if (left.type != right.type) {
+        result = left.type == static_cast<uint8_t>(LibraryEntryType::Directory)
+                     ? -1
+                     : 1;
+        return true;
+    }
+
+    size_t leftPosition = 0;
+    size_t rightPosition = 0;
+    while (leftPosition < left.prefixLength &&
+           rightPosition < right.prefixLength) {
+        const uint8_t leftByte = left.prefix[leftPosition];
+        const uint8_t rightByte = right.prefix[rightPosition];
+        if (leftByte >= '0' && leftByte <= '9' &&
+            rightByte >= '0' && rightByte <= '9') {
+            size_t leftEnd = leftPosition;
+            size_t rightEnd = rightPosition;
+            while (leftEnd < left.prefixLength &&
+                   left.prefix[leftEnd] >= '0' &&
+                   left.prefix[leftEnd] <= '9') {
+                ++leftEnd;
+            }
+            while (rightEnd < right.prefixLength &&
+                   right.prefix[rightEnd] >= '0' &&
+                   right.prefix[rightEnd] <= '9') {
+                ++rightEnd;
+            }
+
+            const bool leftRunComplete =
+                leftEnd < left.prefixLength || leftEnd >= left.nameLength;
+            const bool rightRunComplete =
+                rightEnd < right.prefixLength || rightEnd >= right.nameLength;
+            if (!leftRunComplete || !rightRunComplete) {
+                return false;
+            }
+
+            size_t leftSignificant = leftPosition;
+            size_t rightSignificant = rightPosition;
+            while (leftSignificant < leftEnd &&
+                   left.prefix[leftSignificant] == '0') {
+                ++leftSignificant;
+            }
+            while (rightSignificant < rightEnd &&
+                   right.prefix[rightSignificant] == '0') {
+                ++rightSignificant;
+            }
+            const size_t leftDigits = leftEnd - leftSignificant;
+            const size_t rightDigits = rightEnd - rightSignificant;
+            if (leftDigits != rightDigits) {
+                result = leftDigits < rightDigits ? -1 : 1;
+                return true;
+            }
+            const int numeric = leftDigits == 0
+                                    ? 0
+                                    : std::memcmp(left.prefix + leftSignificant,
+                                                  right.prefix + rightSignificant,
+                                                  leftDigits);
+            if (numeric != 0) {
+                result = numeric < 0 ? -1 : 1;
+                return true;
+            }
+            leftPosition = leftEnd;
+            rightPosition = rightEnd;
+            continue;
+        }
+
+        const uint8_t foldedLeft = foldAscii(leftByte);
+        const uint8_t foldedRight = foldAscii(rightByte);
+        if (foldedLeft != foldedRight) {
+            result = foldedLeft < foldedRight ? -1 : 1;
+            return true;
+        }
+        ++leftPosition;
+        ++rightPosition;
+    }
+
+    const bool leftEnded = leftPosition >= left.nameLength;
+    const bool rightEnded = rightPosition >= right.nameLength;
+    if (leftEnded || rightEnded) {
+        if (leftEnded == rightEnded) {
+            result = 0;
+        } else {
+            result = leftEnded ? -1 : 1;
+        }
+        return true;
+    }
+
+    // A shared prefix with at least one truncated name cannot be ordered
+    // exactly without consulting the complete cache record. This also covers
+    // a UTF-8 sequence or a numeric run crossing the 24-byte boundary.
+    return false;
 }
 
 int MusicLibrary::naturalCompare(const char* left, const char* right) {
@@ -941,12 +1130,30 @@ bool MusicLibrary::joinPath(const char* directory, const char* basename,
     return true;
 }
 
-const uint32_t* MusicLibrary::sortSource() const {
-    return sortSourceIsA_ ? offsetsA_ : offsetsB_;
+const uint16_t* MusicLibrary::sortSource() const {
+    if (sortScratch_ == nullptr) {
+        return nullptr;
+    }
+    return sortSourceIsA_ ? sortScratch_->indicesA
+                          : sortScratch_->indicesB;
 }
 
-uint32_t* MusicLibrary::sortDestination() {
-    return sortSourceIsA_ ? offsetsB_ : offsetsA_;
+uint16_t* MusicLibrary::sortDestination() {
+    if (sortScratch_ == nullptr) {
+        return nullptr;
+    }
+    return sortSourceIsA_ ? sortScratch_->indicesB
+                          : sortScratch_->indicesA;
+}
+
+uint32_t MusicLibrary::sortedRecordOffset(size_t sortedIndex) const {
+    if (sortScratch_ == nullptr || sortedIndex >= scanCount_) {
+        return 0;
+    }
+    const uint16_t keyIndex = sortSource()[sortedIndex];
+    return keyIndex < scanCount_
+               ? sortScratch_->keys[keyIndex].recordOffset
+               : 0;
 }
 
 bool MusicLibrary::writeIndexHeader(fs::File& file,
@@ -1179,6 +1386,8 @@ const char* libraryErrorName(LibraryError error) {
             return "QUEUE_TOO_LARGE";
         case LibraryError::CacheBusy:
             return "CACHE_BUSY";
+        case LibraryError::OutOfMemory:
+            return "OUT_OF_MEMORY";
         case LibraryError::IoError:
             return "IO_ERROR";
         case LibraryError::CacheCorrupt:

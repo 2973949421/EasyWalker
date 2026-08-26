@@ -52,13 +52,22 @@ class LibraryRuntime final {
     size_t recentCount() const;
     bool recentPathAt(size_t index, char* output,
                       size_t outputCapacity) const;
+    // True only while a track that crossed the five-second threshold is
+    // queued in RAM but has not yet been handed to RecentTracksStore.  This is
+    // intentionally observable by the device Gate so a track-change race can
+    // be reproduced without relying on timing guesses.
+    bool recentRecordPending() const;
 
   private:
     void shutdown();
     LibraryResult tryPendingSelection();
     void serviceMetadata();
     LibraryResult tryPendingMetadata();
-    void serviceRecent(uint32_t now);
+    bool observeRecent(uint32_t now);
+    void serviceRecentStorage(uint32_t now);
+    bool recentStoragePending(uint32_t now) const;
+    bool serviceBackgroundWork(uint32_t now,
+                               bool deferNewRecentRecord = false);
     void resetRecentObservation(const char* path, uint32_t now);
     static bool samePathAsciiCaseInsensitive(const char* left,
                                              const char* right);
@@ -90,12 +99,16 @@ class LibraryRuntime final {
     RecentTracksStore recent_;
     RecentTracksResult recentResult_ = RecentTracksResult::NotFound;
     char observedRecentPath_[kTrackPathCapacity] = {};
+    // A track that crossed the five-second threshold must survive a track
+    // change until the low-priority storage lane can publish it.
+    char pendingRecentPath_[kTrackPathCapacity] = {};
     uint32_t recentPlayingMs_ = 0;
     uint32_t recentLastTickMs_ = 0;
     uint32_t recentNextRetryAtMs_ = 0;
     bool recentRecorded_ = false;
-    bool recentRecordFailed_ = false;
-    uint8_t serviceLane_ = 0;
+    bool recentRecordPending_ = false;
+    uint8_t libraryQuotaLane_ = 0;
+    uint8_t backgroundLane_ = 0;
 };
 
 }  // namespace player

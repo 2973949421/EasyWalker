@@ -33,6 +33,7 @@ enum class LibraryError : uint8_t {
     DirectoryTooLarge,
     QueueTooLarge,
     CacheBusy,
+    OutOfMemory,
     IoError,
     CacheCorrupt,
 };
@@ -63,6 +64,15 @@ struct LibraryStats {
     uint32_t filteredEntries = 0;
     uint32_t serviceMaxUs = 0;
     uint32_t overBudgetSteps = 0;
+    uint32_t scanMaxUs = 0;
+    uint32_t sortSliceMaxUs = 0;
+    uint32_t finalizeMaxUs = 0;
+    uint32_t sortMoves = 0;
+    uint32_t sortComparisons = 0;
+    uint32_t sortFallbackComparisons = 0;
+    uint32_t sortFallbackMaxUs = 0;
+    uint32_t scratchBytes = 0;
+    uint32_t scratchAllocationFailures = 0;
     // Includes the synchronous page lookup plus cache-record SD read performed
     // by entryAt(). Cooperative serviceMaxUs intentionally excludes it.
     uint32_t entryReadMaxUs = 0;
@@ -101,6 +111,7 @@ class MusicLibrary final {
     size_t entryCount() const;
     size_t directoryCount() const;
     size_t trackCount() const;
+    bool workPending() const;
 
     // Pages are loaded cooperatively by service(). entryAt() automatically
     // requests the containing page and returns Pending until it is resident.
@@ -144,6 +155,29 @@ class MusicLibrary final {
         uint32_t recordOffsets[kPageEntries] = {};
     };
 
+    static constexpr size_t kSortPrefixBytes = 24;
+    static constexpr size_t kSortMovesPerService = 128;
+    static constexpr size_t kFinalizeBytesPerService = 512;
+
+    struct SortKey {
+        uint32_t recordOffset = 0;
+        uint16_t nameLength = 0;
+        uint8_t type = 0;
+        uint8_t prefixLength = 0;
+        uint8_t prefix[kSortPrefixBytes] = {};
+    };
+
+    struct SortScratch {
+        SortKey keys[kMaxDirectoryEntries];
+        uint16_t indicesA[kMaxDirectoryEntries];
+        uint16_t indicesB[kMaxDirectoryEntries];
+    };
+
+    static_assert(sizeof(SortKey) == 32,
+                  "SortKey must remain a compact 32-byte record");
+    static_assert(sizeof(SortScratch) == 73728,
+                  "SortScratch memory budget changed unexpectedly");
+
     bool ensureCacheDirectories();
     void clearSessionCacheFiles();
     void closeWorkFiles();
@@ -161,6 +195,8 @@ class MusicLibrary final {
     void serviceSort();
     void serviceFinalize();
     void servicePageRequest();
+    bool allocateSortScratch();
+    void releaseSortScratch();
 
     bool acceptEntry(fs::File& entry, const char*& basename,
                      LibraryEntryType& type) const;
@@ -168,15 +204,18 @@ class MusicLibrary final {
     bool readRecord(fs::File& dataFile, uint32_t offset,
                     LibraryEntryType& type, char* name,
                     size_t nameCapacity) const;
-    int compareRecords(uint32_t leftOffset, uint32_t rightOffset);
+    int compareRecords(uint16_t leftIndex, uint16_t rightIndex);
+    bool compareCachedKeys(const SortKey& left, const SortKey& right,
+                           int& result) const;
     static int naturalCompare(const char* left, const char* right);
     static bool isMp3Name(const char* name);
     static const char* basenameOf(const char* path);
     static bool joinPath(const char* directory, const char* basename,
                          char* output, size_t outputCapacity);
 
-    const uint32_t* sortSource() const;
-    uint32_t* sortDestination();
+    const uint16_t* sortSource() const;
+    uint16_t* sortDestination();
+    uint32_t sortedRecordOffset(size_t sortedIndex) const;
     bool writeIndexHeader(fs::File& file, const CacheSlot& slot) const;
     bool readIndexHeader(size_t slotIndex, uint8_t* header) const;
     void indexPath(size_t slotIndex, char* output, size_t capacity) const;
@@ -205,8 +244,7 @@ class MusicLibrary final {
     fs::File sortDataFile_;
     fs::File indexFile_;
 
-    uint32_t offsetsA_[kMaxDirectoryEntries]{};
-    uint32_t offsetsB_[kMaxDirectoryEntries]{};
+    SortScratch* sortScratch_ = nullptr;
     size_t scanCount_ = 0;
     bool sortSourceIsA_ = true;
     size_t sortWidth_ = 1;
