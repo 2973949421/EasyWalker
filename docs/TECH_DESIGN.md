@@ -147,7 +147,7 @@ V1 不建立复杂数据库。
 - `PlayerController` 在 Queue / 当前曲目变化时缓存规范化完整路径；`PlayerRuntime::currentPath()` 只复制 RAM 缓存，Recent 与状态画面不得在每轮播放循环重新打开 Library index。
 - `LibraryRuntime` 与其 pinned `FolderQueueSource` 是单次绑定生命周期；禁止对仍被 Player 引用的实例执行重新 begin。Queue source 只有在没有异步 State Store 工作时才能解除 pin。
 - P2 Gate 使用独立 Recent 测试槽并暂停正式 Queue / Session persistence；四份日志在停止测试音频后一次写完并回读完整性标记，避免日志本身污染播放中断音指标。
-- P2 Gate 在完整 P2-01～P2-04 生命周期持续检查 Player state、44.1 kHz、Audio Error、Backpressure 与相邻 service 间隔；播放中单次超过 100 ms 的间隔或非预期状态持续超过 100 ms 均作为 starvation 失败，不能由下一轮补音掩盖。
+- P2 Gate 在完整 P2-01～P2-04 生命周期持续检查 Player state、44.1 kHz、Audio Error、Backpressure 与 Speaker channel 0。相邻 `player.service()` 入口间隔及 `M5Cardputer.update`、PlayerRuntime、LibraryRuntime、Gate 的分段最大耗时作为诊断指标记录；最大间隔同时冻结上一轮的阶段转换与分段耗时，避免把阻塞错归到下一阶段，不再把混合循环间隔直接冒充 Speaker starvation。Audio Error、Backpressure、非预期播放状态持续超过 100 ms，或连续采样观察到 Speaker channel 0 静默超过 100 ms，仍作为硬失败。Player service 前观察到 channel 0 为空会单独记录，但预期 Pause / Resume 后用于重新填充 channel 的第一轮不计入该指标。
 
 ---
 

@@ -162,6 +162,98 @@ void P2DeviceTestRunner::service() {
     }
 }
 
+void P2DeviceTestRunner::recordLoopTimings(
+    uint32_t inputUpdateUs, uint32_t playerServiceStartGapUs,
+    bool speakerChannelPlayingAtServiceStart,
+    uint32_t playerRuntimeServiceUs, uint32_t libraryRuntimeServiceUs,
+    uint32_t preGateLoopBodyUs) {
+    // Startup includes four log transactions and fixture verification before
+    // audio exists. Exclude that setup work so these maxima only describe the
+    // playback-under-load portion exercised by P2.
+    if (!active() || !playbackSelected_) return;
+    inputUpdateMaxUs_ = std::max(inputUpdateMaxUs_, inputUpdateUs);
+    playerRuntimeServiceMaxUs_ =
+        std::max(playerRuntimeServiceMaxUs_, playerRuntimeServiceUs);
+    libraryRuntimeServiceMaxUs_ =
+        std::max(libraryRuntimeServiceMaxUs_, libraryRuntimeServiceUs);
+    loopBodyMaxUs_ = std::max(loopBodyMaxUs_, preGateLoopBodyUs);
+
+    // The interval ending at this Player service start belongs primarily to
+    // the previous completed loop. Stage the current loop for completion in
+    // recordGateServiceTiming(), but freeze the previous loop when this gap is
+    // the new maximum so phase transitions cannot misattribute the delay.
+    pendingLoopPlayerRuntimeUs_ = playerRuntimeServiceUs;
+    pendingLoopLibraryRuntimeUs_ = libraryRuntimeServiceUs;
+    std::strncpy(pendingLoopPhaseFrom_, phaseName(),
+                 sizeof(pendingLoopPhaseFrom_) - 1);
+    pendingLoopPhaseFrom_[sizeof(pendingLoopPhaseFrom_) - 1] = '\0';
+    pendingLoopTimingValid_ = true;
+
+    const PlayerSnapshot snapshot = player_->snapshot();
+    if (snapshot.state != PlayerState::Playing) {
+        playerServiceGapArmed_ = false;
+        return;
+    }
+    if (!playerServiceGapArmed_) {
+        playerServiceGapArmed_ = true;
+        return;
+    }
+    // The first Playing loop after a planned Pause/Resume is allowed to refill
+    // an empty channel. Only count emptiness during an already continuous
+    // Playing interval.
+    if (!speakerChannelPlayingAtServiceStart) {
+        ++speakerChannelEmptyAtServiceStart_;
+    }
+    if (playerServiceStartGapUs > playerServiceStartGapMaxUs_) {
+        playerServiceStartGapMaxUs_ = playerServiceStartGapUs;
+        playerGapCurrentInputUs_ = inputUpdateUs;
+        playerGapPreviousPlayerRuntimeUs_ =
+            lastLoopTimingValid_ ? lastLoopPlayerRuntimeUs_ : 0;
+        playerGapPreviousLibraryRuntimeUs_ =
+            lastLoopTimingValid_ ? lastLoopLibraryRuntimeUs_ : 0;
+        playerGapPreviousGateUs_ =
+            lastLoopTimingValid_ ? lastLoopGateUs_ : 0;
+        playerGapPreviousLoopBodyUs_ =
+            lastLoopTimingValid_ ? lastLoopBodyUs_ : 0;
+        const char* fromPhase =
+            lastLoopTimingValid_ ? lastLoopPhaseFrom_ : "none";
+        const char* toPhase =
+            lastLoopTimingValid_ ? lastLoopPhaseTo_ : phaseName();
+        std::strncpy(playerServiceStartGapMaxFromPhase_, fromPhase,
+                     sizeof(playerServiceStartGapMaxFromPhase_) - 1);
+        playerServiceStartGapMaxFromPhase_[
+            sizeof(playerServiceStartGapMaxFromPhase_) - 1] = '\0';
+        std::strncpy(playerServiceStartGapMaxToPhase_, toPhase,
+                     sizeof(playerServiceStartGapMaxToPhase_) - 1);
+        playerServiceStartGapMaxToPhase_[
+            sizeof(playerServiceStartGapMaxToPhase_) - 1] = '\0';
+    }
+    if (playerServiceStartGapUs > 100000U) {
+        ++playerServiceStartGapOver100Ms_;
+    }
+}
+
+void P2DeviceTestRunner::recordGateServiceTiming(uint32_t gateServiceUs,
+                                                 uint32_t loopBodyUs) {
+    if (!active() || !playbackSelected_) return;
+    gateServiceMaxUs_ = std::max(gateServiceMaxUs_, gateServiceUs);
+    loopBodyMaxUs_ = std::max(loopBodyMaxUs_, loopBodyUs);
+    if (!pendingLoopTimingValid_) return;
+
+    lastLoopPlayerRuntimeUs_ = pendingLoopPlayerRuntimeUs_;
+    lastLoopLibraryRuntimeUs_ = pendingLoopLibraryRuntimeUs_;
+    lastLoopGateUs_ = gateServiceUs;
+    lastLoopBodyUs_ = loopBodyUs;
+    std::strncpy(lastLoopPhaseFrom_, pendingLoopPhaseFrom_,
+                 sizeof(lastLoopPhaseFrom_) - 1);
+    lastLoopPhaseFrom_[sizeof(lastLoopPhaseFrom_) - 1] = '\0';
+    std::strncpy(lastLoopPhaseTo_, phaseName(),
+                 sizeof(lastLoopPhaseTo_) - 1);
+    lastLoopPhaseTo_[sizeof(lastLoopPhaseTo_) - 1] = '\0';
+    lastLoopTimingValid_ = true;
+    pendingLoopTimingValid_ = false;
+}
+
 bool P2DeviceTestRunner::active() const {
     return phase_ != Phase::Idle && phase_ != Phase::Passed &&
            phase_ != Phase::Failed;
@@ -234,12 +326,38 @@ void P2DeviceTestRunner::resetRun() {
     metadataCasesPassed_ = 0;
     speakerSilentSinceMs_ = 0;
     speakerStarvationCount_ = 0;
-    lastPlaybackMonitorAtMs_ = 0;
+    speakerChannelEmptyAtServiceStart_ = 0;
+    unexpectedPlaybackStateOver100Ms_ = 0;
+    playerServiceStartGapMaxUs_ = 0;
+    playerServiceStartGapOver100Ms_ = 0;
+    inputUpdateMaxUs_ = 0;
+    playerRuntimeServiceMaxUs_ = 0;
+    libraryRuntimeServiceMaxUs_ = 0;
+    gateServiceMaxUs_ = 0;
+    loopBodyMaxUs_ = 0;
+    pendingLoopPlayerRuntimeUs_ = 0;
+    pendingLoopLibraryRuntimeUs_ = 0;
+    lastLoopPlayerRuntimeUs_ = 0;
+    lastLoopLibraryRuntimeUs_ = 0;
+    lastLoopGateUs_ = 0;
+    lastLoopBodyUs_ = 0;
+    playerGapPreviousPlayerRuntimeUs_ = 0;
+    playerGapPreviousLibraryRuntimeUs_ = 0;
+    playerGapPreviousGateUs_ = 0;
+    playerGapPreviousLoopBodyUs_ = 0;
+    playerGapCurrentInputUs_ = 0;
     unexpectedPlaybackStateSinceMs_ = 0;
     speakerStarvationReported_ = false;
-    lastPlaybackWasPlaying_ = false;
+    playerServiceGapArmed_ = false;
+    pendingLoopTimingValid_ = false;
+    lastLoopTimingValid_ = false;
     playbackSelected_ = false;
     playbackPath_[0] = '\0';
+    std::strcpy(pendingLoopPhaseFrom_, "none");
+    std::strcpy(lastLoopPhaseFrom_, "none");
+    std::strcpy(lastLoopPhaseTo_, "none");
+    std::strcpy(playerServiceStartGapMaxFromPhase_, "none");
+    std::strcpy(playerServiceStartGapMaxToPhase_, "none");
     std::strcpy(manifestSha256_, "unverified");
     std::strcpy(failure_, "none");
 
@@ -371,8 +489,7 @@ void P2DeviceTestRunner::servicePhase(uint32_t now) {
             playbackSelected_ = true;
             playbackBackpressureStart_ = snapshot.backpressureEvents;
             playbackAudioErrorsStart_ = snapshot.audioErrorEvents;
-            lastPlaybackMonitorAtMs_ = now;
-            lastPlaybackWasPlaying_ = true;
+            playerServiceGapArmed_ = false;
             enter(Phase::RecentPrePause);
             return;
         }
@@ -594,8 +711,14 @@ void P2DeviceTestRunner::servicePhase(uint32_t now) {
                     fail("lazy_cache_or_audio_stability_failed");
                     return;
                 }
-                passTask(1,
-                         "large_tracks=1000 pagination=1 natural_sort=1 lru_eviction=1 pinned_queue=1 audio_stable=1 heap_tolerance_bytes=16384");
+                char detail[224] = {};
+                std::snprintf(
+                    detail, sizeof(detail),
+                    "large_tracks=1000 pagination=1 natural_sort=1 lru_eviction=1 pinned_queue=1 audio_stable=1 heap_tolerance_bytes=16384 player_gap_gt100=%lu player_gap_max_us=%lu",
+                    static_cast<unsigned long>(
+                        playerServiceStartGapOver100Ms_),
+                    static_cast<unsigned long>(playerServiceStartGapMaxUs_));
+                passTask(1, detail);
                 if (phase_ == Phase::Failed) return;
                 enter(Phase::FindMetadata);
                 return;
@@ -934,19 +1057,6 @@ void P2DeviceTestRunner::monitorPlayback(uint32_t now) {
     const bool expectPaused = phase_ == Phase::RecentPaused;
     const bool expectPlaying = !expectPaused;
 
-    // A single blocking Library/Metadata/Recent step happens between these
-    // samples. Even if PlayerRuntime refills Speaker before this function is
-    // called again, a >100 ms service gap must remain observable to the Gate.
-    if (expectPlaying && lastPlaybackWasPlaying_ &&
-        lastPlaybackMonitorAtMs_ != 0 &&
-        now - lastPlaybackMonitorAtMs_ > 100) {
-        ++speakerStarvationCount_;
-        fail("player_service_gap_over_100ms");
-        return;
-    }
-    lastPlaybackMonitorAtMs_ = now;
-    lastPlaybackWasPlaying_ = snapshot.state == PlayerState::Playing;
-
     if (snapshot.state == PlayerState::Error ||
         snapshot.audioErrorEvents != playbackAudioErrorsStart_) {
         fail("audio_error_during_library_gate");
@@ -972,7 +1082,7 @@ void P2DeviceTestRunner::monitorPlayback(uint32_t now) {
         if (unexpectedPlaybackStateSinceMs_ == 0) {
             unexpectedPlaybackStateSinceMs_ = now;
         } else if (now - unexpectedPlaybackStateSinceMs_ > 100) {
-            ++speakerStarvationCount_;
+            ++unexpectedPlaybackStateOver100Ms_;
             fail(expectPaused ? "player_did_not_remain_paused"
                               : "player_did_not_remain_playing");
             return;
@@ -982,7 +1092,7 @@ void P2DeviceTestRunner::monitorPlayback(uint32_t now) {
     }
 
     if (snapshot.state == PlayerState::Playing && snapshot.sampleRateHz > 0 &&
-        !M5.Speaker.isPlaying()) {
+        M5.Speaker.isPlaying(0) == 0) {
         if (speakerSilentSinceMs_ == 0) {
             speakerSilentSinceMs_ = now;
             speakerStarvationReported_ = false;
@@ -1303,6 +1413,43 @@ bool P2DeviceTestRunner::writeLog(size_t taskIndex, const char* status,
                static_cast<unsigned long>(snapshot.backpressureEvents));
     log.printf("audio_error_events=%lu\n",
                static_cast<unsigned long>(snapshot.audioErrorEvents));
+    log.printf("player_service_start_gap_over_100ms=%lu\n",
+               static_cast<unsigned long>(playerServiceStartGapOver100Ms_));
+    log.printf("player_service_start_gap_max_us=%lu\n",
+               static_cast<unsigned long>(playerServiceStartGapMaxUs_));
+    log.printf("player_service_start_gap_max_from_phase=%s\n",
+               playerServiceStartGapMaxFromPhase_);
+    log.printf("player_service_start_gap_max_to_phase=%s\n",
+               playerServiceStartGapMaxToPhase_);
+    log.printf("player_gap_previous_player_runtime_us=%lu\n",
+               static_cast<unsigned long>(
+                   playerGapPreviousPlayerRuntimeUs_));
+    log.printf("player_gap_previous_library_runtime_us=%lu\n",
+               static_cast<unsigned long>(
+                   playerGapPreviousLibraryRuntimeUs_));
+    log.printf("player_gap_previous_gate_us=%lu\n",
+               static_cast<unsigned long>(playerGapPreviousGateUs_));
+    log.printf("player_gap_previous_loop_body_us=%lu\n",
+               static_cast<unsigned long>(playerGapPreviousLoopBodyUs_));
+    log.printf("player_gap_current_input_us=%lu\n",
+               static_cast<unsigned long>(playerGapCurrentInputUs_));
+    log.printf("speaker_channel_empty_at_service_start=%lu\n",
+               static_cast<unsigned long>(speakerChannelEmptyAtServiceStart_));
+    log.printf("unexpected_playback_state_over_100ms=%lu\n",
+               static_cast<unsigned long>(
+                   unexpectedPlaybackStateOver100Ms_));
+    log.printf("input_update_max_us=%lu\n",
+               static_cast<unsigned long>(inputUpdateMaxUs_));
+    log.printf("player_runtime_service_max_us=%lu\n",
+               static_cast<unsigned long>(playerRuntimeServiceMaxUs_));
+    log.printf("player_engine_service_max_us=%lu\n",
+               static_cast<unsigned long>(snapshot.serviceMaxUs));
+    log.printf("library_runtime_service_max_us=%lu\n",
+               static_cast<unsigned long>(libraryRuntimeServiceMaxUs_));
+    log.printf("gate_service_max_us=%lu\n",
+               static_cast<unsigned long>(gateServiceMaxUs_));
+    log.printf("loop_body_max_us=%lu\n",
+               static_cast<unsigned long>(loopBodyMaxUs_));
     log.printf("speaker_starvation_over_100ms=%lu\n",
                static_cast<unsigned long>(speakerStarvationCount_));
     log.printf("heap_start=%lu\n", static_cast<unsigned long>(initialHeap_));

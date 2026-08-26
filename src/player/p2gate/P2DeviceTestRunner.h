@@ -17,6 +17,14 @@ class P2DeviceTestRunner final {
     void begin(PlayerRuntime& player, LibraryRuntime& libraryRuntime);
     bool start();
     void service();
+    void recordLoopTimings(uint32_t inputUpdateUs,
+                           uint32_t playerServiceStartGapUs,
+                           bool speakerChannelPlayingAtServiceStart,
+                           uint32_t playerRuntimeServiceUs,
+                           uint32_t libraryRuntimeServiceUs,
+                           uint32_t preGateLoopBodyUs);
+    void recordGateServiceTiming(uint32_t gateServiceUs,
+                                 uint32_t loopBodyUs);
 
     bool active() const;
     bool ownsDisplay() const;
@@ -132,10 +140,31 @@ class P2DeviceTestRunner final {
     uint32_t metadataCasesPassed_ = 0;
     uint32_t speakerSilentSinceMs_ = 0;
     uint32_t speakerStarvationCount_ = 0;
-    uint32_t lastPlaybackMonitorAtMs_ = 0;
+    uint32_t speakerChannelEmptyAtServiceStart_ = 0;
+    uint32_t unexpectedPlaybackStateOver100Ms_ = 0;
+    uint32_t playerServiceStartGapMaxUs_ = 0;
+    uint32_t playerServiceStartGapOver100Ms_ = 0;
+    uint32_t inputUpdateMaxUs_ = 0;
+    uint32_t playerRuntimeServiceMaxUs_ = 0;
+    uint32_t libraryRuntimeServiceMaxUs_ = 0;
+    uint32_t gateServiceMaxUs_ = 0;
+    uint32_t loopBodyMaxUs_ = 0;
+    uint32_t pendingLoopPlayerRuntimeUs_ = 0;
+    uint32_t pendingLoopLibraryRuntimeUs_ = 0;
+    uint32_t lastLoopPlayerRuntimeUs_ = 0;
+    uint32_t lastLoopLibraryRuntimeUs_ = 0;
+    uint32_t lastLoopGateUs_ = 0;
+    uint32_t lastLoopBodyUs_ = 0;
+    uint32_t playerGapPreviousPlayerRuntimeUs_ = 0;
+    uint32_t playerGapPreviousLibraryRuntimeUs_ = 0;
+    uint32_t playerGapPreviousGateUs_ = 0;
+    uint32_t playerGapPreviousLoopBodyUs_ = 0;
+    uint32_t playerGapCurrentInputUs_ = 0;
     uint32_t unexpectedPlaybackStateSinceMs_ = 0;
     bool speakerStarvationReported_ = false;
-    bool lastPlaybackWasPlaying_ = false;
+    bool playerServiceGapArmed_ = false;
+    bool pendingLoopTimingValid_ = false;
+    bool lastLoopTimingValid_ = false;
     bool playbackSelected_ = false;
     bool taskPassed_[4] = {};
     char taskDetail_[4][224] = {};
@@ -143,6 +172,11 @@ class P2DeviceTestRunner final {
     bool finalPlayerSnapshotValid_ = false;
     bool autoRecentTimingPassed_ = false;
     char playbackPath_[kTrackPathCapacity] = {};
+    char pendingLoopPhaseFrom_[40] = "none";
+    char lastLoopPhaseFrom_[40] = "none";
+    char lastLoopPhaseTo_[40] = "none";
+    char playerServiceStartGapMaxFromPhase_[40] = "none";
+    char playerServiceStartGapMaxToPhase_[40] = "none";
     char manifestSha256_[65] = "unverified";
     char failure_[96] = "none";
 };

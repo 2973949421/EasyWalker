@@ -21,6 +21,7 @@ LibraryRuntime libraryRuntime;
 P2DeviceTestRunner testRunner;
 bool previousTestKeyDown = false;
 bool bootReady = false;
+uint32_t previousPlayerServiceStartedAtUs = 0;
 
 void renderIdle(const char* error = nullptr) {
     auto& display = M5Cardputer.Display;
@@ -101,13 +102,37 @@ void setup() {
 }
 
 void loop() {
+    const uint32_t loopStartedAtUs = micros();
+    const uint32_t inputStartedAtUs = micros();
     M5Cardputer.update();
     serviceTestKey();
+    const uint32_t inputUpdateUs = micros() - inputStartedAtUs;
     if (bootReady) {
         // The P2 contract requires Player service before every Library step.
+        const uint32_t playerStartedAtUs = micros();
+        const uint32_t playerServiceStartGapUs =
+            previousPlayerServiceStartedAtUs == 0
+                ? 0
+                : playerStartedAtUs - previousPlayerServiceStartedAtUs;
+        previousPlayerServiceStartedAtUs = playerStartedAtUs;
+        const bool speakerChannelPlayingAtServiceStart =
+            M5.Speaker.isPlaying(0) != 0;
         player.service();
+        const uint32_t playerRuntimeServiceUs = micros() - playerStartedAtUs;
+        const uint32_t libraryStartedAtUs = micros();
         libraryRuntime.service();
+        const uint32_t libraryRuntimeServiceUs =
+            micros() - libraryStartedAtUs;
+        const uint32_t preGateLoopBodyUs = micros() - loopStartedAtUs;
+        testRunner.recordLoopTimings(
+            inputUpdateUs, playerServiceStartGapUs,
+            speakerChannelPlayingAtServiceStart, playerRuntimeServiceUs,
+            libraryRuntimeServiceUs, preGateLoopBodyUs);
+        const uint32_t gateStartedAtUs = micros();
         testRunner.service();
+        const uint32_t gateServiceUs = micros() - gateStartedAtUs;
+        const uint32_t loopBodyUs = micros() - loopStartedAtUs;
+        testRunner.recordGateServiceTiming(gateServiceUs, loopBodyUs);
     }
     delay(1);
 }

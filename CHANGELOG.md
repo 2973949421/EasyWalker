@@ -25,6 +25,7 @@ Date: 2026-08-26
 
 - 新增 marker-owned P2 Fixture 和主机 validator，覆盖多层中文/日文路径、1,000 项大目录、自然排序、过滤、ID3 编码与 Recent/Cache binary CRC；测试数据与 MP3 不提交 Git。
 - 新增 `player-p2-gate`：一次按 `T` 自动覆盖 P2-01～P2-04，屏幕只在阶段变化时刷新，停止音频后再写四份完整日志。
+- 根据首轮真机日志修正 Gate 诊断口径：相邻 Player service 入口间隔与各主循环阶段耗时独立记录，不再把混合采样间隔误报为 Speaker starvation；最大间隔冻结上一轮阶段与耗时，Pause / Resume 后首轮空 channel 不计为异常，并补充 FAIL 日志主机端诊断输出。
 - `player-dev`、P2 Gate 和两个历史 P1 Gate 均保留独立构建入口；P2 不改变 Candidate A Audio Backend、P1 Queue / Session 语义或 Launcher 分区。
 - PC Fixture、静态校验与自动构建已通过；P2-01～P2-04 当前统一处于 `DEVICE TEST`，必须以四份真机日志为准，尚未标记 `DONE`。
 

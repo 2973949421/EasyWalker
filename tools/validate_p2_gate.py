@@ -408,7 +408,10 @@ def parse_key_value_log(path: Path) -> dict[str, str]:
         raise ValidationError(f"cannot read log {path}: {error}") from error
     nonempty = [line.strip() for line in lines if line.strip()]
     require(nonempty, f"empty gate log: {path}")
-    require(nonempty[0] == "status=PASS", f"gate log is not PASS: {path.name}")
+    require(
+        nonempty[0] in ("status=PASS", "status=FAIL"),
+        f"invalid gate status line: {path.name}",
+    )
     fields: dict[str, str] = {}
     for line in nonempty:
         if "=" not in line:
@@ -419,36 +422,90 @@ def parse_key_value_log(path: Path) -> dict[str, str]:
         if key in fields and fields[key] != value.strip():
             raise ValidationError(f"conflicting {key} values in {path.name}")
         fields[key] = value.strip()
-    require(fields.get("status") == "PASS", f"missing PASS status: {path.name}")
+    require(
+        fields.get("status") in ("PASS", "FAIL"),
+        f"missing gate status: {path.name}",
+    )
     require(fields.get("log_complete") == "1", f"incomplete gate log: {path.name}")
     return fields
 
 
-def validate_gate_logs(sd_root: Path, manifest_sha: str) -> dict[str, str]:
+def validate_gate_logs(
+    sd_root: Path, manifest_sha: str
+) -> tuple[dict[str, str], list[str]]:
     logs_dir = sd_root / "ADVWalkman" / "logs"
     results: dict[str, str] = {}
+    failures: list[str] = []
     hash_keys = (
         "fixture_manifest_sha256",
         "manifest_sha256",
         "fixture_sha256",
         "fixture_hash",
     )
+    timing_keys = (
+        "player_service_start_gap_over_100ms",
+        "player_service_start_gap_max_us",
+        "player_gap_previous_player_runtime_us",
+        "player_gap_previous_library_runtime_us",
+        "player_gap_previous_gate_us",
+        "player_gap_previous_loop_body_us",
+        "player_gap_current_input_us",
+        "speaker_channel_empty_at_service_start",
+        "unexpected_playback_state_over_100ms",
+        "input_update_max_us",
+        "player_runtime_service_max_us",
+        "player_engine_service_max_us",
+        "library_runtime_service_max_us",
+        "gate_service_max_us",
+        "loop_body_max_us",
+    )
+    timing_values: dict[str, int] | None = None
+    gap_from_phase = "none"
+    gap_to_phase = "none"
     for index, name in enumerate(P2_LOG_NAMES, start=1):
         fields = parse_key_value_log(logs_dir / name)
         require(
             fields.get("task") == f"P2-0{index}",
             f"unexpected task id in {name}",
         )
-        require(fields.get("player_state") == "PLAYING", f"player not PLAYING in {name}")
-        require(fields.get("player_error") == "NONE", f"player error in {name}")
-        require(fields.get("audio_error") == "none", f"audio error in {name}")
-        require(fields.get("sample_rate") == "44100", f"unexpected sample rate in {name}")
-        require(fields.get("backpressure") == "0", f"backpressure in {name}")
-        require(fields.get("audio_error_events") == "0", f"audio error events in {name}")
-        require(
-            fields.get("speaker_starvation_over_100ms") == "0",
-            f"speaker starvation in {name}",
+        current_timings: dict[str, int] = {}
+        for key in timing_keys:
+            raw = fields.get(key)
+            try:
+                value = int(raw) if raw is not None else -1
+            except ValueError as error:
+                raise ValidationError(
+                    f"invalid {key} in {name}: {raw}"
+                ) from error
+            require(value >= 0, f"missing or negative {key} in {name}")
+            current_timings[key] = value
+        if timing_values is None:
+            timing_values = current_timings
+        else:
+            require(
+                current_timings == timing_values,
+                f"mixed timing snapshots across P2 logs: {name}",
+            )
+        current_gap_from_phase = fields.get(
+            "player_service_start_gap_max_from_phase", ""
         )
+        current_gap_to_phase = fields.get(
+            "player_service_start_gap_max_to_phase", ""
+        )
+        require(current_gap_from_phase != "", f"missing gap from-phase in {name}")
+        require(current_gap_to_phase != "", f"missing gap to-phase in {name}")
+        if index == 1:
+            gap_from_phase = current_gap_from_phase
+            gap_to_phase = current_gap_to_phase
+        else:
+            require(
+                current_gap_from_phase == gap_from_phase,
+                f"mixed gap from-phases across P2 logs: {name}",
+            )
+            require(
+                current_gap_to_phase == gap_to_phase,
+                f"mixed gap to-phases across P2 logs: {name}",
+            )
         require(
             fields.get("fixture_manifest_sha256", "").lower() == manifest_sha,
             f"missing or mismatched canonical fixture hash in {name}",
@@ -460,7 +517,43 @@ def validate_gate_logs(sd_root: Path, manifest_sha: str) -> dict[str, str]:
                     f"fixture hash mismatch in {name}",
                 )
         results[f"p2_0{index}_status"] = fields["status"]
-    return results
+        semantic_checks = (
+            (fields["status"] == "PASS", f"gate log is not PASS: {name}"),
+            (fields.get("player_state") == "PLAYING", f"player not PLAYING in {name}"),
+            (fields.get("player_error") == "NONE", f"player error in {name}"),
+            (fields.get("audio_error") == "none", f"audio error in {name}"),
+            (fields.get("sample_rate") == "44100", f"unexpected sample rate in {name}"),
+            (fields.get("backpressure") == "0", f"backpressure in {name}"),
+            (fields.get("audio_error_events") == "0", f"audio error events in {name}"),
+            (
+                fields.get("unexpected_playback_state_over_100ms") == "0",
+                f"unexpected playback state in {name}",
+            ),
+            (
+                fields.get("speaker_starvation_over_100ms") == "0",
+                f"speaker starvation in {name}",
+            ),
+        )
+        failures.extend(message for passed, message in semantic_checks if not passed)
+    require(timing_values is not None, "no P2 timing snapshot was parsed")
+    for key in (
+        "input_update_max_us",
+        "player_runtime_service_max_us",
+        "player_engine_service_max_us",
+        "library_runtime_service_max_us",
+        "gate_service_max_us",
+        "loop_body_max_us",
+    ):
+        if timing_values[key] <= 0:
+            failures.append(f"timing metric was not sampled: {key}")
+    if timing_values["player_service_start_gap_max_us"] > 0:
+        if gap_from_phase == "none" or gap_to_phase == "none":
+            failures.append("player service gap phase transition was not captured")
+    for key, value in timing_values.items():
+        results[key] = str(value)
+    results["player_service_start_gap_max_from_phase"] = gap_from_phase
+    results["player_service_start_gap_max_to_phase"] = gap_to_phase
+    return results, failures
 
 
 def canonical_recent_path(path: str) -> bool:
@@ -634,12 +727,16 @@ def main() -> int:
         else:
             try:
                 require(fixture_result is not None, "local fixture validation failed")
-                log_results = validate_gate_logs(
+                log_results, log_failures = validate_gate_logs(
                     args.sd_root, str(fixture_result["manifest_sha256"])
                 )
-                emit("p2_logs_status", "PASS")
+                if log_failures:
+                    failed = True
+                emit("p2_logs_status", "FAIL" if log_failures else "PASS")
                 for key, value in log_results.items():
                     emit(key, value)
+                if log_failures:
+                    emit("p2_logs_error", "; ".join(log_failures))
             except (OSError, ValidationError) as error:
                 failed = True
                 emit("p2_logs_status", "FAIL")
