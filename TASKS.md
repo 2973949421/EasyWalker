@@ -201,40 +201,44 @@ AC：
 
 ## P1-03 Queue & Playback Modes
 
-Status: DEVICE TEST
+Status: DONE
 
 AC：
 
-- [ ] Queue
-- [ ] Sequential
-- [ ] Shuffle
-- [ ] Repeat One
-- [ ] Repeat All
-- [ ] 模式切换状态正确
-- [ ] 重启后可恢复
-- [ ] Repeat 与 Shuffle 独立；Repeat One 不阻止手动 Next / Previous
-- [ ] Shuffle 单轮不重复，Previous 按真实历史返回
-- [ ] 空队列、单曲、队首和队尾安全
+- [x] Queue
+- [x] Sequential
+- [x] Shuffle
+- [x] Repeat One
+- [x] Repeat All
+- [x] 模式切换状态正确
+- [x] 重启后可恢复
+- [x] Repeat 与 Shuffle 独立；Repeat One 不阻止手动 Next / Previous
+- [x] Shuffle 单轮不重复，Previous 按真实历史返回
+- [x] 空队列、单曲、队首和队尾安全
+
+2026-08-26，`0.3.0-p1.gate-b` 真机 Gate B 通过：Sequential、单轮 Shuffle、Repeat One、Repeat All、手动导航、模式切换保持当前歌曲及 Previous history 全部满足断言；最终 `STOPPED / NONE`，三次自然 EOF、零 Audio Error、零 Backpressure。
 
 ---
 
 ## P1-04 Playback State Persistence
 
-Status: DEVICE TEST
+Status: DONE
 
 AC：
 
-- [ ] 保存歌曲
-- [ ] 保存位置
-- [ ] 保存队列
-- [ ] 保存播放模式
-- [ ] 重启恢复
-- [ ] 恢复后保持 Pause
-- [ ] 不自动出声
-- [ ] Queue / Session 使用 CRC32 与 A/B 双槽，新槽回读通过后才生效
-- [ ] 恢复时选择最新完整 Queue / Session 配对，并保留 order / cursor / Previous history
-- [ ] Session 播放中约每 10 秒 checkpoint，Queue 只在队列变化时重写
-- [ ] 未知版本、CRC 错误、截断文件和无 SD 时不重启循环
+- [x] 保存歌曲
+- [x] 保存位置
+- [x] 保存队列
+- [x] 保存播放模式
+- [x] 重启恢复
+- [x] 恢复后保持 Pause
+- [x] 不自动出声
+- [x] Queue / Session 使用 CRC32 与 A/B 双槽，新槽回读通过后才生效
+- [x] 恢复时选择最新完整 Queue / Session 配对，并保留 order / cursor / Previous history
+- [x] Session 播放中约每 10 秒 checkpoint，Queue 只在队列变化时重写
+- [x] 未知版本、CRC 错误、截断文件和无 SD 时不重启循环
+
+同一次 Gate B 完成一次真实 SD 保存与受控软件重启。重启后恢复第 2/3 首、`4003 ms`、source offset `61248`、Repeat All、Shuffle On、完整 order/cursor/history，并保持 `PAUSED` 且至少 3 秒无 Speaker 输出。首代有效状态写入 `queue-a.bin / session-a.bin` 属于正常 A/B 轮换起点；主机只读解析确认 schema、generation 与 CRC32 有效。
 
 ---
 

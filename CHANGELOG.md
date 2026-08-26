@@ -29,6 +29,8 @@ Date: 2026-08-25～2026-08-26
 - `0.3.0-p1.gate-a2` 允许正常 EOF 的 terminal `BUFLEN`，通过 Xing/Info/VBRI 声明字节数提前拒绝本轮截断 Fixture，并将 Fixture 提升到保守但可听的约 `-20.4 dBFS` Mono Peak；正式 Player 音量仍保持 `128/255`。
 - Gate 测试画面改为仅在阶段切换时整屏刷新，消除原先每 250 ms 清屏造成的频闪；FAIL 日志在 Stop 前保存快照并增加 `player_error / audio_error`。
 - 2026-08-26 Gate A 真机通过：三份合法 MP3、截断/缺失错误处理、Pause/Resume、Stop/Replay、Next/Previous、CBR/VBR Seek 全部通过；Fixture Hash 全匹配，最大 Seek 误差 60 ms、Backpressure 0，用户确认声音正常。P1-01、P1-02 完成，进入 Gate B 的 P1-03、P1-04 真机验收。
+- 2026-08-26 Gate B 真机通过：Sequential、Shuffle、Repeat One/All/Off、Previous history 与模式切换断言全部通过；状态写入 SD 后受控重启，正确恢复第 2 首约 4 秒位置、Repeat All、Shuffle order/cursor/history，并保持 Paused 与至少 3 秒静音。
+- 主机只读解析 `queue-a.bin / session-a.bin` 确认 schema v1、generation 1、CRC32、三首完整 UTF-8 路径和 Session 字段有效。P1-03、P1-04 完成，P1 Player Core 正式收口；下一阶段按既定顺序进入 P2 Music Library。
 
 ## V0.2 — V1 Design Baseline
 
