@@ -27,6 +27,10 @@ Date: 2026-08-26
 
 - `0.4.2-p2.gate` 真机日志首次独立确认 P2-01 完整通过，并将唯一首个失败收敛到 P2-02：Library 单次扫描 92.6 ms、Player service 间隔 101 ms；当时仍为 Playing / 44.1 kHz、无 Audio Error / Backpressure，PCM 最大间隔 98.397 ms，P2-03/P2-04 因早停未执行。
 - `0.4.3-p2.gate` 将千文件枚举从每项 `openNextFile()` 的 `stat + fopen` 改为官方 `getNextFileName(bool*)`，并复用 SortScratch 的 4 KiB 合并 `.dat` 小写，缓存格式不变且额外内存峰值为 0。
+- `0.4.3-p2.gate` 真机已让 P2-01、P2-02、P2-03 依次 PASS：千文件阶段约 22 秒完成，Audio Error / Backpressure 为 0；但原三组 768-sample Buffer 仅约 52 ms 余量，53.942 ms PCM 间隔被用户实际听到为卡顿，证明旧 100 ms 音频门槛会产生假 PASS。
+- 正式 Candidate A 保持 ESP8266Audio、M5.Speaker、三缓冲、downmix 与音量不变，将单 Buffer 从 768 增至 1536 samples，以约 4.5 KiB 静态内存换取约 104 ms 总余量；最终 Gate 使用 70 ms 缓冲感知 PCM 门槛。
+- SortKey basename prefix 从 24 bytes 收敛至 20 bytes，2,048 项 Scratch 从 73,728 降至 65,536 bytes；精确 fallback、缓存格式和排序结果不变，回收的 8 KiB 足以覆盖音频缓冲增长并保留原 80 KiB 最低 Heap 门槛。
+- P2-04 的 0.89 秒失败确认来自 Gate 在播放期间同步重载并逐个检查 31 条 Recent 路径。最终 Gate 先在长曲播放中验证一次真实 5 秒发布并捕获音频快照，再停止音频执行 32 项 MRU、缺失路径与 A/B CRC 冷启动验证，使测试生命周期与正式产品一致。
 - 千文件设备复核由 1,000 次同步 `entryAt()` 改为覆盖首尾、分页边界和远端 LRU 的 32 个代表点，PC Fixture 继续全量校验；减少 Gate 自身制造的 SD 负载。
 - 单个 Player service >100 ms 改为明确 `WARN`，连续三次 >100 ms 或单次 >500 ms 才是调度硬失败；PCM submit >100 ms、2 秒无推进、Audio Error、Backpressure 与意外 TrackEnded 继续保持硬失败。新增目录读取、过滤、追加、批量写、close 和 EOF 收尾分项指标，下一次异常可直接归因。
 

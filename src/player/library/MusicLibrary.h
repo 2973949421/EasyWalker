@@ -167,7 +167,10 @@ class MusicLibrary final {
         uint32_t recordOffsets[kPageEntries] = {};
     };
 
-    static constexpr size_t kSortPrefixBytes = 24;
+    // 20 bytes keeps common short names on the RAM fast path while reducing
+    // the 2,048-entry scratch allocation by 8 KiB. Longer/common-prefix names
+    // already use the exact SD fallback comparator.
+    static constexpr size_t kSortPrefixBytes = 20;
     static constexpr size_t kSortMovesPerService = 128;
     static constexpr size_t kFinalizeBytesPerService = 512;
     static constexpr size_t kScanWriteBufferBytes = 4096;
@@ -186,9 +189,9 @@ class MusicLibrary final {
         uint16_t indicesB[kMaxDirectoryEntries];
     };
 
-    static_assert(sizeof(SortKey) == 32,
-                  "SortKey must remain a compact 32-byte record");
-    static_assert(sizeof(SortScratch) == 73728,
+    static_assert(sizeof(SortKey) == 28,
+                  "SortKey must remain a compact 28-byte record");
+    static_assert(sizeof(SortScratch) == 65536,
                   "SortScratch memory budget changed unexpectedly");
     static_assert(sizeof(((SortScratch*)nullptr)->indicesB) ==
                       kScanWriteBufferBytes,

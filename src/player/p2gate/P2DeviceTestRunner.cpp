@@ -123,6 +123,10 @@ constexpr uint32_t kTimingWarningGapUs = 100000U;
 constexpr uint32_t kTimingSevereGapUs = 500000U;
 constexpr uint32_t kTimingConsecutiveFailureCount = 3U;
 constexpr uint32_t kPcmProgressStallUs = 2000000U;
+// Three 1536-frame rotating buffers provide about 104 ms of source-buffer
+// ownership at 44.1 kHz.  Keep a conservative margin below that window so a
+// PASS also means the measured workload did not approach audible depletion.
+constexpr uint32_t kPcmContinuityGapUs = 70000U;
 
 // The host validator checks all 1,000 expected names. On-device, sample the
 // beginning/end plus page boundaries and distant pages so the Gate exercises
@@ -1100,7 +1104,7 @@ void P2DeviceTestRunner::servicePhase(uint32_t now) {
                 stats.cacheEvictions == 0 || stats.pageMisses == 0 ||
                 stats.sortMoves == 0 || stats.sortComparisons == 0 ||
                 stats.sortFallbackComparisons == 0 ||
-                stats.scratchBytes < 73728U ||
+                stats.scratchBytes < 65536U ||
                 stats.scratchAllocationFailures != 0 ||
                 !pinnedSourceHealthy ||
                 snapshot.state != PlayerState::Playing ||
@@ -1247,6 +1251,18 @@ void P2DeviceTestRunner::servicePhase(uint32_t now) {
                 }
                 return;
             }
+
+            // The production lifecycle loads Recent state at startup, before
+            // Decoder/Speaker output begins.  Preserve the live-audio evidence
+            // after the real five-second record has been published, then stop
+            // audio before the synthetic A/B/32-entry/cold-reload checks.  The
+            // old Gate incorrectly ran that boot-only reload while playing and
+            // manufactured an 0.89 s dropout that cannot occur in normal use.
+            captureTaskSnapshot(3);
+            player_->stop();
+            playbackSelected_ = false;
+            longMeasurementActive_ = false;
+            playerServiceGapArmed_ = false;
             if (!recentStore_.begin(SD, kRecentSlotA, kRecentSlotB)) {
                 fail("recent_test_store_begin_failed");
                 return;
@@ -1408,7 +1424,7 @@ void P2DeviceTestRunner::servicePhase(uint32_t now) {
                 return;
             }
             passTask(3,
-                     "playing_5s=1 pause_excluded=1 pending_path_survived_track_change=1 aba_dedupe=1 maximum=32 eviction=1 missing_filtered=1 ab_slots=1 crc_reload=1 isolated_state=1");
+                     "playing_5s=1 pause_excluded=1 pending_path_survived_track_change=1 live_publish=1 offline_cold_reload=1 aba_dedupe=1 maximum=32 eviction=1 missing_filtered=1 ab_slots=1 crc_reload=1 isolated_state=1");
             if (phase_ == Phase::Failed) return;
             finalizePass();
             return;
@@ -1471,11 +1487,13 @@ void P2DeviceTestRunner::monitorPlayback(uint32_t now) {
         fail("long_benchmark_ended_unexpectedly");
         return;
     }
-    // PCM submit cadence is the direct audio-continuity signal. Unlike the
-    // scheduling-only Player gap, any >100 ms PCM gap remains a hard failure.
+    // PCM submit cadence is the direct audio-continuity signal.  The limit is
+    // deliberately below the configured source-buffer window, rather than the
+    // old generic 100 ms threshold that allowed an audible P2-02 stutter to
+    // pass.
     if (snapshot.pcmSubmitGapOver100Ms != 0 ||
-        snapshot.pcmSubmitGapMaxUs > kTimingWarningGapUs) {
-        fail("pcm_submit_gap_over_100ms");
+        snapshot.pcmSubmitGapMaxUs > kPcmContinuityGapUs) {
+        fail("pcm_submit_gap_over_buffer_window");
         return;
     }
     if (playerServiceGapSevereOver500Ms_ != 0) {
@@ -1654,7 +1672,11 @@ void P2DeviceTestRunner::passTask(size_t taskIndex, const char* detail) {
                  sizeof(taskDetail_[taskIndex]) - 1);
     taskDetail_[taskIndex][sizeof(taskDetail_[taskIndex]) - 1] = '\0';
     taskExecuted_[taskIndex] = true;
-    captureTaskSnapshot(taskIndex);
+    // P2-04 deliberately captures its live-audio snapshot before running the
+    // startup-only Recent cold-reload checks with playback stopped.
+    if (!taskSnapshots_[taskIndex].valid) {
+        captureTaskSnapshot(taskIndex);
+    }
     taskPassed_[taskIndex] = true;
     if (taskIndex + 1 < 4) taskExecuted_[taskIndex + 1] = true;
 }
@@ -1763,18 +1785,19 @@ bool P2DeviceTestRunner::finalizePass() {
             return false;
         }
     }
-    const PlayerSnapshot health = player_->snapshot();
-    if (!playbackSelected_ || health.state != PlayerState::Playing ||
+    const TaskSnapshot& finalAudioSnapshot = taskSnapshots_[3];
+    const PlayerSnapshot& health = finalAudioSnapshot.player;
+    if (!finalAudioSnapshot.valid || health.state != PlayerState::Playing ||
         health.error != PlayerError::None ||
         health.audioError != AudioError::None || health.sampleRateHz != 44100 ||
         health.audioErrorEvents != playbackAudioErrorsStart_ ||
         health.backpressureEvents != playbackBackpressureStart_ ||
         health.trackEndedEvents != 0 || health.pcmBuffersSinceReset == 0 ||
         health.pcmSubmitGapOver100Ms != 0 ||
-        health.pcmSubmitGapMaxUs > kTimingWarningGapUs ||
+        health.pcmSubmitGapMaxUs > kPcmContinuityGapUs ||
         health.pcmLastSubmitAgeUs > kPcmProgressStallUs ||
-        playerServiceGapSevereOver500Ms_ != 0 ||
-        playerServiceGapMaxConsecutiveOver100Ms_ >=
+        finalAudioSnapshot.playerServiceGapSevereOver500Ms != 0 ||
+        finalAudioSnapshot.playerServiceGapMaxConsecutiveOver100Ms >=
             kTimingConsecutiveFailureCount) {
         fail("final_audio_health_failed");
         return false;
@@ -1806,7 +1829,9 @@ void P2DeviceTestRunner::fail(const char* reason) {
                  sizeof(primaryFailurePhase_) - 1);
     primaryFailurePhase_[sizeof(primaryFailurePhase_) - 1] = '\0';
     taskExecuted_[primaryFailureTaskIndex_] = true;
-    captureTaskSnapshot(primaryFailureTaskIndex_);
+    if (!taskSnapshots_[primaryFailureTaskIndex_].valid) {
+        captureTaskSnapshot(primaryFailureTaskIndex_);
+    }
     if (player_ != nullptr) player_->stop();
     SD.remove(kMissingRecentPath);
     for (size_t index = 0; index < 4; ++index) {
@@ -1998,6 +2023,8 @@ bool P2DeviceTestRunner::writeLog(size_t taskIndex, const char* status,
                static_cast<unsigned long>(snapshot.pcmSubmitGapMaxUs));
     log.printf("pcm_submit_gap_over_100ms=%lu\n",
                static_cast<unsigned long>(snapshot.pcmSubmitGapOver100Ms));
+    log.printf("pcm_continuity_limit_us=%lu\n",
+               static_cast<unsigned long>(kPcmContinuityGapUs));
     log.printf("pcm_last_submit_age_us=%lu\n",
                static_cast<unsigned long>(snapshot.pcmLastSubmitAgeUs));
     log.printf("open_max_us=%lu\n",

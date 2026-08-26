@@ -1115,7 +1115,7 @@ bool MusicLibrary::compareCachedKeys(const SortKey& left,
 
     // A shared prefix with at least one truncated name cannot be ordered
     // exactly without consulting the complete cache record. This also covers
-    // a UTF-8 sequence or a numeric run crossing the 24-byte boundary.
+    // a UTF-8 sequence or a numeric run crossing the cached-prefix boundary.
     return false;
 }
 

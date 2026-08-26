@@ -31,7 +31,13 @@ class M5SpeakerPcmOutput final : public AudioOutput {
     uint32_t pcmLastSubmitAgeUs() const;
 
   private:
-    static constexpr size_t kFramesPerBuffer = 768;
+    // P2 device validation showed that the previous 768-frame chunk left only
+    // about 52 ms across the three rotating M5.Speaker buffers.  A normal
+    // directory/cache SD transaction could consume that entire margin.  Keep
+    // the proven three-buffer ownership model, but double each chunk so the
+    // Player can ride through bounded foreground SD latency without changing
+    // the decoder, downmix, volume, or audio backend.
+    static constexpr size_t kFramesPerBuffer = 1536;
     static constexpr uint8_t kBufferCount = 3;
     static constexpr uint8_t kVirtualChannel = 0;
 

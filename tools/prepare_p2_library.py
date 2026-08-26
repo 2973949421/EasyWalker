@@ -252,7 +252,7 @@ def write_fixture(source_mp3: Path, output: Path) -> dict:
     for index in range(1, 1001):
         (large / f"track-{index:04d}.mp3").write_bytes(b"")
 
-    # Every distinguishing digit lies beyond the firmware's 24-byte cached
+    # Every distinguishing digit lies beyond the firmware's cached
     # sort prefix.  The device Gate therefore proves that the exact full-name
     # fallback preserves natural ordering without relying on equal-key scan
     # order, which can differ between NTFS and FAT.

@@ -271,12 +271,12 @@ AC：
 - [x] 当前目录按页显示
 - [x] 大目录有界内存
 - [x] 缓存可淘汰
-- [ ] 约 1000 首库规模可正常使用
+- [x] 约 1000 首库规模可完成扫描、排序、分页和 Queue pin
 - [ ] 播放中扫描不造成明显断音
 
 4 个 SD session cache slot、3×32 项 RAM LRU page 与 Queue pin 已实现。`0.4.2-p2.gate` 已把首个真实失败收敛到千文件扫描：单次 Library 调用 92.6 ms，使 Player service 间隔擦线达到 101 ms，但当时仍为 Playing / 44.1 kHz、无 Audio Error、无 Backpressure，PCM 最大间隔 98.397 ms。
 
-`0.4.3-p2.gate` 不再为每个目录项执行 `openNextFile()` 的 `stat + fopen`，改用官方 `getNextFileName(bool*)` 只读取目录项，并复用既有 SortScratch 将零碎 `.dat` 写入合并为 4 KiB 批量写，额外内存峰值为 0。设备端千文件复核改为 32 个分页 / LRU / 首尾代表点，PC Fixture 仍全量核对 1,000 个文件。等待新版真机 Gate；完成前保持 `DEVICE TEST`。
+`0.4.3-p2.gate` 真机在约 22 秒内完成 1,000 项扫描、排序、分页、LRU 与 Queue pin，P2-02 逻辑通过；但测得 PCM 最大提交间隔 53.942 ms，超过原 `3 × 768` 约 52 ms 的实际缓冲余量，用户听到卡顿，证明旧 100 ms Gate 门槛过宽。最终 Gate 保持 Candidate A 与三缓冲模型，只把正式 Player 单 Buffer 增至 1536 samples，并以 70 ms 缓冲感知门槛验收；完成前状态保持 `DEVICE TEST`。
 
 ---
 
@@ -291,10 +291,10 @@ AC：
 - [x] Album
 - [x] Track Number
 - [x] 中文 Metadata 可规范解析为 UTF-8（CJK 字形显示留给 P3）
-- [ ] Metadata 解析不长时间阻塞播放
+- [x] Metadata 解析在长曲播放期间完成且未增加 Audio Error / Backpressure
 - [x] 无 Metadata 时合理回退到文件名
 
-ID3v2.3 / v2.4、四种文本编码、unsynchronization、extended header 与损坏标签 fallback 已通过 PC Fixture；播放并行等待真机 Gate。
+ID3v2.3 / v2.4、四种文本编码、unsynchronization、extended header 与损坏标签 fallback 已通过 PC Fixture；`0.4.3-p2.gate` 又在长曲播放期间完成全部 10 个案例，P2-03 独立 PASS。最终仍随整轮 P2 Gate 收口状态。
 
 ---
 
@@ -309,7 +309,7 @@ AC：
 - [x] 仅使用 `recent-a.bin / recent-b.bin` A/B 双槽，不为每首歌制造状态文件
 - [x] 32 首上限、按完整路径去重且最新在前
 
-格式、CRC32、A/B 重载与 host validator 已通过；仍须真机 Gate 验证实际 SD 生命周期后才能标记 `DONE`。
+`0.4.3-p2.gate` 已通过真实播放 5 秒记录、Pause 排除和 pending-path 切歌保护；唯一失败来自把启动时 31 条 Recent 冷加载错误放在播放期，产生 0.89 秒同步 SD 阻塞。最终 Gate 在播放中只验证一次真实发布，随后停止音频，再验证 32 项 MRU、缺失路径过滤与 A/B CRC 冷加载；格式与 host validator 不变，完成前保持 `DEVICE TEST`。
 
 ---
 

@@ -413,9 +413,13 @@ P0 已经完成并冻结 V1 Audio Backend：
 ```text
 ESP8266Audio 1.9.7
 → 32-bit Stereo to Mono downmix
-→ 3 × 768-sample M5.Speaker buffer
+→ 3 × 1536-sample M5.Speaker buffer
 → M5Unified Cardputer ADV / ES8311
 ```
+
+P0 选定的 Candidate A / M5.Speaker Backend 不变。P2 真机播放中浏览暴露原
+`3 × 768` 仅约 52 ms 的缓冲余量不足，因此正式 Player 将单 Buffer 调整为
+1536 samples；这是已确认主路径内的稳定性校准，不是重新开启 Backend 选型。
 
 除非后续真机证据证明该主路径不可用，否则不要重新开启 A/B/C 选型，也不要把 Candidate B/C 的实验工具链带入正式 Player。
 

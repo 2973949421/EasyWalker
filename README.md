@@ -76,9 +76,11 @@ P0 Audio Backend Benchmark 已完成，V1 正式冻结 Candidate A：
 ```text
 ESP8266Audio 1.9.7
 → 32-bit Stereo to Mono downmix
-→ 3 × 768-sample M5.Speaker buffer
+→ 3 × 1536-sample M5.Speaker buffer
 → M5Unified Cardputer ADV / ES8311
 ```
+
+P2 真机验证确认原 768-sample 配置的约 52 ms 缓冲余量会被正常 SD 目录工作耗尽；正式 Player 保持 Candidate A、三缓冲、downmix 与音量不变，只将单 Buffer 增至 1536 samples，提供约 104 ms 总余量。
 
 当前进入 P2 Music Library，在已通过真机验收的 P1 Player Core 上实现多层目录、按需扫描、有界缓存、Metadata 和 Recent Tracks。P2 交付 Library Engine 与开发验收入口；实体按键可直接操作的正式 Library UI 仍属于 P3。选型证据见 [`docs/AUDIO_BENCHMARK.md`](docs/AUDIO_BENCHMARK.md)。
 
@@ -117,7 +119,7 @@ python .\tools\prepare_p2_library.py --sd-root D:\
 /firmware/ADV-Walkman-P2-Gate.bin
 ```
 
-通过 M5Launcher 安装后启动，按一次物理 `T`，随后不要操作。Gate 目标约 60～120 秒完成，固件在 240 秒时自动判定超时；正常情况下用户等待不会超过 5 分钟。单次 Player 调度超过 100 ms 会写入 `WARN` 但不会立即截断整轮；真实 PCM 超过 100 ms、连续调度阻塞、Audio Error、Backpressure 或 PCM 停止推进仍会失败。测量期间不刷新屏幕，只在开始和停止音频后的最终结果刷新，P2-01～P2-04 结果写入：
+通过 M5Launcher 安装后启动，按一次物理 `T`，随后不要操作。Gate 目标约 60～120 秒完成，固件在 240 秒时自动判定超时；正常情况下用户等待不会超过 5 分钟。长曲播放期间验证真实的千文件扫描、分页、Metadata 和一次 Recent 发布；P2-04 的 32 项/缺失路径/CRC 冷加载属于启动生命周期，在停止音频后验证，不再制造不可能出现在正常播放中的压力。单次 Player 调度超过 100 ms 会写入 `WARN`；PCM submit 超过 70 ms 的缓冲感知上限、连续调度阻塞、Audio Error、Backpressure 或 PCM 停止推进仍会失败。测量期间不刷新屏幕，只在开始和停止音频后的最终结果刷新，P2-01～P2-04 结果写入：
 
 ```text
 /ADVWalkman/logs/p2-01-last.txt

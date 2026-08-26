@@ -603,6 +603,7 @@ def validate_gate_logs(
         "pcm_buffers_since_reset",
         "pcm_submit_gap_max_us",
         "pcm_submit_gap_over_100ms",
+        "pcm_continuity_limit_us",
         "pcm_last_submit_age_us",
         "track_ended_events",
         "open_max_us",
@@ -664,8 +665,11 @@ def validate_gate_logs(
                 (metrics["pcm_frames_since_reset"] > 0, f"no PCM frames in {name}"),
                 (metrics["pcm_submit_gap_over_100ms"] == 0,
                  f"PCM submit gap exceeded 100 ms in {name}"),
-                (metrics["pcm_submit_gap_max_us"] <= 100_000,
-                 f"PCM submit max gap exceeded 100 ms in {name}"),
+                (metrics["pcm_continuity_limit_us"] == 70_000,
+                 f"unexpected PCM continuity limit in {name}"),
+                (metrics["pcm_submit_gap_max_us"] <=
+                 metrics["pcm_continuity_limit_us"],
+                 f"PCM submit max gap exceeded buffer-aware limit in {name}"),
                 (metrics["pcm_last_submit_age_us"] <= 2_000_000,
                  f"PCM made no progress for two seconds in {name}"),
                 (metrics["player_service_gap_severe_over_500ms"] == 0,
@@ -682,6 +686,13 @@ def validate_gate_logs(
         failures.extend(message for passed, message in semantic_checks if not passed)
         for key, value in metrics.items():
             results[f"p2_0{index + 1}_{key}"] = str(value)
+
+    if parsed[3]["status"] == "PASS":
+        detail = parsed[3].get("detail", "")
+        require("live_publish=1" in detail,
+                "P2-04 did not validate the normal live Recent publish")
+        require("offline_cold_reload=1" in detail,
+                "P2-04 cold reload did not use the startup lifecycle")
 
     p202 = parsed[1]
     if p202["status"] == "PASS":
@@ -711,7 +722,7 @@ def validate_gate_logs(
             (library_metrics["sort_comparisons"] > 0, "P2-02 sort made no comparisons"),
             (library_metrics["sort_fallback_comparisons"] > 0,
              "P2-02 did not exercise full-name sort fallback"),
-            (library_metrics["scratch_bytes"] >= 73_728,
+            (library_metrics["scratch_bytes"] >= 65_536,
              "P2-02 SortScratch peak was not recorded"),
             (library_metrics["scratch_allocation_failures"] == 0,
              "P2-02 SortScratch allocation failed"),
