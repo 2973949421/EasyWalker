@@ -699,9 +699,11 @@ Cardputer ADV 无 PSRAM，P3A 不分配完整 `135×240×RGB565` Framebuffer；�
 135 × 240
 Portrait
 Headphone Jack Up
+M5GFX Rotation 2
 ```
 
-V1 不使用 IMU 自动旋转 UI。
+首次 P3A 真机检查确认 `rotation 0` 在耳机孔朝上时上下颠倒，因此 Cardputer ADV
+Portrait 基线冻结为 `rotation 2`。V1 不使用 IMU 自动旋转 UI。
 
 ### 9.2 Screen Regions
 

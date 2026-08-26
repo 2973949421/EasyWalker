@@ -13,7 +13,9 @@ namespace {
 
 using namespace adv_walkman::player;
 
-constexpr uint8_t kPortraitRotation = 0;
+// Cardputer ADV portrait baseline: headphone jack at the top. Rotation 0 has
+// the correct geometry but is physically upside down in that posture.
+constexpr uint8_t kPortraitRotation = 2;
 
 PlayerRuntime player;
 LibraryRuntime libraryRuntime;
@@ -108,6 +110,11 @@ void loop() {
 
 #if defined(P3A_DEVICE_GATE)
     gate.service(ui, player);
+    if (gate.finished()) {
+        gate.renderResult(M5Cardputer.Display);
+        delay(5);
+        return;
+    }
     ui.setHint(gate.hint());
 #endif
     ui.service();

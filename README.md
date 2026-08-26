@@ -82,8 +82,9 @@ P3A 构建与 SD 复制：
 .\tools\build_player.ps1 -Target P3AGate -SdRoot D:\
 ```
 
-当前 Gate 固件：`/firmware/ADV-Walkman-P3A-Gate.bin`，大小 705,120 bytes，
-SHA-256 `766d5c489d5a78ca2c00071eab41e8c402be55ee7538a970c72e0f88c6138744`。
+当前 Gate 固件：`/firmware/ADV-Walkman-P3A-Gate.bin`，版本
+`0.5.1-p3a.gate`，大小 706,064 bytes，SHA-256
+`d6b093d432f033e6e93d1e599555489d56d1dfbc9860eaeffcc9596239b21c9e`。
 通过 M5Launcher 安装后按屏幕逐步操作；无需记忆整套按键流程。Build Success
 只代表进入 `DEVICE TEST`，不代表 P3A 已完成。
 

@@ -11,7 +11,7 @@
 namespace adv_walkman {
 namespace player {
 
-constexpr size_t kP3AVisibleRows = 7;
+constexpr size_t kP3AVisibleRows = 6;
 
 struct PlaylistRenderRow {
     bool valid = false;

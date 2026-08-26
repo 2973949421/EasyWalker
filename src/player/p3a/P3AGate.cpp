@@ -96,7 +96,9 @@ void P3AGate::service(UiCoordinator& ui, PlayerRuntime& player) {
     minimumHeap_ = std::min(minimumHeap_, ESP.getFreeHeap());
     const uint32_t now = millis();
     if (now - startedAtMs_ > kGateTimeoutMs) {
-        finish(false, "timeout", ui, player);
+        char reason[64] = {};
+        std::snprintf(reason, sizeof(reason), "timeout_%s", stepName(step_));
+        finish(false, reason, ui, player);
         return;
     }
 
@@ -177,47 +179,99 @@ void P3AGate::service(UiCoordinator& ui, PlayerRuntime& player) {
 const char* P3AGate::hint() const {
     switch (step_) {
         case Step::Orientation:
-            return "Jack UP + upright? Enter";
+            return "STEP 01 / 11\nPRESS ENTER";
         case Step::LibraryLeft:
-            return "Gate: Fn+Left";
+            return "STEP 02 / 11\nFN + LEFT";
         case Step::LibraryRight:
-            return "Gate: Fn+Right";
+            return "STEP 03 / 11\nFN + RIGHT";
         case Step::LibraryEnter:
-            return "Gate: Enter library";
+            return "STEP 04 / 11\nPRESS ENTER";
         case Step::WaitPlaylist:
-            return "Opening playlist...";
+            return "PLEASE WAIT\nOPENING LIST";
         case Step::PlaylistUp:
-            return "Gate: Fn+Up";
+            return "STEP 05 / 11\nFN + UP";
         case Step::PlaylistDown:
-            return "Gate: Fn+Down";
+            return "STEP 06 / 11\nFN + DOWN";
         case Step::PlaylistEnter:
-            return "Gate: Enter benchmark";
+            return "STEP 07 / 11\nPRESS ENTER";
         case Step::WaitPlayer:
-            return "Starting 44.1k audio...";
+            return "PLEASE WAIT\nSTARTING AUDIO";
         case Step::PlayWait:
-            return "Listen/wait 10 seconds";
+            return "AUTO CHECK\nPLAYING 10 SEC";
         case Step::PlayerBack:
-            return "Gate: Fn+Esc to list";
+            return "STEP 08 / 11\nFN + ESC";
         case Step::WaitPlaylistBack:
-            return "Restoring playlist...";
+            return "PLEASE WAIT\nRESTORE LIST";
         case Step::PlaylistBack:
-            return "Gate: Fn+Esc to library";
+            return "STEP 09 / 11\nFN + ESC";
         case Step::WaitLibrary:
-            return "Opening library...";
+            return "PLEASE WAIT\nOPEN LIBRARY";
         case Step::SettingsOpen:
-            return "Gate: press S";
+            return "STEP 10 / 11\nPRESS S";
         case Step::WaitSettings:
-            return "Opening settings...";
+            return "PLEASE WAIT\nOPEN SETTINGS";
         case Step::SettingsBack:
-            return "Gate: Fn+Esc";
+            return "STEP 11 / 11\nFN + ESC";
         case Step::WaitFinal:
-            return "Checking audio + log...";
+            return "PLEASE WAIT\nFINAL CHECK";
         case Step::Passed:
-            return "P3A PASS - return SD to PC";
+            return "P3A PASS\nSD TO PC";
         case Step::Failed:
-            return "P3A FAIL - return SD to PC";
+            return "P3A FAIL\nSD TO PC";
     }
     return "";
+}
+
+void P3AGate::renderResult(M5GFX& display) {
+    if (resultRendered_) {
+        return;
+    }
+    display.fillScreen(TFT_BLACK);
+    display.setTextWrap(false);
+    display.setTextColor(passed() ? TFT_GREEN : TFT_ORANGE, TFT_BLACK);
+    display.setTextSize(1.4f);
+    display.setCursor(23, 24);
+    display.print("P3A GATE");
+    display.setTextSize(3.0f);
+    display.setCursor(passed() ? 22 : 20, 72);
+    display.print(passed() ? "PASS" : "FAIL");
+    display.setTextColor(TFT_WHITE, TFT_BLACK);
+    display.setTextSize(1.25f);
+    if (!passed()) {
+        display.setCursor(7, 126);
+        display.printf("%.17s", reason_);
+    }
+    display.setCursor(19, 166);
+    display.print("POWER OFF");
+    display.setCursor(23, 188);
+    display.print("SD -> PC");
+    resultRendered_ = true;
+}
+
+const char* P3AGate::stepName(Step step) {
+    switch (step) {
+        case Step::Orientation: return "orientation";
+        case Step::LibraryLeft: return "library_left";
+        case Step::LibraryRight: return "library_right";
+        case Step::LibraryEnter: return "library_enter";
+        case Step::WaitPlaylist: return "wait_playlist";
+        case Step::PlaylistUp: return "playlist_up";
+        case Step::PlaylistDown: return "playlist_down";
+        case Step::PlaylistEnter: return "playlist_enter";
+        case Step::WaitPlayer: return "wait_player";
+        case Step::PlayWait: return "play_wait";
+        case Step::PlayerBack: return "player_back";
+        case Step::WaitPlaylistBack: return "wait_playlist_back";
+        case Step::PlaylistBack: return "playlist_back";
+        case Step::WaitLibrary: return "wait_library";
+        case Step::SettingsOpen: return "settings_open";
+        case Step::WaitSettings: return "wait_settings";
+        case Step::SettingsBack: return "settings_back";
+        case Step::WaitFinal: return "wait_final";
+        case Step::Passed: return "passed";
+        case Step::Failed: return "failed";
+    }
+    return "unknown";
 }
 
 bool P3AGate::finished() const {
@@ -276,6 +330,7 @@ void P3AGate::writeLog(const char* reason, const UiCoordinator& ui,
     file.printf("result=%s\n", passed() ? "PASS" : "FAIL");
     file.printf("version=%s\n", ADV_WALKMAN_VERSION);
     file.printf("reason=%s\n", reason == nullptr ? "unknown" : reason);
+    file.printf("final_step=%s\n", stepName(step_));
     file.printf("orientation=%dx%d rotation=%u\n", displayWidth_,
                 displayHeight_, static_cast<unsigned>(displayRotation_));
     file.printf("events=%s\n", events_);

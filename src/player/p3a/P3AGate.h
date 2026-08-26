@@ -18,6 +18,7 @@ class P3AGate final {
     // it to UiCoordinator (the initial orientation confirmation).
     bool beforeAction(UiAction action, const RawKeyEvent& raw, UiPage page);
     void service(UiCoordinator& ui, PlayerRuntime& player);
+    void renderResult(M5GFX& display);
 
     const char* hint() const;
     bool finished() const;
@@ -51,6 +52,7 @@ class P3AGate final {
     static constexpr uint32_t kGateTimeoutMs = 300000;
 
     void setStep(Step step);
+    static const char* stepName(Step step);
     void appendEvent(UiAction action, const RawKeyEvent& raw, UiPage page);
     void finish(bool pass, const char* reason, UiCoordinator& ui,
                 PlayerRuntime& player);
@@ -66,6 +68,7 @@ class P3AGate final {
     uint32_t minimumHeap_ = UINT32_MAX;
     bool diagnosticsReset_ = false;
     bool logWritten_ = false;
+    bool resultRendered_ = false;
     char reason_[64] = "running";
     char events_[768] = {};
     size_t eventLength_ = 0;

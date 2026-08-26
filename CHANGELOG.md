@@ -13,6 +13,10 @@ Date: 2026-08-26
 - `player-dev`、`player-p3a-gate`、历史 P1 Gate A/B 与 P2 Gate 均重新构建通过；P3A Gate 为 705,120 bytes，占 `0x140000` Launcher 上限 53.8%。
 - SD 中 marker / manifest 完整匹配的 P1/P2 测试夹具目录已安全删除；`/Music/ADVWalkmanBenchmark/benchmark.mp3` 与 Player 状态、缓存和日志均保留。
 - `ADV-Walkman-P3A-Gate.bin` 已复制到 SD 并核对 SHA-256 `766d5c489d5a78ca2c00071eab41e8c402be55ee7538a970c72e0f88c6138744`；P3A 当前进入 `DEVICE TEST`，未提前标记完成。
+- 首轮 P3A 真机反馈确认 `rotation 0` 在耳机孔朝上时上下颠倒、页面和 Gate 提示字号过小，而且最终状态缺少明确整屏反馈；这属于 UI / Gate 可用性失败，P3A 保持 `DEVICE TEST`。
+- `0.5.1-p3a.gate` 将 Portrait 基线改为 `rotation 2`，精简页面文字、放大标题和列表，并把 Gate 提示改为清楚的 `STEP nn / 11` 双行大字。
+- Gate 通过或失败后现在锁定整屏大号 `PASS / FAIL`；超时原因包含卡住的具体步骤。44.1 kHz、跨页连续播放、Audio Error、Backpressure 与 PCM gap 验收条件均未放宽。
+- 修正版 SD 固件为 706,064 bytes，SHA-256 `d6b093d432f033e6e93d1e599555489d56d1dfbc9860eaeffcc9596239b21c9e`。
 
 ## V0.4 — P2 Music Library Development
 
