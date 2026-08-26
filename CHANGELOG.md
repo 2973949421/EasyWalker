@@ -37,6 +37,11 @@ Date: 2026-08-26
 
 ### Validation Harness
 
+- `0.4.4-p2.final-gate` 已通过最终真机与 Host Validator 验收，P2-01～P2-04 均为 `task_executed=1 / PASS`，无 `SKIPPED`、无主失败项；Gate 总时长约 78 秒。
+- 连续长曲压力窗口仍使用 70,000 µs PCM 门槛，没有放宽回 100 ms：P2-02 / 03 / 04 最大 PCM 间隔分别为 60.317 / 61.796 / 61.796 ms，Audio Error、Backpressure、意外 TrackEnded 均为 0，最低 Heap 90,148 bytes。
+- P2-01 的一次 112.933 ms PCM 间隔来自刻意的短曲 EOF / Track 切换生命周期，单独保留为 WARN；Repeat One 快速重启仅 8.832 ms。该阶段从设计上不冒充连续长曲压力窗口，日志与 Host Validator 均保留完整证据。
+- 1,000 项扫描、排序、32 个代表分页样本、LRU / Queue pin、10 个 Metadata 案例以及 Recent 的 live publish / offline cold reload 全部实际执行；Recent A/B generation 37/36 与 CRC32 均通过主机解析。
+- SD Gate binary 与本地 artifact SHA-256 一致：`727beed3024f1feab45d153cbfe3339b173104ec63c84ce81301ecc3103aeaa4`。P2-01～P2-04 正式标记 `DONE`。
 - `0.4.2-p2.gate` 真机日志首次独立确认 P2-01 完整通过，并将唯一首个失败收敛到 P2-02：Library 单次扫描 92.6 ms、Player service 间隔 101 ms；当时仍为 Playing / 44.1 kHz、无 Audio Error / Backpressure，PCM 最大间隔 98.397 ms，P2-03/P2-04 因早停未执行。
 - `0.4.3-p2.gate` 将千文件枚举从每项 `openNextFile()` 的 `stat + fopen` 改为官方 `getNextFileName(bool*)`，并复用 SortScratch 的 4 KiB 合并 `.dat` 小写，缓存格式不变且额外内存峰值为 0。
 - `0.4.3-p2.gate` 真机已让 P2-01、P2-02、P2-03 依次 PASS：千文件阶段约 22 秒完成，Audio Error / Backpressure 为 0；但原三组 768-sample Buffer 仅约 52 ms 余量，53.942 ms PCM 间隔被用户实际听到为卡顿，证明旧 100 ms 音频门槛会产生假 PASS。

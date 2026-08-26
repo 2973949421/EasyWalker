@@ -1,7 +1,7 @@
 # ADV Walkman
 
 > 工作名：ADV Walkman  
-> 当前阶段：P2 Music Library（音乐库引擎）
+> 当前阶段：P2 Music Library 已完成，待进入下一阶段计划
 > 平台：M5Stack Cardputer ADV
 
 ## 1. 项目是什么
@@ -82,7 +82,7 @@ ESP8266Audio 1.9.7
 
 P2 真机验证确认原 768-sample 配置的约 52 ms 缓冲余量会被正常 SD 目录工作耗尽；正式 Player 保持 Candidate A、三缓冲、downmix 与音量不变，只将单 Buffer 增至 1536 samples，提供约 104 ms 总余量。
 
-当前进入 P2 Music Library，在已通过真机验收的 P1 Player Core 上实现多层目录、按需扫描、有界缓存、Metadata 和 Recent Tracks。P2 交付 Library Engine 与开发验收入口；实体按键可直接操作的正式 Library UI 仍属于 P3。选型证据见 [`docs/AUDIO_BENCHMARK.md`](docs/AUDIO_BENCHMARK.md)。
+P2 Music Library 已于 2026-08-26 通过 `0.4.4-p2.final-gate` 真机与 Host Validator 验收：多层目录、1,000 项 Lazy Scan / Cache、Metadata、Recent Tracks 和播放中连续性全部收口。P2 交付 Library Engine 与开发验收入口；实体按键可直接操作的正式 Library UI 仍属于 P3。选型证据见 [`docs/AUDIO_BENCHMARK.md`](docs/AUDIO_BENCHMARK.md)。
 
 ### P2 开发构建与一次性 Gate
 

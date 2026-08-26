@@ -150,6 +150,7 @@ V1 不建立复杂数据库。
 - P2 Gate 使用独立 Recent 测试槽并暂停正式 Queue / Session persistence；四份日志在停止测试音频后一次写完并回读完整性标记，避免日志本身污染播放中断音指标。
 - P2 Gate 先用短 Fixture 验证 P2-01 Queue / Recent 语义，再通过正式 `MusicLibrary → FolderQueueSource` 切换到 `/Music/ADVWalkmanBenchmark/benchmark.mp3`。长曲播放期间执行 P2-02、P2-03 及 P2-04 的真实 5 秒 Recent 发布；设备端确认千文件 count 后抽查 32 个首尾、分页边界和远端 LRU 代表点，PC Fixture 继续全量核对文件集合与参考排序。Recent 的 32 项 MRU、缺失路径过滤和 A/B CRC 冷加载属于启动生命周期，在捕获 live-audio 快照并停止音频后验证，不得把冷启动同步读取伪装成播放期负载。
 - 音频硬指标保持 Player state、44.1 kHz、Audio Error、Backpressure、TrackEnded、PCM Buffer 提交进度与 PCM 提交间隔。正式 Player 的三组 1536-sample Buffer 总余量约 104 ms，Gate 使用 70 ms 缓冲感知上限，避免原 100 ms 门槛把用户可听见的耗尽误判为 PASS。单个 Player service 间隔超过 100 ms 只记录 timing warning；连续三次超过 100 ms 或单次超过 500 ms 仍为硬失败。`M5.Speaker.isPlaying(0)` 只表示 M5Unified 请求槽占用，保留为诊断采样，不得命名或判定为硬件 underrun / starvation。测量期间不刷新屏幕，停止音频后再显示和写日志。
+- 最终 `0.4.4-p2.final-gate` 在长曲压力阶段测得最大 PCM 间隔 61.796 ms，低于 70 ms 上限；1,000 项扫描、Metadata 与 Recent live publish 期间无 Audio Error / Backpressure / 意外 EOF，最低 Heap 90,148 bytes。P2-01 的 112.933 ms WARN 属于短曲 EOF / 切歌生命周期，Repeat One 快速重启 8.832 ms，不纳入连续长曲门槛，也不得从历史报告中删除。
 
 ---
 

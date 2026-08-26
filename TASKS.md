@@ -257,13 +257,13 @@ AC：
 - [x] P2 已实现阶段非 MP3 文件不进入可播放列表；FLAC / WAV 暴露由 P6-04 在 Decoder 可用后统一扩展
 - [x] 播放时浏览目录不主动 Stop Audio
 
-实现与 PC Fixture 验收已通过。2026-08-26 的 `0.4.2-p2.gate` 真机日志独立确认：根目录边界、多层中文路径、过滤、自然排序、当前文件夹 Queue、Queue pin 与播放中浏览全部通过；P2-02 后续失败不回滚该项结果。
+实现与 PC Fixture 验收已通过。2026-08-26 的 `0.4.2-p2.gate` 真机日志独立确认：根目录边界、多层中文路径、过滤、自然排序、当前文件夹 Queue、Queue pin 与播放中浏览全部通过。最终 `0.4.4-p2.final-gate` 再次 PASS；P2-01 的一次 112.933 ms PCM 间隔发生在刻意的短曲 EOF / Track 切换生命周期，`repeat_restart_max_us=8832`，记录为非连续长曲阶段 WARN，不作为隐藏的连续播放放宽。
 
 ---
 
 ## P2-02 Lazy Scan / Cache
 
-Status: DEVICE TEST
+Status: DONE
 
 AC：
 
@@ -272,17 +272,17 @@ AC：
 - [x] 大目录有界内存
 - [x] 缓存可淘汰
 - [x] 约 1000 首库规模可完成扫描、排序、分页和 Queue pin
-- [ ] 播放中扫描不造成明显断音
+- [x] 播放中扫描不造成明显断音
 
 4 个 SD session cache slot、3×32 项 RAM LRU page 与 Queue pin 已实现。`0.4.2-p2.gate` 已把首个真实失败收敛到千文件扫描：单次 Library 调用 92.6 ms，使 Player service 间隔擦线达到 101 ms，但当时仍为 Playing / 44.1 kHz、无 Audio Error、无 Backpressure，PCM 最大间隔 98.397 ms。
 
-`0.4.3-p2.gate` 真机在约 22 秒内完成 1,000 项扫描、排序、分页、LRU 与 Queue pin，P2-02 逻辑通过；但测得 PCM 最大提交间隔 53.942 ms，超过原 `3 × 768` 约 52 ms 的实际缓冲余量，用户听到卡顿，证明旧 100 ms Gate 门槛过宽。最终 Gate 保持 Candidate A 与三缓冲模型，只把正式 Player 单 Buffer 增至 1536 samples，并以 70 ms 缓冲感知门槛验收；完成前状态保持 `DEVICE TEST`。
+`0.4.3-p2.gate` 真机在约 22 秒内完成 1,000 项扫描、排序、分页、LRU 与 Queue pin，P2-02 逻辑通过；但测得 PCM 最大提交间隔 53.942 ms，超过原 `3 × 768` 约 52 ms 的实际缓冲余量，用户听到卡顿，证明旧 100 ms Gate 门槛过宽。最终 `0.4.4-p2.final-gate` 保持 Candidate A 与三缓冲模型，只把正式 Player 单 Buffer 增至 1536 samples，并在 70 ms 缓冲感知门槛下通过：1,000 项与 32 个代表分页样本全部验证，PCM 最大间隔 60.317 ms，Audio Error / Backpressure / TrackEnded 均为 0，最低 Heap 90,148 bytes。
 
 ---
 
 ## P2-03 Metadata
 
-Status: DEVICE TEST
+Status: DONE
 
 AC：
 
@@ -294,13 +294,13 @@ AC：
 - [x] Metadata 解析在长曲播放期间完成且未增加 Audio Error / Backpressure
 - [x] 无 Metadata 时合理回退到文件名
 
-ID3v2.3 / v2.4、四种文本编码、unsynchronization、extended header 与损坏标签 fallback 已通过 PC Fixture；`0.4.3-p2.gate` 又在长曲播放期间完成全部 10 个案例，P2-03 独立 PASS。最终仍随整轮 P2 Gate 收口状态。
+ID3v2.3 / v2.4、四种文本编码、unsynchronization、extended header 与损坏标签 fallback 已通过 PC Fixture；最终 `0.4.4-p2.final-gate` 在长曲播放期间完成全部 10 个案例，PCM 最大间隔 61.796 ms，Audio Error / Backpressure 均为 0，P2-03 真机收口。
 
 ---
 
 ## P2-04 Recent Tracks
 
-Status: DEVICE TEST
+Status: DONE
 
 AC：
 
@@ -309,7 +309,7 @@ AC：
 - [x] 仅使用 `recent-a.bin / recent-b.bin` A/B 双槽，不为每首歌制造状态文件
 - [x] 32 首上限、按完整路径去重且最新在前
 
-`0.4.3-p2.gate` 已通过真实播放 5 秒记录、Pause 排除和 pending-path 切歌保护；唯一失败来自把启动时 31 条 Recent 冷加载错误放在播放期，产生 0.89 秒同步 SD 阻塞。最终 Gate 在播放中只验证一次真实发布，随后停止音频，再验证 32 项 MRU、缺失路径过滤与 A/B CRC 冷加载；格式与 host validator 不变，完成前保持 `DEVICE TEST`。
+`0.4.3-p2.gate` 已通过真实播放 5 秒记录、Pause 排除和 pending-path 切歌保护；唯一失败来自把启动时 31 条 Recent 冷加载错误放在播放期，产生 0.89 秒同步 SD 阻塞。最终 `0.4.4-p2.final-gate` 在播放中通过真实 5 秒 publish，再在停播后的正确启动生命周期验证 A→B→A 去重、32 项淘汰、缺失路径过滤和 A/B CRC cold reload；Host Validator 确认 generation 37/36、CRC 有效并整体 PASS。
 
 ---
 
