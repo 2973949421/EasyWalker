@@ -484,3 +484,5 @@ Candidate C — Deferred unless A fails during P1 development
 P0 Audio Backend Benchmark 不等待最终 UI 实现。
 
 UI、歌词、ASCII Cover、Keymap 和 Sound Preset 已有 V1 设计基线，但 P0 只需要最小测试 Harness。禁止为了“顺便把 UI 做好”拖慢 Backend 选型。
+
+2026-08-26 的 V1 增量把最终格式方向扩展为 MP3 / FLAC / WAV，但不改变本文件结论：P0 比较和 Candidate A 冻结均以 MP3 PCM 输出为证据。FLAC / WAV 后续只增加 Format Detector / Decoder adapter，并继续复用已选定的 DSP、Stereo → Mono 与 M5.Speaker / ES8311 Backend；不得借格式扩展重新开启 A/B/C 选型。

@@ -35,8 +35,8 @@ ADV Walkman 是一个基于 M5Stack Cardputer ADV 的个人化复古随身音乐
 V1 聚焦“本地随身播放器”：
 
 - microSD 本地音乐
-- MP3 为主格式
-- 目标覆盖最高 320 kbps MP3
+- V1 优先支持 MP3 / FLAC / WAV；当前已验证主路径仍为 MP3
+- MP3 目标覆盖最高 320 kbps
 - 44.1 kHz / 48 kHz 常见采样率
 - 原生 ES8311 + 3.5mm 输出
 - 正确 Stereo（立体声）→ Mono（单声道）下混
@@ -173,15 +173,18 @@ V1 产品侧主要设计已完成，已足够交付 Codex 正式开工。
 - 项目定位与 V1 范围
 - 原生 ES8311 + 3.5mm 第一阶段路线
 - 四种互斥 Sound Preset
-- Keymap 主体
+- 仅在播放器页面生效的顶部 3×4 盲操区
 - 耳机孔朝上竖持的主要使用姿态
+- 播放器 / 播放列表 / 曲库 / 设置四页面层级与逐层返回
 - Now Playing 信息结构
 - Now Playing Lyrics / Color ASCII Cover 双视图与偏好规则
 - 逐行竖排歌词逻辑
 - 中文 / 原文双语歌词规则
 - 彩色 ASCII Cover 方向
 - 息屏 Soft Lock 逻辑
-- Library / Queue / Sound / Settings 的 V1 基础交互
+- 上方曲库封面 + 下方黑胶唱片堆叠的曲库方向
+- 整洁标准列表形式的播放列表
+- Music / Lyrics / Cover 分离、相对路径镜像与每首歌独立 Cover
 
 允许真机原型小范围校准：
 
@@ -203,43 +206,21 @@ V1 产品侧主要设计已完成，已足够交付 Codex 正式开工。
 
 ## 8. V1 Keymap 摘要
 
-V1 以“耳机孔朝上、设备竖持”为主要播放器使用姿态。
-
-### 数字列：高频播放与音效
+V1 以“耳机孔朝上、设备竖持”为主要播放器使用姿态。播放器页面独占最靠近耳机孔的顶部 3×4 物理区域；这里的 `1–12` 是位置编号，不代表键帽字符：
 
 ```text
-0  Volume +
-9  Previous
-8  Play / Pause
-7  Next
-6  Volume -
-
-5  Reserved
-
-4  Vocal Clear
-3  Radio
-2  Tape
-1  Original
+┌────────┬────────────┬────────────┬──────────┐
+│ Vol +  │ Play/Pause │ Play/Pause │ Previous │
+├────────┼────────────┼────────────┼──────────┤
+│ Vol -  │    View    │ Play Mode  │   Next   │
+├────────┼────────────┼────────────┼──────────┤
+│Original│    Tape    │   Radio    │VocalClear│
+└────────┴────────────┴────────────┴──────────┘
 ```
 
-### 字母快捷键：页面、播放模式与视图
+`View` 在有可用歌词时切换 Lyrics / Cover；无歌词时保持 Cover。`Play Mode` 按 `Normal → Repeat One → Repeat All → Shuffle → Normal` 循环。旧数字列以及 `H/L/Q/R/S/V` 全局快捷键不再是 V1 基线。
 
-```text
-H  Now Playing / Home
-L  Library
-Q  Queue
-R  Repeat Mode
-S  Shuffle
-V  View（仅 Now Playing：Lyrics ↔ Cover）
-```
-
-`V` 只切换 Now Playing 的 Content Stage；在其他页面不暗中改变偏好。无可用歌词时保持 Cover，不进入空白 Lyrics 页面。
-
-### UI 导航键
-
-方向键、Enter、Esc 等功能键保留原本的 UI / 导航语义，不被播放快捷键占用。
-
-进入真正的文本输入状态时，字母和数字恢复普通输入，不触发播放器快捷键。
+离开播放器页面后立即恢复普通 UI 输入：方向键导航、Enter 确认、Esc 返回。曲库页面额外使用 `S` 进入设置；播放器和播放列表中的 `S` 不承担该功能。
 
 
 ## 9. V1 UI 摘要
@@ -252,6 +233,17 @@ V  View（仅 Now Playing：Lyrics ↔ Cover）
 UI 不自动旋转
 ```
 
+四页面层级：
+
+```text
+播放器 --Esc--> 播放列表 --Esc--> 曲库
+曲库 --S--> 设置 --Esc--> 曲库
+```
+
+曲库是最外层内容页，`Esc` 不再退出到额外主页。音频可跨页面继续播放，但完整的 3×4 播放控制只属于播放器页面。
+
+有有效恢复歌曲时启动进入播放器页面并保持 Pause；第一次使用或没有可恢复歌曲时进入曲库页面。
+
 Now Playing：
 
 ```text
@@ -263,7 +255,7 @@ Content Stage
 有可用歌词 + 偏好 Lyrics → 竖排同步歌词
 有可用歌词 + 偏好 Cover  → 彩色 ASCII Cover
 无可用歌词                → 彩色 ASCII Cover
-V                          → Lyrics ↔ Cover
+View                       → Lyrics ↔ Cover
 
 Footer
 进度 / Sound Preset / Volume
@@ -283,16 +275,26 @@ Header / Footer 不随 View 切换变化。切换不影响歌曲、播放状态�
 
 Color ASCII Cover：
 
-- PC 端批量生成彩色 ASCII Cover；
+- PC 端按每首歌曲批量生成彩色 ASCII Cover；
 - ADV 不实时转换图片；
 - PC 端预渲染 RGB565，ADV 直接读取；
 - 初始目标网格约 30×24，真机允许一次性校准。
+
+曲库页面采用上方独立曲库封面、下方黑胶唱片堆叠选择带；播放列表先采用清晰的标准歌曲列表。媒体资源按相同相对路径和 basename 机械匹配：
+
+```text
+/Music/<relative>/<song>.<audio>
+/Lyrics/<relative>/<song>[.<language>].lrc
+/ADVWalkman/covers/<relative>/<song>.cover.adv
+```
+
+每首歌保存独立设备封面，不使用专辑公共封面、模糊匹配、Hash 数据库或 JSON Manifest。曲库封面与歌曲封面相互独立；曲库封面的最终文件命名和具体动画参数留到 P3 真机原型冻结。
 
 息屏：
 
 - 息屏后所有按键原功能失效；
 - 第一次任意键只唤醒并吞掉该按键；
 - 第二次按键才执行；
-- 因此息屏时第一次按 `V` 只唤醒，不切换 View；
+- 因此息屏时第一次按 3×4 区的 `View` 只唤醒，不切换 View；
 - 唤醒后约 5 秒无操作重新息屏；
 - 正常播放时默认约 15 秒无 UI 操作自动息屏。

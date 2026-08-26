@@ -4,6 +4,18 @@
 
 Date: 2026-08-26
 
+### V1 Interaction / UI / Resource Baseline Update
+
+- 用仅在播放器页面生效的顶部 3×4 盲操区替换旧数字列和 `H/L/Q/R/S/V` 全局快捷键；双 Play/Pause 扩大盲操命中区，四个 Sound Preset 改为四颗物理位置直选。
+- `Play Mode` 产品动作收敛为 `Normal → Repeat One → Repeat All → Shuffle → Normal`；P1 内部 Repeat / Shuffle 两维模型和 Session schema 保持不变，由 UI 做原子映射。
+- 页面层级收敛为播放器 / 播放列表 / 曲库 / 设置四页：播放器 Esc → 播放列表 → 曲库，曲库 `S` → 设置，曲库 Esc no-op；无额外 Home、独立 Queue 或独立 Sound 页面。
+- 音频允许跨页面持续，完整播放控制只属于播放器页面；非播放器页面恢复 Arrow / Enter / Esc 普通映射。
+- 曲库视觉冻结为上方独立曲库封面 + 下方黑胶唱片堆叠选择带；播放列表 V1 保持清楚的标准列表，具体像素和动画参数留给 P3 真机校准。
+- 媒体资源改为 `/Music`、`/Lyrics`、可选 `/CoverSource`、`/ADVWalkman/covers` 分离保存，以相同相对路径 + basename 机械匹配；每首歌曲保存独立 `.cover.adv`，不做 Album / Folder 去重或模糊数据库。
+- 多语言歌词采用基础 `.lrc` 加 `zh-Hans / zh-Hant / en / ja / ko` 后缀；曲库封面与歌曲封面相互独立，曲库封面最终命名仍待实现阶段冻结。
+- V1 格式方向扩展为 MP3 / FLAC / WAV；现有 P1/P2 MP3 主路径和 Candidate A Backend 不变，FLAC / WAV 作为后续独立兼容任务接入，AAC/M4A 与 OGG/Opus 继续 Deferred。
+- 本次只更新产品与技术事实源，不修改正在真机运行的 P2 Gate 固件、P2 状态或 Flash 布局。
+
 ### V1 UI Design Increment — Now Playing Dual View
 
 - 将 Now Playing Content Stage 从“有歌词自动显示 Lyrics、无歌词显示 Cover”扩展为：有可用歌词时可通过 `V` 在 Lyrics / Color ASCII Cover 间切换，无歌词时保持 Cover-only。

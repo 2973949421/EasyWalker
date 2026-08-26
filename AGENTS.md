@@ -423,4 +423,4 @@ P0 选定的 Candidate A / M5.Speaker Backend 不变。P2 真机播放中浏览�
 
 除非后续真机证据证明该主路径不可用，否则不要重新开启 A/B/C 选型，也不要把 Candidate B/C 的实验工具链带入正式 Player。
 
-V1 Sound Preset、Keymap 与主要 UI/UX 已完成产品侧设计。字号、列宽、ASCII 网格与音效细节允许真机小范围校准，但不应被当作重新做产品设计的理由。正式 Player Core 阶段不抢先实现大型 UI、Library、歌词、ASCII Cover 或 DSP。
+V1 Sound Preset、Keymap 与主要 UI/UX 已完成产品侧设计。当前 Keymap 基线是“仅播放器页面启用顶部 3×4 盲操区”，旧数字列及 `H/L/Q/R/S/V` 全局快捷键已经废止；页面固定为播放器 / 播放列表 / 曲库 / 设置四层产品模型。具体行为以 PRD / TECH_DESIGN 为准，不在本文件复制完整布局。字号、列宽、ASCII 网格、曲库唱片动画与音效细节允许真机小范围校准，但不应被当作重新做产品设计的理由。正式阶段仍按 `TASKS.md` 推进，不能因为新 UI 基线而跳过当前 P2 Device Gate 或重新开启 Audio Backend 选型。

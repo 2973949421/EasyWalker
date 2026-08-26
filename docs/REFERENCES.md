@@ -205,7 +205,7 @@ https://github.com/earlephilhower/BackgroundAudio
 - ESP32 版本依赖较新的 I2S 支持
 - PlatformIO 可能需要 pioarduino / IDF5
 - 与当前稳定 Cardputer 工具链存在环境差异
-- 当前项目 V1 只需要 MP3，不应因为“架构更现代”就提前迁移整个工具链
+- 当前正式主路径仍是已验证的 MP3 / Candidate A；V1 新增 FLAC / WAV 产品目标也不构成提前迁移整个工具链或重开 Backend 选型的理由
 
 ### P0 固定实验版本
 

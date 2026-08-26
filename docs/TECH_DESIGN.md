@@ -1,6 +1,6 @@
 # ADV Walkman Technical Design
 
-> 版本：V0.2  
+> 版本：V0.3
 > 状态：基线架构；V1 Audio Backend 已由 P0 Benchmark 冻结为 Candidate A
 
 ## 1. 设计目标
@@ -66,8 +66,8 @@ microSD
           │
           ▼
 ┌─────────────────────┐
-│ Decoder             │
-│ MP3 解码             │
+│ Format / Decoder    │
+│ MP3 / FLAC / WAV    │
 └─────────┬───────────┘
           │ Stereo PCM
           ▼
@@ -130,9 +130,9 @@ V1 不建立复杂数据库。
 
 - Library 根目录固定为 `/Music`，导航不得逃出该根目录；完整 UTF-8 路径最多 511 bytes，超长报错而不截断。
 - Recursive Folder Browser 表示用户可逐层进入任意深度，不表示启动时递归扫描整库。
-- 当前目录只显示非 dot-hidden 目录和大小写不敏感的 `.mp3`；其他文件不进入 V1 可播放列表。
+- P2 已验证实现只显示非 dot-hidden 目录和大小写不敏感的 `.mp3`。V1 最终在格式扩展任务完成后将同一过滤入口扩展到 `.flac` / `.wav`；不得在 Decoder 尚未可用时先把不可播放文件暴露给用户。
 - 顺序固定为“文件夹优先 + ASCII 大小写不敏感自然排序”；数字段按数值比较，非 ASCII UTF-8 按原始字节保持稳定顺序。
-- 在 Library 选中 Track 后，Queue 为“当前文件夹内排序后的 MP3”，不递归包含子目录，并从所选 Track 开始。
+- 在 Library 选中 Track 后，Queue 为“当前文件夹内排序后的受支持音频”，不递归包含子目录，并从所选 Track 开始。P2 Gate 阶段的受支持集合仍只有 MP3。
 - Browser 当前页不直接充当 `TrackSource`。正在播放的 `FolderQueueSource` 必须绑定不可被 LRU 淘汰的稳定目录索引，直到下次 Queue 安全发布。
 - 单目录最多索引 2,048 个“目录 + MP3”条目；单目录超过 1,024 首 MP3 时仍可浏览，但创建 Queue 明确返回 `QueueTooLarge`。
 
@@ -223,20 +223,23 @@ Queue 最多 1,024 首，单条 UTF-8 路径最多 511 bytes。RAM 只保存 sou
 
 ---
 
-## 4.3 Decoder
+## 4.3 Format / Decoder
 
-V1 只要求 MP3。
+V1 产品目标为 MP3 / FLAC / WAV。当前已完成并真机验证的是 MP3；增加 FLAC / WAV 不重新开启 Audio Backend 选型，也不改变 Decoder → PCM → DSP → Downmix / Safety → Candidate A Backend 的边界。
 
-目标：
+```text
+Audio File
+→ Format Detector
+→ format-specific Decoder
+→ PCM
+→ shared DSP / Downmix / Backend
+```
 
-- 最高 320 kbps
-- 44.1 / 48 kHz 常见音源
-- CBR / VBR 兼容
-- 输出 16-bit PCM
+MP3 目标：最高 320 kbps、44.1 / 48 kHz、CBR / VBR、16-bit PCM。FLAC / WAV 的具体位深、声道和采样率兼容矩阵在 V1 格式任务中以实际库能力和无 PSRAM 内存预算冻结；不承诺 Hi-Res。
 
 P0 已冻结 `ESP8266Audio 1.9.7`。P1 的 `Mp3Probe` 负责跳过 ID3v2、识别 MPEG Layer III、CBR / VBR、Xing / Info / VBRI，并为 Seek 提供有界 Frame resync。无 TOC 的 VBR 使用比例估算后在最多 64 KiB 范围内寻找连续合法 Frame，不做无限扫描。
 
-`Mp3PlaybackEngine` 只管理单首歌曲，不包含 Queue / Repeat：
+当前 `Mp3PlaybackEngine` 只管理单首 MP3，不包含 Queue / Repeat。后续格式扩展通过薄型 format-specific engine / decoder adapter 接入，PlayerController 不按扩展名硬编码播放状态机：
 
 - 播放位置按实际提交到 PCM Output 的 Frame 计算；
 - 自然 EOF 先进入 `Draining`，提交尾部 Buffer 并等待 M5.Speaker Channel 0 排空；
@@ -547,15 +550,20 @@ Artist/Album/Track
   session-b.bin
 ```
 
-其他资源可采用：
+媒体资源使用镜像相对路径，不与 Audio 文件混放：
 
 ```text
-/Music/
-  <album>/
-    song.mp3
-    song.lrc
-    song.zh.lrc
-    cover_ascii.rgb565
+/Music/<relative>/<basename>.<mp3|flac|wav>
+
+/Lyrics/<relative>/<basename>.lrc
+/Lyrics/<relative>/<basename>.zh-Hans.lrc
+/Lyrics/<relative>/<basename>.zh-Hant.lrc
+/Lyrics/<relative>/<basename>.en.lrc
+/Lyrics/<relative>/<basename>.ja.lrc
+/Lyrics/<relative>/<basename>.ko.lrc
+
+/CoverSource/<relative>/<basename>.<jpg|png>       # 可选，主要供 PC 工具
+/ADVWalkman/covers/<relative>/<basename>.cover.adv
 
 /ADVWalkman/
   fonts/
@@ -564,6 +572,8 @@ Artist/Album/Track
   config.*
   cache/
 ```
+
+资源键固定为 `/Music` 下的规范化 `relative path + basename`。同一目录内两个不同音频不得使用完全相同 basename；版本差异必须体现在文件名中。V1 不使用模糊标题匹配、AI、UUID、Hash 数据库或 JSON Manifest。每首歌曲保存独立 `.cover.adv`，即使内容相同也不做 Album / Folder 共享与 fallback；曲库封面是另一类资源，不从第一首歌曲封面继承。曲库封面的最终目录和命名在 P3 实现前冻结，但必须保持每曲库独立且可机械查找。
 
 P1 schema version 1 使用小端二进制。每个文件含 20-byte Header：magic、schema version、header size、generation、payload length、CRC32。
 
@@ -593,9 +603,11 @@ P1 schema version 1 使用小端二进制。每个文件含 20-byte Header：mag
 - 保持 Pause；
 - 不自动出声。
 
-只持久化 `preferredNowPlayingView`。歌曲无可用歌词时由 View Selector 临时选择 Cover，不得把该 effective view 回写为用户偏好。`V` 更新偏好后只标记 Session dirty，继续沿用 cooperative A/B 保存，不在按键处理路径同步写 SD。
+只持久化 `preferredNowPlayingView`。歌曲无可用歌词时由 View Selector 临时选择 Cover，不得把该 effective view 回写为用户偏好。播放器 3×4 区的 `View` Action 更新偏好后只标记 Session dirty，继续沿用 cooperative A/B 保存，不在按键处理路径同步写 SD。
 
-启动恢复只读取 Queue / Session，不打开 Decoder、不向 Speaker 提交 PCM。当前歌曲缺失时沿当前 order 寻找下一首有效 MP3 并以 `Paused @ 0` 恢复；全部缺失则安全进入 Empty。CRC 错误、截断记录或未知 schema 不触发重启循环。
+启动恢复只读取 Queue / Session，不打开 Decoder、不向 Speaker 提交 PCM。当前歌曲缺失时沿当前 order 寻找下一首当前已支持的音频并以 `Paused @ 0` 恢复；全部缺失则安全进入 Empty。CRC 错误、截断记录或未知 schema 不触发重启循环。
+
+是否按断电间隔决定恢复精确 position 尚未冻结。除非能从官方硬件能力或真机验证得到可靠时间来源，否则 V1 继续采用“恢复最后 checkpoint 并保持 Pause”，不猜测断电时长。
 
 ---
 
@@ -623,7 +635,7 @@ Metadata 读取不能造成长时间播放卡顿。
 
 V1 不要求运行时解码传统 Album Art；Color ASCII Cover 使用 PC 预生成资源。有歌词时它是可手动选择的第二视图，无歌词时是唯一有效视图。
 
-P2 的 Metadata Reader 按需、cooperative 解析 ID3v2.3 / v2.4 的 `TIT2 / TPE1 / TALB / TRCK`，支持常见 ISO-8859-1、UTF-16 和 UTF-8 文本。单步最多读取 512 bytes，APIC 只跳过而不加载。Title 缺失时回退为去掉 `.mp3` 扩展名的文件名。P2 验证 CJK UTF-8 字节正确，字形显示留给 P3 Font / UI Gate。
+P2 的 Metadata Reader 按需、cooperative 解析 MP3 ID3v2.3 / v2.4 的 `TIT2 / TPE1 / TALB / TRCK`，支持常见 ISO-8859-1、UTF-16 和 UTF-8 文本。单步最多读取 512 bytes，APIC 只跳过而不加载。Title 缺失时回退为去掉音频扩展名的文件名。P2 验证 CJK UTF-8 字节正确，字形显示留给 P3 Font / UI Gate；FLAC / WAV Metadata adapter 随对应 Decoder 一起实现，不能假装复用 ID3 解析即可覆盖所有格式。
 
 ### 8.1 Recent Tracks
 
@@ -688,9 +700,9 @@ effectiveView =
 
 行为规则：
 
-- `V` 仅在 Now Playing 页面切换 Content Stage；其他页面 no-op，不暗中改变偏好；
-- 有可用歌词时，`V` 执行 Lyrics ↔ Cover，并更新 `preferredNowPlayingView`；
-- 无可用歌词时，`V` no-op；可以显示短暂、非阻塞的 `No lyrics` 提示，但不是必做项；
+- `View` Action 仅由播放器页面的 3×4 区派发；其他页面不暗中改变偏好；
+- 有可用歌词时，`View` 执行 Lyrics ↔ Cover，并更新 `preferredNowPlayingView`；
+- 无可用歌词时，`View` no-op；可以显示短暂、非阻塞的 `No lyrics` 提示，但不是必做项；
 - 偏好为 Lyrics、当前歌曲无歌词时只临时显示 Cover，不修改偏好；下一首有歌词时自动回到 Lyrics；
 - 偏好为 Cover 时，无论是否有歌词都显示 Cover；
 - 切换只将 Content Stage 标记为 dirty；Header / Footer 不重建，资源加载继续 cooperative；
@@ -703,8 +715,12 @@ V1 解析标准逐行 LRC。
 文件约定：
 
 ```text
-song.lrc
-song.zh.lrc
+/Lyrics/<relative>/<basename>.lrc
+/Lyrics/<relative>/<basename>.zh-Hans.lrc
+/Lyrics/<relative>/<basename>.zh-Hant.lrc
+/Lyrics/<relative>/<basename>.en.lrc
+/Lyrics/<relative>/<basename>.ja.lrc
+/Lyrics/<relative>/<basename>.ko.lrc
 ```
 
 概念数据模型：
@@ -748,14 +764,15 @@ ASCII 生成由 PC 工具完成，不占用 ESP32 实时图像处理预算。
 
 PC Tool 负责：
 
-- 递归处理音乐库；
-- 找 `cover.jpg` / `folder.jpg`；
-- 必要时读取 MP3 ID3 / Embedded Cover；
+- 按 `/Music` 的相对路径和 basename 查找 `/CoverSource` 下对应 JPG / PNG；
 - 转彩色 ASCII；
 - 输出电脑 Preview；
-- 输出设备端预渲染 RGB565。
+- 为每首歌曲输出独立 `/ADVWalkman/covers/<relative>/<basename>.cover.adv`；
+- 不建立 Album / Folder 共享封面或运行时 fallback 数据库。
 
 初始网格候选：26×20 / 30×24 / 34×26，默认先测 30×24。
+
+`.cover.adv` 使用小型 Header（Magic / Width / Height / Pixel Format）加 RGB565 Pixels。候选画布约 120×144 px，需在 135×240 逻辑竖屏真机原型中与 Header / Footer 一起校准，不在文档阶段伪装成固定像素规格。
 
 设备侧优先：
 
@@ -765,15 +782,30 @@ read RGB565 → push image
 
 而不是运行时逐字符转换。
 
-### 9.8 Other Screens
+### 9.8 Page Model and Other Screens
 
-Library / Queue / Sound / Settings 使用低复杂度列表 UI。共同原则：方向键导航、Enter 确认、Esc 返回、当前音乐继续播放、不做持续动画、Dirty / Throttled Redraw、UI 不阻塞音频。
+V1 只有四个实际页面：播放器、播放列表、曲库、设置；不增加额外 Home、独立 Queue 页面或独立 Sound 页面。
+
+启动路由：存在有效恢复歌曲时进入播放器并保持 Paused；无有效状态或全部歌曲失效时进入曲库。恢复流程仍不得打开 Decoder 或提交 PCM，第一次 Play 才实际出声。
+
+```text
+播放器 --Esc--> 播放列表 --Esc--> 曲库
+曲库 --S--> 设置 --Esc--> 曲库
+```
+
+曲库是最外层内容页，Esc no-op。播放状态跨页面持续，但完整 3×4 控制只属于播放器页面。
+
+曲库页面采用上方独立曲库封面、下方横向黑胶唱片堆叠选择带。当前项以上浮为主要高亮，可辅以提高亮度和露出更多标签；短名允许沿圆弧排列。Left / Right 切换、Enter 进入播放列表，动画必须 Dirty / Throttled、短且不阻塞音频。尺寸、圆弧角度、重叠比例和时长由 P3 真机校准。
+
+播放列表采用低复杂度标准列表：Up / Down 选择、Enter 播放并进入播放器、Esc 返回曲库；至少显示序号、Title、选择高亮和可选的正在播放标识。底层可以复用 P1 Queue，但 UI 不改变 Queue / Session 语义。
+
+设置仅包含 Brightness、Screen Timeout、About / Version 和 Return to Launcher，不为填充页面增加项目。
 
 ### 9.9 Screen-off
 
 Screen Off 等同 V1 Soft Lock：所有按键原功能暂时失效；首次任意键只唤醒且事件不向 Player / UI Action 派发；亮屏后第二次按键才正常派发。
 
-该规则同样覆盖 `V`：息屏状态第一次按 `V` 只唤醒，不能同时切换 View。
+该规则同样覆盖 `View`：息屏状态第一次按对应物理键只唤醒，不能同时切换 View。
 
 建议 Timer：
 
@@ -800,95 +832,65 @@ Headphone Jack Up（耳机孔朝上）
 
 UI 与按键布局都应以这一姿态作为重要设计输入。
 
-### 10.2 功能分层
+### 10.2 Player-page 3×4 Blind Zone
 
-按键分成三类：
-
-```text
-数字键
-→ 高频播放控制 + 音效直选
-
-字母键
-→ 页面跳转 + 播放模式 + Now Playing 视图
-
-方向键 / Enter / Esc
-→ UI 导航与确认
-```
-
-UI 功能键不被重新占用为媒体键。
-
-### 10.3 数字键
+专用映射只在播放器页面生效。以耳机孔为顶部，使用最靠近耳机孔的三排、每排四颗；以下 `1–12` 是物理位置编号，不是键帽字符：
 
 ```text
-0  Volume +
-9  Previous
-8  Play / Pause
-7  Next
-6  Volume -
-
-5  Reserved
-
-4  Vocal Clear
-3  Radio
-2  Tape
-1  Original
+1  Volume +       2  Play/Pause  3  Play/Pause  4  Previous
+5  Volume -       6  View        7  Play Mode   8  Next
+9  Original      10  Tape       11  Radio      12  Vocal Clear
 ```
 
 规则：
 
-- `0–6` 的播放控制按耳机孔朝上竖持时的物理方向排列；
-- `5` 保留，不为填满键盘而强行分配；
-- `1–4` 直接切换四个互斥 Sound Preset；
-- 快捷键调用 Player / Sound 层，不直接操作 Audio Backend。
+- 2 / 3 故意重复 Play/Pause，扩大盲操命中区域；
+- Sound Preset 使用四颗物理键直接选择，不经过循环页；
+- `View` 只派发 Now Playing View Action；无歌词时保持 Cover；
+- 这些 Action 调用 Player / UI / Sound 层，不直接操作 Audio Backend；
+- 离开播放器页面立即停用该映射；旧数字列及 `H/L/Q/R/S/V` 全局快捷键不得重新出现。
 
-### 10.4 字母快捷键
+### 10.3 Play Mode Projection
 
-```text
-H  Now Playing / Home
-L  Library
-Q  Queue
-R  Repeat Mode
-S  Shuffle
-V  View（仅 Now Playing：Lyrics ↔ Cover）
-```
-
-`R`：
+UI 只暴露四个互斥状态：
 
 ```text
-Off → Repeat All → Repeat One → Off
+Normal → Repeat One → Repeat All → Shuffle → Normal
 ```
 
-`S`：
+P1 内部 `RepeatMode` 与 `Shuffle` 两维状态模型保持不变，由 UI 原子映射：
 
 ```text
-Shuffle Off ↔ Shuffle On
+Normal      = Repeat Off + Shuffle Off
+Repeat One  = Repeat One + Shuffle Off
+Repeat All  = Repeat All + Shuffle Off
+Shuffle     = Repeat Off + Shuffle On
 ```
 
-`V` 只在 Now Playing 且有可用歌词时切换并保存偏好；其他页面或无歌词歌曲不改变偏好。Text Input 中仍作为普通字母输入。
+因此不需要迁移既有 Queue / Session schema，也不允许暴露复杂 Repeat + Shuffle 组合。Shuffle 完成一轮后按 Repeat Off 语义停止。
 
-### 10.5 UI 导航键
+### 10.4 Normal-page Input
+
+播放列表、曲库、设置使用普通 UI 映射：
 
 - Arrow Keys：方向导航；
 - Enter / OK：确认；
-- Esc：返回；
-- Tab / Modifier Keys 等默认保留原本语义，后续 UI 需要时再定义。
+- Esc：按页面层级返回；
+- 曲库页面额外识别 `S → Settings`；
+- 曲库 Esc no-op；
+- 播放器 Esc 返回播放列表；播放列表 Esc 返回曲库；设置 Esc 返回曲库。
 
-### 10.6 Context（上下文）
+如果以后出现真正的 Text Input，字母和数字恢复普通输入，方向键、Enter、Esc 继续维持 UI 语义。
 
-普通播放器状态：
+### 10.5 Screen-off Input Gate
 
-- 数字 / 字母快捷键生效。
+Screen Off 状态在所有页面先于 Context Keymap 处理：第一次任意键只唤醒并吞掉事件，第二次按键才派发。因此第一次按 Volume、Play、Next、Sound、Play Mode 或 View 都不能同时执行功能。
 
-Text Input（文本输入）状态：
-
-- 字母和数字恢复普通输入；
-- 播放器快捷键暂时关闭；
-- 方向键、Enter、Esc 继续维持 UI 语义。
-
-### 10.7 尚待 UI / System 阶段确认
+### 10.6 尚待 UI / System 阶段确认
 
 - Lock（锁键）；
 - 长按 / 组合键是否有必要；
+- 3×4 物理位置到 M5Cardputer 键盘事件的最终映射与去抖参数；
 - 特殊页面是否需要额外上下文行为。
 
 ---

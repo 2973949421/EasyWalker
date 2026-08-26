@@ -1,6 +1,6 @@
 # ADV Walkman PRD
 
-> 版本：V0.2  
+> 版本：V0.3
 > 状态：V1 Design Baseline  
 > 工作名：ADV Walkman
 
@@ -91,7 +91,7 @@ V1 只实现已经明确有价值的能力。
 
 可使用任意多层文件夹组织。
 
-播放器打开音乐库、进入目录、选择歌曲并播放。
+播放器从曲库进入对应播放列表，选择歌曲后进入播放器页面并播放。曲库可以代表用户定义的歌单、分类或文件集合，不强制等同于 Album。
 
 ### 4.2 口袋使用
 
@@ -113,6 +113,8 @@ V1 只实现已经明确有价值的能力。
 - 用户上次选择的 Now Playing 视图偏好。
 
 恢复后默认保持 Pause，不自动播放。
+
+V1 最低可行行为仍是恢复保存的位置并保持 Pause。是否只在短时间断电 / 重启后恢复精确进度，取决于 ADV 能否可靠判断断电间隔，尚未冻结；不能为了实现时间窗口而猜测设备具备可靠 RTC。
 
 ### 4.4 音效
 
@@ -136,13 +138,20 @@ V1 固定四种预设：
 
 V1 不做 Surround / Spatial Audio（环绕 / 空间音频），因为原生 ES8311 输出为单声道。后续如增加外置立体声音频 Backend，再重新评估。
 
+### 4.5 启动页面
+
+- 有有效恢复歌曲时直接进入播放器页面，加载上次状态并保持 Pause；
+- 第一次使用、状态损坏、SD 或歌曲缺失且无法恢复时进入曲库页面；
+- 启动不得因为恢复 UI 状态而自动出声。
+
 ---
 
 ## 5. V1 功能范围
 
 ### 5.1 Audio（音频）
 
-- MP3 播放
+- V1 优先支持 MP3 / FLAC / WAV
+- 当前已验证的正式播放主路径为 MP3；FLAC / WAV 在后续 V1 兼容任务中接入，不重新选择 Audio Backend
 - 目标支持最高 320 kbps
 - 常见 44.1 kHz / 48 kHz 音源
 - CBR / VBR 作为兼容目标
@@ -185,14 +194,13 @@ V1 不做 Surround / Spatial Audio（环绕 / 空间音频），因为原生 ES8
 
 ### 5.4 UI
 
-计划保留五个核心页面：
+V1 保留四个实际页面，不增加额外主页：
 
 ```text
-Now Playing（正在播放）
-Library（音乐库）
-Queue（播放队列）
-Sound（音效）
-Settings（设置）
+播放器页面
+播放列表页面
+曲库页面
+设置页面
 ```
 
 V1 视觉方向、主要布局和导航以本文件第 8 章为设计基线；只允许在真机原型中做小范围校准。
@@ -208,14 +216,26 @@ Now Playing 的 Content Stage 在歌曲有可用歌词时允许用户在 Lyrics 
 - 可返回 M5Launcher
 - 不依赖网络完成核心播放功能
 
+### 5.6 Media Resources（媒体资源）
+
+- 音频位于 `/Music/`
+- 本地歌词位于 `/Lyrics/`
+- 可选 JPG / PNG 封面源位于 `/CoverSource/`，主要供 PC 工具处理
+- 设备端彩色 ASCII Cover 位于 `/ADVWalkman/covers/`
+- 不同资源根目录使用相同相对目录结构和 basename 机械匹配
+- V1 不使用 AI 猜歌名、模糊标题匹配、UUID、Hash 数据库或 JSON Manifest
+- 每首歌曲拥有独立设备封面，不进行专辑 / Folder 公共封面去重
+- 每个曲库拥有独立曲库封面；曲库封面与歌曲封面不互相继承
+- 同一目录内不同音频不得使用完全相同 basename；不同版本应在文件名中明确区分
+
 ---
 
 ## 6. V1 Out of Scope
 
 以下不作为 V1 目标：
 
-- FLAC
 - AAC / M4A
+- OGG / Opus
 - 24bit / 96kHz
 - 外置 DAC
 - 外置 Codec
@@ -254,6 +274,9 @@ V1 至少应达到：
 11. 设备可在 Launcher 工作流中正常安装、启动和返回。
 12. 不存在持续性明显 Heap 泄漏或长时间播放后崩溃。
 13. 有歌词歌曲可在 Lyrics / Color ASCII Cover 间切换；无歌词歌曲不会进入空白 Lyrics 页面，切换不干扰播放。
+14. 曲库、播放列表、播放器和设置之间按冻结层级导航；跨页面不会意外停止当前音乐。
+15. 歌词和设备封面可通过相同相对路径与 basename 稳定匹配，不依赖模糊识别或网络服务。
+16. MP3 / FLAC / WAV 达到 V1 最终兼容目标；其中 MP3 的既有稳定性标准不因增加格式而降低。
 
 ---
 
@@ -274,6 +297,16 @@ V1 UI 不使用 IMU 自动旋转。用户如需更自然地阅读旋转后的英
 ### 8.2 Now Playing
 
 Now Playing 是 V1 最重要的界面。
+
+只有播放器页面启用顶部 3×4 盲操区。以耳机孔为顶部，从最靠近耳机孔的三排、每排四颗按位置定义为：
+
+```text
+Vol +       Play/Pause  Play/Pause  Previous
+Vol -       View        Play Mode   Next
+Original    Tape        Radio       Vocal Clear
+```
+
+`Play Mode` 按 `Normal → Repeat One → Repeat All → Shuffle → Normal` 循环。双 Play/Pause 是刻意扩大最高频功能的盲操命中区。这里的布局按物理位置冻结，不以键帽字符或旧数字快捷键表达。
 
 基本结构：
 
@@ -311,7 +344,7 @@ Footer        约 30 px
 无可用歌词                         → Color ASCII Cover
 ```
 
-用户在 Now Playing 按 `V` 时，只在 Lyrics 与 Cover 间切换 Content Stage，并更新：
+用户按 3×4 区中的 `View` 时，只在 Lyrics 与 Cover 间切换 Content Stage，并更新：
 
 ```text
 preferred_now_playing_view = LYRICS | COVER
@@ -319,7 +352,7 @@ preferred_now_playing_view = LYRICS | COVER
 
 默认值为 `LYRICS`，该偏好跨歌曲并在重启后恢复。实际显示视图按当前歌曲是否有可用歌词计算：当偏好为 Lyrics 但当前歌曲没有可用歌词时，临时显示 Cover，不得把用户偏好改写为 Cover；下一首重新有歌词时自动恢复 Lyrics。
 
-无歌词时按 `V` 不切换，也不进入空白 Lyrics 页面。最低实现可以直接无动作；允许短暂显示非阻塞的 `No lyrics` 提示，但提示不是 V1 必做项。
+无歌词时按 `View` 不切换，也不进入空白 Lyrics 页面。最低实现可以直接无动作；允许短暂显示非阻塞的 `No lyrics` 提示，但提示不是 V1 必做项。
 
 View 切换不得改变当前歌曲、播放 / 暂停、进度、Queue、Sound Preset 或 Volume。Header 与 Footer 不随 Content Stage 切换而变化。
 
@@ -345,16 +378,20 @@ Footer 在歌词 / ASCII 两种状态下保持稳定。
 - 使用本地离线歌词；
 - 采用逐行同步，不做逐字 Karaoke。
 
-推荐文件：
+歌词与音频分目录保存，并镜像 `/Music` 下的相对路径。推荐文件：
 
 ```text
-song.mp3
-song.lrc
-song.zh.lrc
+/Music/<relative>/<song>.<audio>
+/Lyrics/<relative>/<song>.lrc
+/Lyrics/<relative>/<song>.zh-Hans.lrc
+/Lyrics/<relative>/<song>.zh-Hant.lrc
+/Lyrics/<relative>/<song>.en.lrc
+/Lyrics/<relative>/<song>.ja.lrc
+/Lyrics/<relative>/<song>.ko.lrc
 ```
 
 - `.lrc`：原歌词或歌曲主要歌词；
-- `.zh.lrc`：中文翻译；
+- 语言后缀文件：对应语言或翻译；
 - 中文歌曲可以只有 `.lrc`。
 
 双语配对：
@@ -421,13 +458,11 @@ Color ASCII Cover 是 Now Playing 的第二种 Content Stage：有歌词时可�
 PC 批处理：
 
 ```text
-扫描 Music
-→ 找 cover.jpg / folder.jpg
-→ 如无则尝试从 MP3 ID3 APIC 提取封面
+读取 /CoverSource 下与歌曲相同相对路径和 basename 的 JPG / PNG 源文件
 → 缩放
 → 转彩色 ASCII
 → 预渲染
-→ 输出 ADV 直接使用的数据
+→ 输出 /ADVWalkman/covers/<relative>/<song>.cover.adv
 ```
 
 初始测试网格：
@@ -438,32 +473,54 @@ PC 批处理：
 
 真机选出合适密度后批量统一处理。
 
-推荐输出：
+推荐设备输出：
 
 ```text
-cover_ascii_preview.png
-cover_ascii.rgb565
+<basename>.cover.adv
 ```
 
-ADV 直接读取预渲染 RGB565，不现场执行图片→ASCII 转换。按专辑生成一次即可。Pixel Cover 作为 Later 选项。
+文件可包含 Magic、Width、Height、Pixel Format 和 RGB565 Pixels。候选像素画布约 `120×144`，仍需结合 135×240 逻辑竖屏和 Header / Footer 真机校准。ADV 直接读取预渲染 RGB565，不现场执行图片→ASCII 转换。每首歌曲拥有独立设备封面，即使专辑内封面重复也不去重。Pixel Cover 作为 Later 选项。
 
 ### 8.5 Library
 
-V1 使用简单列表 UI：Folder / Subfolder / Track / 当前选择高亮。
+曲库是 V1 最外层内容页面，不使用普通文件列表或封面墙。视觉采用：
 
-- Arrow：移动
-- Enter：进入文件夹 / 播放歌曲
-- Esc：返回上一级
+```text
+上方：当前曲库的独立大封面
+下方：横向叠放的黑胶唱片选择带
+```
+
+当前唱片轻微上浮作为主要高亮，同时允许更亮、露出更多标签区域。曲库短名可沿唱片圆弧排列；具体字号、角度、重叠比例和动画时长留给真机原型。切换动画必须短而轻，不能影响音频。
+
+- Left / Right：切换曲库
+- Enter：进入当前曲库的播放列表
+- `S`：进入设置页面
+- Esc：不继续退出
 
 浏览 Library 时当前音乐继续播放，不得因为打开目录而主动 Stop Audio。
 
-### 8.6 Queue
+曲库封面与歌曲封面是两类独立资源，不从第一首歌曲或其他隐式规则继承。曲库封面的最终文件命名与存放目录尚未冻结，但必须每个曲库独立且可机械查找。
 
-简单列表：当前歌曲高亮，可查看前后歌曲，选择某首可直接播放。V1 不做复杂拖拽或大型队列编辑系统。
+### 8.6 播放列表
 
-### 8.7 Sound
+V1 采用整洁、清楚的标准歌曲列表，至少显示曲库名称、歌曲序号、歌名、当前选择高亮，并允许为正在播放歌曲增加标识。空间允许时可显示 Artist，但不牺牲主要可读性。
 
-只显示四个固定 Preset：Original / Tape / Radio / Vocal Clear。当前 Preset 高亮，数字 `1–4` 仍可全局直选。
+```text
+Up / Down → 选择歌曲
+Enter     → 播放并进入播放器页面
+Esc       → 返回曲库页面
+```
+
+播放列表不是播放器页面，不复制 3×4 播放控制，也不建设独立 Sound 页面或额外 Queue 页面。底层仍复用 P1 Queue；这一页面是用户浏览和选曲的产品视图，不改变既有 Queue / Session 语义。
+
+### 8.7 跨页面播放与返回
+
+```text
+播放器 --Esc--> 播放列表 --Esc--> 曲库
+曲库 --S--> 设置 --Esc--> 曲库
+```
+
+音频状态可以跨页面持续，退出播放器或播放列表不会自动 Stop。完整播放控制只属于播放器页面；播放列表、曲库和设置立即恢复普通方向键 / Enter / Esc 输入。
 
 ### 8.8 Settings
 
@@ -487,16 +544,28 @@ Screen Off 时：
 - 该按键事件被吞掉；
 - 屏幕亮起后第二次按键才执行正常功能。
 
-因此息屏状态第一次按 `V` 只唤醒并吞掉事件，不切换 View；屏幕亮起后再次按 `V` 才按正常规则处理。
+因此息屏状态第一次按 `View` 只唤醒并吞掉事件，不切换 View；屏幕亮起后再次按 `View` 才按正常规则处理。
 
 建议基线：
 
 - 正常播放约 15 秒无 UI 操作自动息屏；
 - 息屏被唤醒后约 5 秒无后续操作再次息屏。
 
-### 8.10 Text Input Context
+### 8.10 Input Context
 
-真正进入文本输入状态时：
+播放器页面：
+
+- 仅顶部 3×4 物理区使用专用盲操映射；
+- Esc 保持返回播放列表；
+- 不恢复旧 `H/L/Q/R/S/V` 全局快捷键。
+
+播放列表、曲库和设置：
+
+- Arrow / Enter / Esc 使用普通 UI 语义；
+- 曲库额外识别 `S → Settings`；
+- 其他页面的 `S` 不进入设置。
+
+如果未来真正进入文本输入状态：
 
 - 数字 / 字母恢复正常输入；
 - 媒体快捷键暂时关闭；

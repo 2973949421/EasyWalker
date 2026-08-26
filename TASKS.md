@@ -254,7 +254,7 @@ AC：
 - [x] 多层目录
 - [x] 中文路径
 - [x] 隐藏文件过滤
-- [x] 非 MP3 文件不进入 V1 可播放列表
+- [x] P2 已实现阶段非 MP3 文件不进入可播放列表；FLAC / WAV 暴露由 P6-04 在 Decoder 可用后统一扩展
 - [x] 播放时浏览目录不主动 Stop Audio
 
 实现与 PC Fixture 验收已通过。2026-08-26 的 `0.4.2-p2.gate` 真机日志独立确认：根目录边界、多层中文路径、过滤、自然排序、当前文件夹 Queue、Queue pin 与播放中浏览全部通过；P2-02 后续失败不回滚该项结果。
@@ -349,7 +349,8 @@ Status: TODO
 
 AC：
 
-- [ ] 支持逐行 LRC 和可选 `song.zh.lrc`
+- [ ] 从 `/Lyrics/` 按 `/Music/` 相对路径和 basename 机械匹配逐行 LRC
+- [ ] 支持基础 `<basename>.lrc` 以及 `zh-Hans / zh-Hant / en / ja / ko` 语言后缀
 - [ ] 时间戳初始容差约 300 ms
 - [ ] 中文 / CJK 竖排
 - [ ] 英文字形逐 glyph 旋转 90°后纵向排列
@@ -385,15 +386,16 @@ Status: TODO
 
 AC：
 
-- [ ] 递归扫描音乐库
-- [ ] 优先识别 `cover.jpg` / `folder.jpg`
-- [ ] 无独立封面时可尝试从 MP3 ID3 APIC 提取
+- [ ] 递归扫描 `/Music` 并按相同相对路径 / basename 查找 `/CoverSource` 中的 JPG / PNG
 - [ ] 生成彩色 ASCII
 - [ ] 同时输出电脑 Preview
-- [ ] 输出 ADV 直接读取的预渲染 RGB565
-- [ ] 按专辑生成一次
+- [ ] 为每首歌曲输出独立 `/ADVWalkman/covers/<relative>/<basename>.cover.adv`
+- [ ] `.cover.adv` 包含可验证的 Magic / Width / Height / Pixel Format 与 RGB565 Pixels
+- [ ] 不建立 Album / Folder 公共封面、模糊匹配、Hash 数据库或 JSON Manifest
+- [ ] 同目录重复 basename 明确报冲突，不猜测应该绑定哪一个音频版本
 - [ ] 初始支持 26×20 / 30×24 / 34×26 三档
 - [ ] 默认先测试 30×24
+- [ ] 约 120×144 px 仅作为候选设备画布，真机允许校准
 - [ ] 批处理可重复运行，不需要 Agent 逐张介入
 
 ---
@@ -419,35 +421,45 @@ Status: TODO
 
 AC：
 
-- [ ] 文件夹 / 歌曲简单列表
-- [ ] Arrow 导航、Enter 进入 / 播放、Esc 返回
-- [ ] 当前选择高亮
+- [ ] 上半区显示当前曲库的独立大封面
+- [ ] 下半区显示横向叠放的黑胶唱片选择带
+- [ ] Left / Right 切换曲库，Enter 进入对应播放列表
+- [ ] 当前唱片以上浮为主要高亮，并可辅以更亮 / 露出更多标签
+- [ ] 曲库短名支持沿圆弧排版；字号、角度和重叠比例允许真机校准
+- [ ] `S` 进入设置，Esc 在曲库页不继续退出
+- [ ] 曲库封面与歌曲封面相互独立，不隐式继承第一首歌曲封面
 - [ ] 浏览不主动停止当前音乐
+- [ ] 切换动画短、轻，不造成可感知音频卡顿
 
 ---
 
-## P3-08 Queue UI
+## P3-08 Playlist UI
 
 Status: TODO
 
 AC：
 
-- [ ] 当前歌曲高亮
-- [ ] 可浏览前后队列
-- [ ] 可选择某首直接播放
-- [ ] V1 不要求复杂重排
+- [ ] 标准列表显示当前曲库名称、歌曲序号、Title 和选择高亮
+- [ ] 正在播放歌曲可有独立标识；Artist 仅在不牺牲可读性时显示
+- [ ] Up / Down 选择，Enter 播放并进入播放器页面
+- [ ] Esc 返回曲库并尽量保持原曲库位置
+- [ ] 底层复用 P1 Queue，但不建设独立 Queue 页面或复杂重排 UI
 
 ---
 
-## P3-09 Sound UI
+## P3-09 Page Navigation & Cross-page Playback
 
 Status: TODO
 
 AC：
 
-- [ ] 显示 Original / Tape / Radio / Vocal Clear
-- [ ] 当前 Preset 高亮
-- [ ] 与数字 1–4 的全局切换保持一致
+- [ ] 实际页面固定为播放器 / 播放列表 / 曲库 / 设置，无额外主页
+- [ ] 播放器 Esc → 播放列表；播放列表 Esc → 曲库
+- [ ] 曲库 `S` → 设置；设置 Esc → 曲库；曲库 Esc no-op
+- [ ] 页面返回尽量保持当前歌曲、曲库和列表选择位置
+- [ ] 音频跨页面持续，不因退出播放器或列表而 Stop
+- [ ] 完整播放控制只在播放器页面，不复制到其他页面
+- [ ] 有有效恢复歌曲时启动进入播放器并保持 Pause；无有效状态时进入曲库
 
 ---
 
@@ -487,8 +499,8 @@ Status: TODO
 
 AC：
 
-- [ ] 有可用歌词时可通过 `V` 在 Lyrics / Color ASCII Cover 间切换
-- [ ] 无可用歌词时始终显示 Cover，按 `V` 不进入空白 Lyrics 页面
+- [ ] 有可用歌词时可通过播放器 3×4 区的 `View` 在 Lyrics / Color ASCII Cover 间切换
+- [ ] 无可用歌词时始终显示 Cover，按 `View` 不进入空白 Lyrics 页面
 - [ ] `preferredNowPlayingView` 默认 Lyrics，只在用户成功切换时更新
 - [ ] View 偏好跨歌曲保留
 - [ ] 无歌词导致的临时 Cover 不覆盖用户偏好；下一首有歌词时按偏好恢复 Lyrics
@@ -496,104 +508,87 @@ AC：
 - [ ] Header / Footer 在切换时保持不变，只重绘 Content Stage
 - [ ] 切换不影响当前歌曲、播放状态、进度、Queue、Sound Preset 或 Volume
 - [ ] 切换和 Cover / Lyrics 资源读取不造成可感知音频卡顿
-- [ ] `V` 在其他页面不暗中改变偏好
+- [ ] 其他页面不派发 `View` Action，也不暗中改变偏好
 - [ ] 无歌词提示若实现，必须轻量且非阻塞；提示本身不是 V1 必做项
 
 ---
 
 # P4 — Keymap
 
-## P4-01 Global Navigation Semantics
+## P4-01 Input Context Router
 
 Status: TODO
 
 AC：
 
-- [ ] `↑ ↓ ← →` 保持 UI 导航语义
-- [ ] `Enter / OK` 保持确认 / 进入语义
-- [ ] `Esc` 保持返回 / 退出语义
-- [ ] 不用媒体快捷键覆盖上述核心导航键
+- [ ] 3×4 专用映射只在播放器页面生效
+- [ ] 离开播放器页面立即恢复普通键盘映射
+- [ ] 播放列表、曲库、设置中 Arrow / Enter / Esc 保持 UI 语义
+- [ ] 曲库页面单独识别 `S → Settings`，其他页面的 `S` 不进入设置
+- [ ] 旧数字列和 `H/L/Q/R/S/V` 全局快捷键不再生效
 
 ---
 
-## P4-02 Numeric Playback Strip
+## P4-02 Now Playing 3×4 Blind Zone
 
 Status: TODO
 
 目标：
 
-实现耳机孔朝上竖持时的数字列高频控制。
+实现耳机孔朝上竖持时、仅属于播放器页面的顶部三排四列盲操区。以下数字是物理位置编号，不代表键帽字符。
 
 Keymap：
 
 ```text
-0  Volume +
-9  Previous
-8  Play / Pause
-7  Next
-6  Volume -
-
-5  Reserved
-
-4  Vocal Clear
-3  Radio
-2  Tape
-1  Original
+1  Volume +       2  Play/Pause  3  Play/Pause  4  Previous
+5  Volume -       6  View        7  Play Mode   8  Next
+9  Original      10  Tape       11  Radio      12  Vocal Clear
 ```
 
 AC：
 
-- [ ] `0` 调高音量
-- [ ] `6` 调低音量
-- [ ] `9` Previous
-- [ ] `8` Play / Pause
-- [ ] `7` Next
-- [ ] `5` V1 不分配功能
-- [ ] `1–4` 直接切换对应 Sound Preset
-- [ ] 普通 UI 页面中快捷键可控制当前播放，不强制跳转页面
-- [ ] 快捷键不直接耦合 Audio Backend
+- [ ] 1 / 5 为 Volume + / -，4 / 8 为 Previous / Next
+- [ ] 2 / 3 均为 Play / Pause，形成较大的盲操命中区域
+- [ ] 6 为 View，7 为 Play Mode
+- [ ] 9–12 直接选择 Original / Tape / Radio / Vocal Clear
+- [ ] Esc 不属于 3×4 区，仍返回播放列表
+- [ ] 离开播放器页后这 12 个物理位置恢复普通键盘语义
+- [ ] 所有 Action 不直接耦合 Audio Backend
 
 ---
 
-## P4-03 Letter Shortcuts
+## P4-03 Play Mode Action
 
 Status: TODO
 
-Keymap：
+循环顺序：
 
 ```text
-H  Now Playing / Home
-L  Library
-Q  Queue
-R  Repeat Mode
-S  Shuffle
-V  View（仅 Now Playing：Lyrics ↔ Cover）
+Normal → Repeat One → Repeat All → Shuffle → Normal
 ```
 
 AC：
 
-- [ ] `H` 跳转 Now Playing
-- [ ] `L` 跳转 Library
-- [ ] `Q` 跳转 Queue
-- [ ] `R` 按 Off → Repeat All → Repeat One → Off 循环
-- [ ] `S` 切换 Shuffle On / Off
-- [ ] `V` 只切换 Now Playing Content Stage，不改变播放或页面
-- [ ] 无可用歌词或不在 Now Playing 时，`V` 不改变 View 偏好
-- [ ] `V` 与既有 `H / L / Q / R / S`、数字键及导航键不冲突
-- [ ] 不额外占用大量字母键
+- [ ] UI 四态原子映射到既有 `RepeatMode + Shuffle` 两维模型
+- [ ] Normal = Off + Shuffle Off
+- [ ] Repeat One = One + Shuffle Off
+- [ ] Repeat All = All + Shuffle Off
+- [ ] Shuffle = Off + Shuffle On，一轮结束后停止
+- [ ] 不暴露 Repeat + Shuffle 的复杂组合
+- [ ] 切换不重启当前歌曲，Footer 明确反馈当前模式
 
 ---
 
-## P4-04 Text Input Context
+## P4-04 Normal-page Input
 
 Status: TODO
 
 AC：
 
-- [ ] 进入真正的文本输入状态时，数字和字母恢复普通输入
-- [ ] 文本输入时不触发媒体快捷键
-- [ ] 方向键、Enter、Esc 继续按 UI 语义工作
-- [ ] 退出文本输入后恢复播放器快捷键
+- [ ] 播放列表 Up / Down 选择、Enter 播放、Esc 返回曲库
+- [ ] 曲库 Left / Right 选择、Enter 进入列表、S 进入设置、Esc no-op
+- [ ] 设置 Arrow / Enter 操作、Esc 返回曲库
+- [ ] 未来若出现文本输入，数字 / 字母恢复普通输入且不派发播放器 Action
 
 ---
 
@@ -606,7 +601,7 @@ AC：
 - [ ] Screen Off 时全部快捷键原功能失效
 - [ ] 任意键第一次只唤醒屏幕
 - [ ] 唤醒按键事件不继续传递
-- [ ] Screen Off 时第一次按 `V` 只唤醒，不切换 View
+- [ ] Screen Off 时第一次按 `View` 只唤醒，不切换 View
 - [ ] 亮屏后第二次按键才执行
 - [ ] V1 不增加独立 Lock / Unlock 按键
 - [ ] V1 不要求长按或组合键
@@ -719,12 +714,31 @@ AC：
 
 ---
 
+## P6-04 V1 Audio Format Compatibility
+
+Status: TODO
+
+目标：在不重新选择 Candidate A Audio Backend 的前提下，把当前已验证的 MP3 主路径扩展为 V1 的 MP3 / FLAC / WAV 格式集合。
+
+AC：
+
+- [ ] Format Detector 与 format-specific Decoder 不写入 PlayerController 状态机
+- [ ] MP3 既有 320 kbps / CBR / VBR / Seek / Persistence 行为不回归
+- [ ] FLAC 在无 PSRAM 内存预算内稳定解码并正确 Stereo → Mono 下混
+- [ ] WAV 支持最终确认的常见 PCM 组合，不承诺 Hi-Res
+- [ ] Library 只在对应 Decoder 可用后把 `.flac` / `.wav` 暴露为可播放文件
+- [ ] FLAC / WAV Metadata 使用各自适配器，不把 ID3 假装成通用格式
+- [ ] 三种格式共享 DSP、Limiter、Volume 和 Candidate A Backend
+- [ ] 格式切换、Pause / Resume、Next / Previous 不造成崩溃或持续 Heap 下降
+
+---
+
 # Later / Deferred
 
 当前不做：
 
-- FLAC
 - AAC / M4A
+- OGG / Opus
 - 传统图片 Album Art 直接显示（V1 仍保留 PC 预生成 Color ASCII Cover）
 - External Stereo DAC
 - External Codec
