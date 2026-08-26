@@ -265,6 +265,14 @@ PlayerSnapshot PlayerController::snapshot() const {
     result.variableBitrate = engineLoaded_ && audio.variableBitrate;
     result.backpressureEvents = audio.backpressureEvents;
     result.serviceMaxUs = audio.serviceMaxUs;
+    result.pcmFramesSinceReset = audio.pcmFramesSinceReset;
+    result.pcmBuffersSinceReset = audio.pcmBuffersSinceReset;
+    result.pcmSubmitGapMaxUs = audio.pcmSubmitGapMaxUs;
+    result.pcmSubmitGapOver100Ms = audio.pcmSubmitGapOver100Ms;
+    result.pcmLastSubmitAgeUs = audio.pcmLastSubmitAgeUs;
+    result.openMaxUs = audio.openMaxUs;
+    result.repeatRestartMaxUs = audio.repeatRestartMaxUs;
+    result.repeatRestartCount = audio.repeatRestartCount;
     result.trackEndedEvents = trackEndedEvents_;
     result.audioErrorEvents = audioErrorEvents_;
     return result;
@@ -294,6 +302,7 @@ bool PlayerController::currentPath(char* output, size_t outputCapacity) const {
 void PlayerController::resetDiagnostics() {
     trackEndedEvents_ = 0;
     audioErrorEvents_ = 0;
+    engine_.resetDiagnostics();
 }
 
 bool PlayerController::openCurrent(uint32_t positionMs,
@@ -357,7 +366,15 @@ bool PlayerController::handleTrackEnded() {
     deferredSourceByteOffset_ = 0;
 
     if (repeatMode_ == RepeatMode::One) {
-        return openCurrent(0, false);
+        if (!engine_.restartCurrent(false)) {
+            ++audioErrorEvents_;
+            return fail(PlayerError::AudioOpenFailed,
+                        engine_.status().error);
+        }
+        engineLoaded_ = true;
+        clearError();
+        state_ = PlayerState::Playing;
+        return true;
     }
 
     const bool wrapAtEnd = repeatMode_ == RepeatMode::All;

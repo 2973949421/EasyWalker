@@ -19,10 +19,16 @@ class M5SpeakerPcmOutput final : public AudioOutput {
     bool flushForDrain();
     bool isDrained() const;
     void resetDiagnostics();
+    void breakSubmitGapWindow();
 
     uint32_t sampleRateHz() const;
     uint64_t submittedFrames() const;
     uint32_t backpressureEvents() const;
+    uint64_t pcmFramesSinceReset() const;
+    uint32_t pcmBuffersSinceReset() const;
+    uint32_t pcmSubmitGapMaxUs() const;
+    uint32_t pcmSubmitGapOver100Ms() const;
+    uint32_t pcmLastSubmitAgeUs() const;
 
   private:
     static constexpr size_t kFramesPerBuffer = 768;
@@ -38,6 +44,12 @@ class M5SpeakerPcmOutput final : public AudioOutput {
     uint32_t sampleRateHz_ = 0;
     uint64_t submittedFrames_ = 0;
     uint32_t backpressureEvents_ = 0;
+    uint64_t pcmFramesSinceReset_ = 0;
+    uint32_t pcmBuffersSinceReset_ = 0;
+    uint32_t pcmSubmitGapMaxUs_ = 0;
+    uint32_t pcmSubmitGapOver100Ms_ = 0;
+    uint32_t pcmLastSubmitAtUs_ = 0;
+    bool pcmSubmitObservedSinceReset_ = false;
 };
 
 }  // namespace player

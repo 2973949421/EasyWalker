@@ -1,5 +1,7 @@
 #include "player/audio/M5SpeakerPcmOutput.h"
 
+#include <cstdint>
+
 namespace adv_walkman {
 namespace player {
 
@@ -39,6 +41,20 @@ bool M5SpeakerPcmOutput::queueBuffer() {
     }
 
     submittedFrames_ += frames;
+    const uint32_t submittedAtUs = micros();
+    if (pcmSubmitObservedSinceReset_) {
+        const uint32_t gapUs = submittedAtUs - pcmLastSubmitAtUs_;
+        if (gapUs > pcmSubmitGapMaxUs_) {
+            pcmSubmitGapMaxUs_ = gapUs;
+        }
+        if (gapUs > 100000) {
+            ++pcmSubmitGapOver100Ms_;
+        }
+    }
+    pcmLastSubmitAtUs_ = submittedAtUs;
+    pcmSubmitObservedSinceReset_ = true;
+    pcmFramesSinceReset_ += frames;
+    ++pcmBuffersSinceReset_;
     activeBuffer_ = (activeBuffer_ + 1) % kBufferCount;
     bufferIndex_ = 0;
     return true;
@@ -91,6 +107,17 @@ bool M5SpeakerPcmOutput::stop() {
 
 void M5SpeakerPcmOutput::resetDiagnostics() {
     backpressureEvents_ = 0;
+    pcmFramesSinceReset_ = 0;
+    pcmBuffersSinceReset_ = 0;
+    pcmSubmitGapMaxUs_ = 0;
+    pcmSubmitGapOver100Ms_ = 0;
+    pcmLastSubmitAtUs_ = 0;
+    pcmSubmitObservedSinceReset_ = false;
+}
+
+void M5SpeakerPcmOutput::breakSubmitGapWindow() {
+    pcmLastSubmitAtUs_ = 0;
+    pcmSubmitObservedSinceReset_ = false;
 }
 
 uint32_t M5SpeakerPcmOutput::sampleRateHz() const {
@@ -103,6 +130,29 @@ uint64_t M5SpeakerPcmOutput::submittedFrames() const {
 
 uint32_t M5SpeakerPcmOutput::backpressureEvents() const {
     return backpressureEvents_;
+}
+
+uint64_t M5SpeakerPcmOutput::pcmFramesSinceReset() const {
+    return pcmFramesSinceReset_;
+}
+
+uint32_t M5SpeakerPcmOutput::pcmBuffersSinceReset() const {
+    return pcmBuffersSinceReset_;
+}
+
+uint32_t M5SpeakerPcmOutput::pcmSubmitGapMaxUs() const {
+    return pcmSubmitGapMaxUs_;
+}
+
+uint32_t M5SpeakerPcmOutput::pcmSubmitGapOver100Ms() const {
+    return pcmSubmitGapOver100Ms_;
+}
+
+uint32_t M5SpeakerPcmOutput::pcmLastSubmitAgeUs() const {
+    if (!pcmSubmitObservedSinceReset_) {
+        return UINT32_MAX;
+    }
+    return micros() - pcmLastSubmitAtUs_;
 }
 
 }  // namespace player

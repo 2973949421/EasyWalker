@@ -81,6 +81,7 @@ Mp3PlaybackEngine::~Mp3PlaybackEngine() {
 
 bool Mp3PlaybackEngine::begin() {
     closePlaybackImmediate();
+    resetDiagnostics();
     if (!M5.Speaker.isRunning() && !M5.Speaker.begin()) {
         initialized_ = false;
         return fail(AudioError::SpeakerBeginFailed);
@@ -95,16 +96,24 @@ bool Mp3PlaybackEngine::begin() {
 
 bool Mp3PlaybackEngine::open(const char* path, uint32_t positionMs,
                              bool startPaused, uint32_t sourceOffsetHint) {
+    const uint32_t startedUs = micros();
+    const auto finishOpen = [this, startedUs](bool result) {
+        const uint32_t elapsedUs = micros() - startedUs;
+        if (elapsedUs > openMaxUs_) {
+            openMaxUs_ = elapsedUs;
+        }
+        return result;
+    };
     eventPending_ = false;
     if (!initialized_) {
-        return fail(AudioError::NotInitialized);
+        return finishOpen(fail(AudioError::NotInitialized));
     }
     if (path == nullptr || path[0] == '\0') {
-        return fail(AudioError::InvalidArgument);
+        return finishOpen(fail(AudioError::InvalidArgument));
     }
     const size_t pathLength = std::strlen(path);
     if (pathLength >= sizeof(path_)) {
-        return fail(AudioError::PathTooLong);
+        return finishOpen(fail(AudioError::PathTooLong));
     }
 
     closePlaybackImmediate();
@@ -114,24 +123,48 @@ bool Mp3PlaybackEngine::open(const char* path, uint32_t positionMs,
     error_ = AudioError::None;
     positionBaseMs_ = 0;
     sourceByteOffset_ = 0;
-    serviceMaxUs_ = 0;
     drainFlushed_ = false;
     eventPending_ = false;
-    output_.resetDiagnostics();
 
     Mp3ProbeError probeError = Mp3ProbeError::None;
     if (!Mp3Probe::probe(SD, path_, mp3Info_, probeError)) {
-        return fail(probeErrorToAudioError(probeError,
-                                           AudioError::UnsupportedFormat));
+        return finishOpen(fail(probeErrorToAudioError(
+            probeError, AudioError::UnsupportedFormat)));
     }
 
     Mp3SeekPoint point;
     if (!Mp3Probe::seekPoint(SD, path_, mp3Info_, positionMs, point,
                              probeError, sourceOffsetHint)) {
-        return fail(
-            probeErrorToAudioError(probeError, AudioError::SeekFailed));
+        return finishOpen(fail(
+            probeErrorToAudioError(probeError, AudioError::SeekFailed)));
     }
-    return startAt(point, startPaused);
+    return finishOpen(startAt(point, startPaused));
+}
+
+bool Mp3PlaybackEngine::restartCurrent(bool startPaused) {
+    const uint32_t startedUs = micros();
+    ++repeatRestartCount_;
+    const auto finishRestart = [this, startedUs](bool result) {
+        const uint32_t elapsedUs = micros() - startedUs;
+        if (elapsedUs > repeatRestartMaxUs_) {
+            repeatRestartMaxUs_ = elapsedUs;
+        }
+        return result;
+    };
+
+    eventPending_ = false;
+    if (!initialized_) {
+        return finishRestart(fail(AudioError::NotInitialized));
+    }
+    if (path_[0] == '\0' || mp3Info_.sampleRateHz == 0 ||
+        mp3Info_.firstFrameOffset >= mp3Info_.audioEndOffset) {
+        return finishRestart(fail(AudioError::InvalidArgument));
+    }
+
+    Mp3SeekPoint beginning;
+    beginning.byteOffset = mp3Info_.firstFrameOffset;
+    beginning.positionMs = 0;
+    return finishRestart(startAt(beginning, startPaused));
 }
 
 bool Mp3PlaybackEngine::startAt(const Mp3SeekPoint& point,
@@ -233,6 +266,7 @@ bool Mp3PlaybackEngine::pause() {
     }
     // Position is based on submitted PCM and therefore remains frozen while
     // paused without adjusting the seek base or double-counting frames.
+    output_.breakSubmitGapWindow();
     state_ = AudioState::Paused;
     return true;
 }
@@ -301,7 +335,23 @@ AudioStatus Mp3PlaybackEngine::status() const {
     result.variableBitrate = mp3Info_.variableBitrate;
     result.backpressureEvents = output_.backpressureEvents();
     result.serviceMaxUs = serviceMaxUs_;
+    result.pcmFramesSinceReset = output_.pcmFramesSinceReset();
+    result.pcmBuffersSinceReset = output_.pcmBuffersSinceReset();
+    result.pcmSubmitGapMaxUs = output_.pcmSubmitGapMaxUs();
+    result.pcmSubmitGapOver100Ms = output_.pcmSubmitGapOver100Ms();
+    result.pcmLastSubmitAgeUs = output_.pcmLastSubmitAgeUs();
+    result.openMaxUs = openMaxUs_;
+    result.repeatRestartMaxUs = repeatRestartMaxUs_;
+    result.repeatRestartCount = repeatRestartCount_;
     return result;
+}
+
+void Mp3PlaybackEngine::resetDiagnostics() {
+    serviceMaxUs_ = 0;
+    openMaxUs_ = 0;
+    repeatRestartMaxUs_ = 0;
+    repeatRestartCount_ = 0;
+    output_.resetDiagnostics();
 }
 
 void Mp3PlaybackEngine::closePlaybackImmediate() {
@@ -312,6 +362,10 @@ void Mp3PlaybackEngine::closePlaybackImmediate() {
         output_.stop();
         source_.close();
     }
+    // A pause, seek, stop, track change or reopen is a deliberate producer
+    // discontinuity. Keep cumulative diagnostics, but do not count that
+    // transport interval as a continuous-playback PCM submission gap.
+    output_.breakSubmitGapWindow();
     drainFlushed_ = false;
 }
 

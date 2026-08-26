@@ -51,6 +51,14 @@ struct AudioStatus {
     bool variableBitrate = false;
     uint32_t backpressureEvents = 0;
     uint32_t serviceMaxUs = 0;
+    uint64_t pcmFramesSinceReset = 0;
+    uint32_t pcmBuffersSinceReset = 0;
+    uint32_t pcmSubmitGapMaxUs = 0;
+    uint32_t pcmSubmitGapOver100Ms = 0;
+    uint32_t pcmLastSubmitAgeUs = UINT32_MAX;
+    uint32_t openMaxUs = 0;
+    uint32_t repeatRestartMaxUs = 0;
+    uint32_t repeatRestartCount = 0;
 };
 
 const char* audioStateName(AudioState state);

@@ -33,6 +33,7 @@ class Mp3PlaybackEngine final {
     bool begin();
     bool open(const char* path, uint32_t positionMs = 0,
               bool startPaused = false, uint32_t sourceOffsetHint = 0);
+    bool restartCurrent(bool startPaused = false);
     void service();
     bool pause();
     bool resume();
@@ -41,6 +42,7 @@ class Mp3PlaybackEngine final {
     void setVolume(uint8_t volume);
     bool pollEvent(AudioEvent& event);
     AudioStatus status() const;
+    void resetDiagnostics();
 
   private:
     static constexpr size_t kPathCapacity = 512;
@@ -65,6 +67,9 @@ class Mp3PlaybackEngine final {
     uint32_t positionBaseMs_ = 0;
     uint32_t sourceByteOffset_ = 0;
     uint32_t serviceMaxUs_ = 0;
+    uint32_t openMaxUs_ = 0;
+    uint32_t repeatRestartMaxUs_ = 0;
+    uint32_t repeatRestartCount_ = 0;
     uint8_t volume_ = kInitialVolume;
     bool initialized_ = false;
     bool drainFlushed_ = false;
