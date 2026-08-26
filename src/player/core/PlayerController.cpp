@@ -1,5 +1,7 @@
 #include "PlayerController.h"
 
+#include <cstring>
+
 namespace adv_walkman {
 namespace player {
 
@@ -27,6 +29,9 @@ bool PlayerController::replaceQueue(TrackSource& source, size_t startIndex, bool
                                                   : PlayerError::InvalidArgument);
     }
     queue_.setShuffleEnabled(preserveShuffle, preserveShuffle);
+    if (!refreshCurrentPath()) {
+        return fail(PlayerError::TrackPathUnavailable);
+    }
     clearError();
 
     if (queue_.empty()) {
@@ -48,6 +53,9 @@ bool PlayerController::restorePaused(TrackSource& source,
     }
 
     if (!queue_.restore(source, queueSnapshot)) {
+        return false;
+    }
+    if (!refreshCurrentPath()) {
         return false;
     }
 
@@ -271,7 +279,16 @@ const PlaybackQueue& PlayerController::queue() const {
 }
 
 bool PlayerController::currentPath(char* output, size_t outputCapacity) const {
-    return queue_.currentPath(output, outputCapacity);
+    if (output == nullptr || outputCapacity == 0 || !queue_.hasCurrent() ||
+        currentPath_[0] == '\0') {
+        return false;
+    }
+    const size_t length = std::strlen(currentPath_);
+    if (length + 1 > outputCapacity) {
+        return false;
+    }
+    std::memcpy(output, currentPath_, length + 1);
+    return true;
 }
 
 void PlayerController::resetDiagnostics() {
@@ -311,12 +328,27 @@ bool PlayerController::selectAdvancedTrack() {
     if (state_ == PlayerState::Stopped) {
         engine_.stop();
         engineLoaded_ = false;
+        if (!refreshCurrentPath()) {
+            return fail(PlayerError::TrackPathUnavailable);
+        }
         clearError();
         return true;
     }
 
     const bool startPaused = state_ == PlayerState::Paused;
     return openCurrent(0, startPaused);
+}
+
+bool PlayerController::refreshCurrentPath() {
+    if (!queue_.hasCurrent()) {
+        currentPath_[0] = '\0';
+        return true;
+    }
+    if (!queue_.currentPath(currentPath_, sizeof(currentPath_))) {
+        currentPath_[0] = '\0';
+        return false;
+    }
+    return true;
 }
 
 bool PlayerController::handleTrackEnded() {

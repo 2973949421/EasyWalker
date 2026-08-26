@@ -97,6 +97,7 @@ class MusicLibrary final {
     LibraryState state() const;
     LibraryError error() const;
     const char* currentPath() const;
+    uint32_t currentGeneration() const;
     size_t entryCount() const;
     size_t directoryCount() const;
     size_t trackCount() const;

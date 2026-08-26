@@ -177,6 +177,16 @@ const char* MusicLibrary::currentPath() const {
     return kMusicRoot;
 }
 
+uint32_t MusicLibrary::currentGeneration() const {
+    if (state_ != LibraryState::Ready && workSlot_ >= 0) {
+        return slots_[workSlot_].generation;
+    }
+    if (currentSlot_ >= 0) {
+        return slots_[currentSlot_].generation;
+    }
+    return 0;
+}
+
 size_t MusicLibrary::entryCount() const {
     return state_ == LibraryState::Ready && currentSlot_ >= 0
                ? slots_[currentSlot_].entryCount

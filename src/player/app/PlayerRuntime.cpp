@@ -173,6 +173,10 @@ PlayerSnapshot PlayerRuntime::snapshot() const {
     return controller_.snapshot();
 }
 
+bool PlayerRuntime::currentPath(char* output, size_t outputCapacity) const {
+    return controller_.currentPath(output, outputCapacity);
+}
+
 PlayerController& PlayerRuntime::controller() {
     return controller_;
 }
@@ -207,8 +211,18 @@ void PlayerRuntime::requestCheckpoint(bool queueChanged) {
 }
 
 bool PlayerRuntime::persistenceIdle() const {
-    return !stateStore_.pending() && !queueDirty_ && !sessionDirty_ &&
-           !queuePublicationBlocked_;
+    if (stateStore_.pending()) {
+        return false;
+    }
+    if (!stateStoreAvailable_ || persistenceSuspended_ ||
+        queuePublicationBlocked_) {
+        return true;
+    }
+    return !queueDirty_ && !sessionDirty_;
+}
+
+bool PlayerRuntime::queueSourceReleaseSafe() const {
+    return !stateStore_.pending();
 }
 
 void PlayerRuntime::setPersistenceSuspended(bool suspended) {

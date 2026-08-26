@@ -28,6 +28,7 @@ class PlayerRuntime final {
 
     void service();
     PlayerSnapshot snapshot() const;
+    bool currentPath(char* output, size_t outputCapacity) const;
     PlayerController& controller();
     const PlayerController& controller() const;
 
@@ -39,6 +40,10 @@ class PlayerRuntime final {
     // software restart. The write is still cooperative and must be serviced.
     void requestCheckpoint(bool queueChanged = false);
     bool persistenceIdle() const;
+    // A FolderQueueSource may be released once no asynchronous state-store
+    // job can still read it. Dirty/blocked state alone does not retain the
+    // source and must not permanently block selecting a replacement Queue.
+    bool queueSourceReleaseSafe() const;
     void setPersistenceSuspended(bool suspended);
 
   private:

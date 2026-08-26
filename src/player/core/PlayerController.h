@@ -73,6 +73,7 @@ class PlayerController {
                      uint32_t sourceByteOffsetHint = 0);
     bool selectAdvancedTrack();
     bool handleTrackEnded();
+    bool refreshCurrentPath();
     bool fail(PlayerError error, AudioError audioError = AudioError::None);
     void clearError();
     uint32_t currentPositionMs() const;
