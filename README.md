@@ -1,7 +1,7 @@
 # ADV Walkman
 
 > 工作名：ADV Walkman  
-> 当前阶段：P1 Player Core（播放器核心）
+> 当前阶段：P2 Music Library（音乐库引擎）
 > 平台：M5Stack Cardputer ADV
 
 ## 1. 项目是什么
@@ -80,7 +80,7 @@ ESP8266Audio 1.9.7
 → M5Unified Cardputer ADV / ES8311
 ```
 
-当前进入 P1 Player Core，只实现 MP3 Engine、Transport、Queue / Playback Mode 和 SD 状态恢复；Library、正式 UI、歌词、ASCII Cover 与 DSP 仍按 Backlog 后续阶段推进。选型证据见 [`docs/AUDIO_BENCHMARK.md`](docs/AUDIO_BENCHMARK.md)。
+当前进入 P2 Music Library，在已通过真机验收的 P1 Player Core 上实现多层目录、按需扫描、有界缓存、Metadata 和 Recent Tracks。P2 交付 Library Engine 与开发验收入口；实体按键可直接操作的正式 Library UI 仍属于 P3。选型证据见 [`docs/AUDIO_BENCHMARK.md`](docs/AUDIO_BENCHMARK.md)。
 
 ### P1 开发构建
 

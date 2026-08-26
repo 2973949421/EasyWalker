@@ -126,6 +126,24 @@ UI 与 Player / Library 交互，但不能直接控制底层 I2S 生命周期。
 
 V1 不建立复杂数据库。
 
+### P2 行为与边界
+
+- Library 根目录固定为 `/Music`，导航不得逃出该根目录；完整 UTF-8 路径最多 511 bytes，超长报错而不截断。
+- Recursive Folder Browser 表示用户可逐层进入任意深度，不表示启动时递归扫描整库。
+- 当前目录只显示非 dot-hidden 目录和大小写不敏感的 `.mp3`；其他文件不进入 V1 可播放列表。
+- 顺序固定为“文件夹优先 + ASCII 大小写不敏感自然排序”；数字段按数值比较，非 ASCII UTF-8 按原始字节保持稳定顺序。
+- 在 Library 选中 Track 后，Queue 为“当前文件夹内排序后的 MP3”，不递归包含子目录，并从所选 Track 开始。
+- Browser 当前页不直接充当 `TrackSource`。正在播放的 `FolderQueueSource` 必须绑定不可被 LRU 淘汰的稳定目录索引，直到下次 Queue 安全发布。
+- 单目录最多索引 2,048 个“目录 + MP3”条目；单目录超过 1,024 首 MP3 时仍可浏览，但创建 Queue 明确返回 `QueueTooLarge`。
+
+### P2 扫描与缓存
+
+- 当前目录使用 `Open → Scan → Sort → Finalize → Ready / Error` cooperative 状态机；每轮只处理一个目录项或一个有界读写 / 排序步骤。
+- SD session cache 位于 `/ADVWalkman/cache/library/`，使用 4 个目录索引槽；重启后重建，不建设持久化音乐数据库。
+- RAM 使用 3 个 32-entry page 做 LRU，最多驻留 96 个条目。扫描和排序仅保留数字 offset，不将整批路径常驻 RAM。
+- 当前 Queue 的索引槽保持 pinned；新 Queue 在 Player persistence 空闲后再切换，旧索引才可解除 pin。
+- 应用循环始终先 service Player，再做一次有界 Library / Metadata / Recent 工作；无需新增 RTOS task。
+
 ---
 
 ## 4.2 Player
@@ -592,6 +610,15 @@ Metadata 读取不能造成长时间播放卡顿。
 - 不在播放关键路径同步做大量工作。
 
 V1 不要求运行时解码传统 Album Art；无歌词时优先使用 PC 预生成的彩色 ASCII Cover。
+
+P2 的 Metadata Reader 按需、cooperative 解析 ID3v2.3 / v2.4 的 `TIT2 / TPE1 / TALB / TRCK`，支持常见 ISO-8859-1、UTF-16 和 UTF-8 文本。单步最多读取 512 bytes，APIC 只跳过而不加载。Title 缺失时回退为去掉 `.mp3` 扩展名的文件名。P2 验证 CJK UTF-8 字节正确，字形显示留给 P3 Font / UI Gate。
+
+### 8.1 Recent Tracks
+
+- Recent 最多 32 首，最新在前，按规范化完整路径去重。
+- 同一 Track 累计处于 `Playing` 5 秒后记录；Pause 不计时，Seek / Repeat / Resume 不重复置顶。
+- 使用 `/ADVWalkman/state/recent-a.bin` 和 `recent-b.bin` 的 schema v1 / generation / CRC32 A/B 双槽，不为每首歌建独立文件。
+- 缺失路径在读取时安全忽略，下次保存时紧缩。Recent 不替代 P1 Queue / Session。
 
 ---
 
