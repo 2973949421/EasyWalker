@@ -177,6 +177,10 @@ bool PlayerRuntime::currentPath(char* output, size_t outputCapacity) const {
     return controller_.currentPath(output, outputCapacity);
 }
 
+void PlayerRuntime::resetDiagnostics() {
+    controller_.resetDiagnostics();
+}
+
 PlayerController& PlayerRuntime::controller() {
     return controller_;
 }

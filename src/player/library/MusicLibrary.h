@@ -111,6 +111,10 @@ class MusicLibrary final {
     void end();
 
     LibraryResult openRoot();
+    // Opens one absolute directory inside /Music. This is used by the UI to
+    // restore the parent folder of a persisted track without replaying every
+    // path component. openDirectory() performs the root and traversal checks.
+    LibraryResult openPath(const char* path);
     LibraryResult enter(size_t entryIndex);
     LibraryResult parent();
     LibraryResult refreshCurrent();

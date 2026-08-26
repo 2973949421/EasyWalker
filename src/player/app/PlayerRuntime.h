@@ -29,6 +29,7 @@ class PlayerRuntime final {
     void service();
     PlayerSnapshot snapshot() const;
     bool currentPath(char* output, size_t outputCapacity) const;
+    void resetDiagnostics();
     PlayerController& controller();
     const PlayerController& controller() const;
 

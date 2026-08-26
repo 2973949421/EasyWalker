@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$SdRoot,
-    [ValidateSet('Dev', 'P1GateA', 'P1GateB', 'P2Gate')]
+    [ValidateSet('Dev', 'P1GateA', 'P1GateB', 'P2Gate', 'P3AGate')]
     [string]$Target = 'Dev'
 )
 
@@ -26,6 +26,10 @@ $targets = @{
     P2Gate = @{
         Environment = 'player-p2-gate'
         Artifact = 'ADV-Walkman-P2-Gate.bin'
+    }
+    P3AGate = @{
+        Environment = 'player-p3a-gate'
+        Artifact = 'ADV-Walkman-P3A-Gate.bin'
     }
 }
 $targetConfig = $targets[$Target]

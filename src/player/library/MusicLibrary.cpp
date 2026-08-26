@@ -69,6 +69,10 @@ LibraryResult MusicLibrary::openRoot() {
     return openDirectory(kMusicRoot, false);
 }
 
+LibraryResult MusicLibrary::openPath(const char* path) {
+    return openDirectory(path, false);
+}
+
 LibraryResult MusicLibrary::enter(size_t entryIndex) {
     if (state_ != LibraryState::Ready) {
         error_ = LibraryError::NotReady;
