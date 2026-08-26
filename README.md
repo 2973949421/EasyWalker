@@ -47,7 +47,7 @@ V1 聚焦“本地随身播放器”：
 - Queue（播放队列）
 - 顺序 / 随机 / 单曲循环 / 列表循环
 - 熄屏继续播放
-- 关机/重启恢复：歌曲 + 播放位置 + 队列 + 播放模式；恢复后保持 Pause（暂停），不自动出声
+- 关机/重启恢复：歌曲 + 播放位置 + 队列 + 播放模式 + Now Playing 视图偏好；恢复后保持 Pause（暂停），不自动出声
 - 基础 DSP（数字信号处理）框架
 - V1 固定四种互斥音效预设：Original / Tape / Radio / Vocal Clear
 - 用户不手动调参，参数由固件内置
@@ -174,6 +174,7 @@ V1 产品侧主要设计已完成，已足够交付 Codex 正式开工。
 - Keymap 主体
 - 耳机孔朝上竖持的主要使用姿态
 - Now Playing 信息结构
+- Now Playing Lyrics / Color ASCII Cover 双视图与偏好规则
 - 逐行竖排歌词逻辑
 - 中文 / 原文双语歌词规则
 - 彩色 ASCII Cover 方向
@@ -219,7 +220,7 @@ V1 以“耳机孔朝上、设备竖持”为主要播放器使用姿态。
 1  Original
 ```
 
-### 字母快捷键：页面与播放模式
+### 字母快捷键：页面、播放模式与视图
 
 ```text
 H  Now Playing / Home
@@ -227,7 +228,10 @@ L  Library
 Q  Queue
 R  Repeat Mode
 S  Shuffle
+V  View（仅 Now Playing：Lyrics ↔ Cover）
 ```
+
+`V` 只切换 Now Playing 的 Content Stage；在其他页面不暗中改变偏好。无可用歌词时保持 Cover，不进入空白 Lyrics 页面。
 
 ### UI 导航键
 
@@ -254,12 +258,16 @@ Header
 长标题静止约 5 秒后滚动一遍，再停约 5 秒
 
 Content Stage
-有歌词 → 竖排同步歌词
-无歌词 → 彩色 ASCII Cover
+有可用歌词 + 偏好 Lyrics → 竖排同步歌词
+有可用歌词 + 偏好 Cover  → 彩色 ASCII Cover
+无可用歌词                → 彩色 ASCII Cover
+V                          → Lyrics ↔ Cover
 
 Footer
 进度 / Sound Preset / Volume
 ```
+
+Header / Footer 不随 View 切换变化。切换不影响歌曲、播放状态、进度、Queue、Sound Preset 或 Volume。`preferred_now_playing_view` 默认 `LYRICS` 并跨歌曲、跨重启保留；无歌词歌曲临时退化为 Cover 时不覆盖该偏好，下一首重新有歌词后会恢复 Lyrics。
 
 歌词：
 
@@ -271,7 +279,7 @@ Footer
 - 外文歌曲优先支持“中文译文 + 原文”双语；
 - 字体资源优先放 SD。
 
-无歌词：
+Color ASCII Cover：
 
 - PC 端批量生成彩色 ASCII Cover；
 - ADV 不实时转换图片；
@@ -283,5 +291,6 @@ Footer
 - 息屏后所有按键原功能失效；
 - 第一次任意键只唤醒并吞掉该按键；
 - 第二次按键才执行；
+- 因此息屏时第一次按 `V` 只唤醒，不切换 View；
 - 唤醒后约 5 秒无操作重新息屏；
 - 正常播放时默认约 15 秒无 UI 操作自动息屏。

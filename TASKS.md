@@ -402,7 +402,8 @@ Status: TODO
 
 AC：
 
-- [ ] 无歌词时 Content Stage 显示 ASCII Cover
+- [ ] 有歌词时可作为 View Selector 的 Cover 视图
+- [ ] 无歌词时 Content Stage 只显示 ASCII Cover
 - [ ] ADV 不实时做图片→ASCII 转换
 - [ ] 可直接读取 RGB565
 - [ ] 读图不造成明显音频卡顿
@@ -478,6 +479,26 @@ AC：
 
 ---
 
+## P3-12 Now Playing View Selector
+
+Status: TODO
+
+AC：
+
+- [ ] 有可用歌词时可通过 `V` 在 Lyrics / Color ASCII Cover 间切换
+- [ ] 无可用歌词时始终显示 Cover，按 `V` 不进入空白 Lyrics 页面
+- [ ] `preferredNowPlayingView` 默认 Lyrics，只在用户成功切换时更新
+- [ ] View 偏好跨歌曲保留
+- [ ] 无歌词导致的临时 Cover 不覆盖用户偏好；下一首有歌词时按偏好恢复 Lyrics
+- [ ] View 偏好通过现有 cooperative Session A/B 生命周期持久化，重启后恢复
+- [ ] Header / Footer 在切换时保持不变，只重绘 Content Stage
+- [ ] 切换不影响当前歌曲、播放状态、进度、Queue、Sound Preset 或 Volume
+- [ ] 切换和 Cover / Lyrics 资源读取不造成可感知音频卡顿
+- [ ] `V` 在其他页面不暗中改变偏好
+- [ ] 无歌词提示若实现，必须轻量且非阻塞；提示本身不是 V1 必做项
+
+---
+
 # P4 — Keymap
 
 ## P4-01 Global Navigation Semantics
@@ -544,6 +565,7 @@ L  Library
 Q  Queue
 R  Repeat Mode
 S  Shuffle
+V  View（仅 Now Playing：Lyrics ↔ Cover）
 ```
 
 AC：
@@ -553,6 +575,9 @@ AC：
 - [ ] `Q` 跳转 Queue
 - [ ] `R` 按 Off → Repeat All → Repeat One → Off 循环
 - [ ] `S` 切换 Shuffle On / Off
+- [ ] `V` 只切换 Now Playing Content Stage，不改变播放或页面
+- [ ] 无可用歌词或不在 Now Playing 时，`V` 不改变 View 偏好
+- [ ] `V` 与既有 `H / L / Q / R / S`、数字键及导航键不冲突
 - [ ] 不额外占用大量字母键
 
 ---
@@ -579,6 +604,7 @@ AC：
 - [ ] Screen Off 时全部快捷键原功能失效
 - [ ] 任意键第一次只唤醒屏幕
 - [ ] 唤醒按键事件不继续传递
+- [ ] Screen Off 时第一次按 `V` 只唤醒，不切换 View
 - [ ] 亮屏后第二次按键才执行
 - [ ] V1 不增加独立 Lock / Unlock 按键
 - [ ] V1 不要求长按或组合键

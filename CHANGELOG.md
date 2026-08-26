@@ -4,6 +4,15 @@
 
 Date: 2026-08-26
 
+### V1 UI Design Increment — Now Playing Dual View
+
+- 将 Now Playing Content Stage 从“有歌词自动显示 Lyrics、无歌词显示 Cover”扩展为：有可用歌词时可通过 `V` 在 Lyrics / Color ASCII Cover 间切换，无歌词时保持 Cover-only。
+- Header / Footer、当前歌曲、播放状态、进度、Queue、Sound Preset 与 Volume 不受 View 切换影响。
+- 冻结 `preferredNowPlayingView = Lyrics | Cover`：默认 Lyrics，跨歌曲和重启保留；无歌词时临时退化为 Cover 不覆盖用户偏好。
+- `V` 仅在 Now Playing 且有可用歌词时改变偏好；其他页面 no-op，Screen Off 时第一次按键仍只唤醒并吞掉事件。
+- 技术方案保留现有两个 Renderer，仅增加薄型 View Selector；后续实现可复用 Session v1 预留字段与既有 cooperative A/B 保存，不新增状态文件。
+- 本次只同步 V1 设计、Keymap 与 AC，不提前实现 P3 UI，也不改变当前 P2 `DEVICE TEST` 状态或既有产品路线。
+
 ### Library Engine
 
 - 新增以 `/Music` 为边界的多层目录浏览、隐藏项与非 MP3 过滤、文件夹优先自然排序，以及当前文件夹非递归 Queue。

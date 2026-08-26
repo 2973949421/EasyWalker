@@ -565,6 +565,7 @@ P1 schema version 1 使用小端二进制。每个文件含 20-byte Header：mag
 
 - Queue payload：length-prefixed UTF-8 path，最多 1,024 首，总 payload 最多 256 KiB；
 - Session payload：Queue generation、当前 source index、position、source offset、Repeat、Shuffle、order / cursor 与 Previous history；
+- P3 / P4 实现时复用 Session v1 payload 的 24-byte 固定区中预留 byte 21 保存 `preferredNowPlayingView`：`0=Lyrics`、`1=Cover`，旧状态的零值自然保持原有 Lyrics 默认行为，非法值回退为 Lyrics；无需新增状态文件或改变 schema version；
 - A/B 双槽交替写入；新槽 `write → flush → close → reopen → CRC` 通过后才成为当前版本；
 - 单次 cooperative write / verify read 不超过 1 KiB；
 - Queue 只在队列变化时保存，Session 播放中约每 10 秒 checkpoint，并在控制或模式变化后保存。
@@ -580,13 +581,15 @@ P1 schema version 1 使用小端二进制。每个文件含 20-byte Header：mag
 - queue
 - playback mode
 - sound settings
-- UI / keymap 相关设置（待设计后补充）
+- `preferredNowPlayingView`（用户选择的 Lyrics / Cover 偏好，不是当前歌曲的临时有效视图）
 
 启动时：
 
 - 恢复状态；
 - 保持 Pause；
 - 不自动出声。
+
+只持久化 `preferredNowPlayingView`。歌曲无可用歌词时由 View Selector 临时选择 Cover，不得把该 effective view 回写为用户偏好。`V` 更新偏好后只标记 Session dirty，继续沿用 cooperative A/B 保存，不在按键处理路径同步写 SD。
 
 启动恢复只读取 Queue / Session，不打开 Decoder、不向 Speaker 提交 PCM。当前歌曲缺失时沿当前 order 寻找下一首有效 MP3 并以 `Paused @ 0` 恢复；全部缺失则安全进入 Empty。CRC 错误、截断记录或未知 schema 不触发重启循环。
 
@@ -614,7 +617,7 @@ Metadata 读取不能造成长时间播放卡顿。
 - 缓存；
 - 不在播放关键路径同步做大量工作。
 
-V1 不要求运行时解码传统 Album Art；无歌词时优先使用 PC 预生成的彩色 ASCII Cover。
+V1 不要求运行时解码传统 Album Art；Color ASCII Cover 使用 PC 预生成资源。有歌词时它是可手动选择的第二视图，无歌词时是唯一有效视图。
 
 P2 的 Metadata Reader 按需、cooperative 解析 ID3v2.3 / v2.4 的 `TIT2 / TPE1 / TALB / TRCK`，支持常见 ISO-8859-1、UTF-16 和 UTF-8 文本。单步最多读取 512 bytes，APIC 只跳过而不加载。Title 缺失时回退为去掉 `.mp3` 扩展名的文件名。P2 验证 CJK UTF-8 字节正确，字形显示留给 P3 Font / UI Gate。
 
@@ -661,7 +664,35 @@ hold 5s → scroll left once → hold 5s → repeat
 
 滚动速度初始目标约 `20–25 px/s`，允许真机调整。
 
-### 9.4 Lyrics Renderer
+### 9.4 Now Playing View Selector
+
+保留独立的 Lyrics Renderer 与 Color ASCII Cover Renderer，在 UI / Application 层增加薄型 View Selector；不得把该状态放进 Audio Engine 或 `PlayerController`。
+
+```cpp
+enum class PreferredNowPlayingView : uint8_t {
+    Lyrics = 0,
+    Cover = 1,
+};
+
+effectiveView =
+    hasUsableLyrics && preferredView == PreferredNowPlayingView::Lyrics
+        ? Lyrics
+        : Cover;
+```
+
+`hasUsableLyrics` 表示本地 LRC 存在且可成功解析；缺失、空文件或损坏歌词均按 unavailable 处理，禁止进入空白 Lyrics 页面。
+
+行为规则：
+
+- `V` 仅在 Now Playing 页面切换 Content Stage；其他页面 no-op，不暗中改变偏好；
+- 有可用歌词时，`V` 执行 Lyrics ↔ Cover，并更新 `preferredNowPlayingView`；
+- 无可用歌词时，`V` no-op；可以显示短暂、非阻塞的 `No lyrics` 提示，但不是必做项；
+- 偏好为 Lyrics、当前歌曲无歌词时只临时显示 Cover，不修改偏好；下一首有歌词时自动回到 Lyrics；
+- 偏好为 Cover 时，无论是否有歌词都显示 Cover；
+- 切换只将 Content Stage 标记为 dirty；Header / Footer 不重建，资源加载继续 cooperative；
+- View Action 不调用 Play / Pause / Seek / Queue / Track / Sound / Volume，不改变播放进度或 Decoder 生命周期。
+
+### 9.5 Lyrics Renderer
 
 V1 解析标准逐行 LRC。
 
@@ -693,7 +724,7 @@ CJK：楷体约 `16 px`，正常竖排。
 
 Latin：Times New Roman 约 `12 px`，每个 glyph 单独旋转 90°后沿纵轴布局；不是整句整体旋转。V1 UI 不跟随设备物理旋转。
 
-### 9.5 Font Storage
+### 9.6 Font Storage
 
 字体资源优先从 SD 加载：
 
@@ -705,9 +736,11 @@ Latin：Times New Roman 约 `12 px`，每个 glyph 单独旋转 90°后沿纵轴
 
 Flash 只保留最小 fallback。字体加载失败不得影响 Audio Core。
 
-### 9.6 Color ASCII Cover
+### 9.7 Color ASCII Cover
 
 ASCII 生成由 PC 工具完成，不占用 ESP32 实时图像处理预算。
+
+该 Renderer 既服务于有歌词歌曲的 Cover 偏好，也服务于无歌词歌曲的强制 fallback。
 
 PC Tool 负责：
 
@@ -728,13 +761,15 @@ read RGB565 → push image
 
 而不是运行时逐字符转换。
 
-### 9.7 Other Screens
+### 9.8 Other Screens
 
 Library / Queue / Sound / Settings 使用低复杂度列表 UI。共同原则：方向键导航、Enter 确认、Esc 返回、当前音乐继续播放、不做持续动画、Dirty / Throttled Redraw、UI 不阻塞音频。
 
-### 9.8 Screen-off
+### 9.9 Screen-off
 
 Screen Off 等同 V1 Soft Lock：所有按键原功能暂时失效；首次任意键只唤醒且事件不向 Player / UI Action 派发；亮屏后第二次按键才正常派发。
+
+该规则同样覆盖 `V`：息屏状态第一次按 `V` 只唤醒，不能同时切换 View。
 
 建议 Timer：
 
@@ -770,7 +805,7 @@ UI 与按键布局都应以这一姿态作为重要设计输入。
 → 高频播放控制 + 音效直选
 
 字母键
-→ 页面跳转 + 播放模式
+→ 页面跳转 + 播放模式 + Now Playing 视图
 
 方向键 / Enter / Esc
 → UI 导航与确认
@@ -810,6 +845,7 @@ L  Library
 Q  Queue
 R  Repeat Mode
 S  Shuffle
+V  View（仅 Now Playing：Lyrics ↔ Cover）
 ```
 
 `R`：
@@ -823,6 +859,8 @@ Off → Repeat All → Repeat One → Off
 ```text
 Shuffle Off ↔ Shuffle On
 ```
+
+`V` 只在 Now Playing 且有可用歌词时切换并保存偏好；其他页面或无歌词歌曲不改变偏好。Text Input 中仍作为普通字母输入。
 
 ### 10.5 UI 导航键
 

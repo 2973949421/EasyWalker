@@ -109,7 +109,8 @@ V1 只实现已经明确有价值的能力。
 - 上次歌曲；
 - 播放位置；
 - 当前播放队列；
-- 播放模式。
+- 播放模式；
+- 用户上次选择的 Now Playing 视图偏好。
 
 恢复后默认保持 Pause，不自动播放。
 
@@ -196,6 +197,8 @@ Settings（设置）
 
 V1 视觉方向、主要布局和导航以本文件第 8 章为设计基线；只允许在真机原型中做小范围校准。
 
+Now Playing 的 Content Stage 在歌曲有可用歌词时允许用户在 Lyrics 与 Color ASCII Cover 间切换；歌曲无可用歌词时只显示 Cover。
+
 ### 5.5 System（系统）
 
 - 熄屏播放
@@ -250,6 +253,7 @@ V1 至少应达到：
 10. 实体按键操作应达到“专用播放器”的可用水平。
 11. 设备可在 Launcher 工作流中正常安装、启动和返回。
 12. 不存在持续性明显 Heap 泄漏或长时间播放后崩溃。
+13. 有歌词歌曲可在 Lyrics / Color ASCII Cover 间切换；无歌词歌曲不会进入空白 Lyrics 页面，切换不干扰播放。
 
 ---
 
@@ -302,9 +306,22 @@ Footer        约 30 px
 #### Content Stage
 
 ```text
-有歌词 → Lyrics
-无歌词 → Color ASCII Cover
+有可用歌词 + preferred = LYRICS → Lyrics
+有可用歌词 + preferred = COVER  → Color ASCII Cover
+无可用歌词                         → Color ASCII Cover
 ```
+
+用户在 Now Playing 按 `V` 时，只在 Lyrics 与 Cover 间切换 Content Stage，并更新：
+
+```text
+preferred_now_playing_view = LYRICS | COVER
+```
+
+默认值为 `LYRICS`，该偏好跨歌曲并在重启后恢复。实际显示视图按当前歌曲是否有可用歌词计算：当偏好为 Lyrics 但当前歌曲没有可用歌词时，临时显示 Cover，不得把用户偏好改写为 Cover；下一首重新有歌词时自动恢复 Lyrics。
+
+无歌词时按 `V` 不切换，也不进入空白 Lyrics 页面。最低实现可以直接无动作；允许短暂显示非阻塞的 `No lyrics` 提示，但提示不是 V1 必做项。
+
+View 切换不得改变当前歌曲、播放 / 暂停、进度、Queue、Sound Preset 或 Volume。Header 与 Footer 不随 Content Stage 切换而变化。
 
 #### Footer
 
@@ -390,7 +407,7 @@ Flash 仅保留最小 fallback 字体，以便 SD 字体失败时仍能显示基
 
 ### 8.4 Color ASCII Cover
 
-无歌词时，中间 Content Stage 显示彩色 ASCII Cover。
+Color ASCII Cover 是 Now Playing 的第二种 Content Stage：有歌词时可由用户选择；无歌词时作为唯一可用视图。
 
 目标：
 
@@ -469,6 +486,8 @@ Screen Off 时：
 - 第一次任意键只负责唤醒屏幕；
 - 该按键事件被吞掉；
 - 屏幕亮起后第二次按键才执行正常功能。
+
+因此息屏状态第一次按 `V` 只唤醒并吞掉事件，不切换 View；屏幕亮起后再次按 `V` 才按正常规则处理。
 
 建议基线：
 
