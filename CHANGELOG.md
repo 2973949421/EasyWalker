@@ -1,5 +1,24 @@
 # Changelog
 
+## V0.4 — P2 Music Library Development
+
+Date: 2026-08-26
+
+### Library Engine
+
+- 新增以 `/Music` 为边界的多层目录浏览、隐藏项与非 MP3 过滤、文件夹优先自然排序，以及当前文件夹非递归 Queue。
+- 新增 cooperative `Open → Scan → Sort → Finalize` 扫描、4 个 SD session cache slot、3×32 项 RAM LRU page 与 Queue 生命周期 pin；不把整库路径常驻 RAM。
+- 新增 ID3v2.3 / v2.4 Metadata reader，支持 ISO-8859-1、UTF-16 BOM、UTF-16BE、UTF-8、unsynchronization、extended header 与安全 fallback；APIC 只跳过。
+- 新增 32 项 Recent Tracks 与 CRC32 A/B 双槽；累计 Playing 5 秒后记录，Pause 不计时，缺失路径读取时忽略。
+- 正式 Player 主循环采用四路轮转，一轮只执行一个有界 Library / Queue selection / Metadata / Recent 工作；当前曲目路径改为 RAM cache，避免播放中每轮读取 SD。
+
+### Validation Harness
+
+- 新增 marker-owned P2 Fixture 和主机 validator，覆盖多层中文/日文路径、1,000 项大目录、自然排序、过滤、ID3 编码与 Recent/Cache binary CRC；测试数据与 MP3 不提交 Git。
+- 新增 `player-p2-gate`：一次按 `T` 自动覆盖 P2-01～P2-04，屏幕只在阶段变化时刷新，停止音频后再写四份完整日志。
+- `player-dev`、P2 Gate 和两个历史 P1 Gate 均保留独立构建入口；P2 不改变 Candidate A Audio Backend、P1 Queue / Session 语义或 Launcher 分区。
+- PC Fixture、静态校验与自动构建已通过；P2-01～P2-04 当前统一处于 `DEVICE TEST`，必须以四份真机日志为准，尚未标记 `DONE`。
+
 ## V0.3 — P1 Player Core Development
 
 Date: 2026-08-25～2026-08-26

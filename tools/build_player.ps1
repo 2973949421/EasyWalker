@@ -1,8 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$SdRoot,
-    [ValidateSet(1, 2)]
-    [int]$Gate = 1
+    [ValidateSet('Dev', 'P1GateA', 'P1GateB', 'P2Gate')]
+    [string]$Target = 'Dev'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -10,9 +10,28 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $pio = 'B:\PlatformIO\penv\Scripts\pio.exe'
 $artifacts = Join-Path $projectRoot 'artifacts'
-$environment = if ($Gate -eq 2) { 'player-dev-gate-b' } else { 'player-dev' }
+$targets = @{
+    Dev = @{
+        Environment = 'player-dev'
+        Artifact = 'ADV-Walkman-Dev.bin'
+    }
+    P1GateA = @{
+        Environment = 'player-p1-gate-a'
+        Artifact = 'ADV-Walkman-P1-Gate-A.bin'
+    }
+    P1GateB = @{
+        Environment = 'player-p1-gate-b'
+        Artifact = 'ADV-Walkman-P1-Gate-B.bin'
+    }
+    P2Gate = @{
+        Environment = 'player-p2-gate'
+        Artifact = 'ADV-Walkman-P2-Gate.bin'
+    }
+}
+$targetConfig = $targets[$Target]
+$environment = $targetConfig.Environment
 $source = Join-Path $projectRoot ".pio\build\$environment\firmware.bin"
-$artifact = Join-Path $artifacts 'ADV-Walkman-Dev.bin'
+$artifact = Join-Path $artifacts $targetConfig.Artifact
 
 if (-not (Test-Path -LiteralPath $pio)) {
     throw "PlatformIO CLI not found at $pio"
@@ -37,7 +56,8 @@ try {
     }
 
     Write-Output "PLAYER_BIN=$artifact"
-    Write-Output "PLAYER_GATE=$Gate"
+    Write-Output "PLAYER_TARGET=$Target"
+    Write-Output "PLAYER_ENVIRONMENT=$environment"
     Write-Output "PLAYER_SIZE=$($sourceInfo.Length)"
     Write-Output "PLAYER_SHA256=$sourceHash"
 
@@ -45,7 +65,7 @@ try {
         $resolvedSdRoot = (Resolve-Path -LiteralPath $SdRoot).Path
         $firmwareDir = Join-Path $resolvedSdRoot 'firmware'
         New-Item -ItemType Directory -Path $firmwareDir -Force | Out-Null
-        $sdBinary = Join-Path $firmwareDir 'ADV-Walkman-Dev.bin'
+        $sdBinary = Join-Path $firmwareDir $targetConfig.Artifact
         Copy-Item -LiteralPath $artifact -Destination $sdBinary -Force
         $sdInfo = Get-Item -LiteralPath $sdBinary
         $sdHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $sdBinary).Hash.ToLowerInvariant()

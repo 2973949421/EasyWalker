@@ -143,6 +143,11 @@ V1 不建立复杂数据库。
 - RAM 使用 3 个 32-entry page 做 LRU，最多驻留 96 个条目。扫描和排序仅保留数字 offset，不将整批路径常驻 RAM。
 - 当前 Queue 的索引槽保持 pinned；新 Queue 在 Player persistence 空闲后再切换，旧索引才可解除 pin。
 - 应用循环始终先 service Player，再做一次有界 Library / Metadata / Recent 工作；无需新增 RTOS task。
+- `LibraryRuntime` 采用四路轮转，每个主循环只推进一次 Directory、Queue selection、Metadata 或 Recent 工作；正式开发串口的目录 / Recent 输出同样使用逐项游标，不在一次命令中同步遍历整个目录。
+- `PlayerController` 在 Queue / 当前曲目变化时缓存规范化完整路径；`PlayerRuntime::currentPath()` 只复制 RAM 缓存，Recent 与状态画面不得在每轮播放循环重新打开 Library index。
+- `LibraryRuntime` 与其 pinned `FolderQueueSource` 是单次绑定生命周期；禁止对仍被 Player 引用的实例执行重新 begin。Queue source 只有在没有异步 State Store 工作时才能解除 pin。
+- P2 Gate 使用独立 Recent 测试槽并暂停正式 Queue / Session persistence；四份日志在停止测试音频后一次写完并回读完整性标记，避免日志本身污染播放中断音指标。
+- P2 Gate 在完整 P2-01～P2-04 生命周期持续检查 Player state、44.1 kHz、Audio Error、Backpressure 与相邻 service 间隔；播放中单次超过 100 ms 的间隔或非预期状态持续超过 100 ms 均作为 starvation 失败，不能由下一轮补音掩盖。
 
 ---
 

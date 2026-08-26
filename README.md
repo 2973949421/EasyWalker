@@ -82,7 +82,7 @@ ESP8266Audio 1.9.7
 
 当前进入 P2 Music Library，在已通过真机验收的 P1 Player Core 上实现多层目录、按需扫描、有界缓存、Metadata 和 Recent Tracks。P2 交付 Library Engine 与开发验收入口；实体按键可直接操作的正式 Library UI 仍属于 P3。选型证据见 [`docs/AUDIO_BENCHMARK.md`](docs/AUDIO_BENCHMARK.md)。
 
-### P1 开发构建
+### P2 开发构建与一次性 Gate
 
 默认 PlatformIO 环境为 `player-dev`：
 
@@ -102,22 +102,37 @@ microSD 已挂载为例如 `D:\` 时，可一并复制并复核 SHA-256：
 .\tools\build_player.ps1 -SdRoot D:\
 ```
 
-目标位置为 `/firmware/ADV-Walkman-Dev.bin`，由 M5Launcher 正常安装；不使用普通 PlatformIO upload 覆盖 Launcher。P1 本地测试 Fixture 由 `tools/prepare_p1_fixtures.py` 生成，文件本身不提交 Git。
+目标位置为 `/firmware/ADV-Walkman-Dev.bin`，由 M5Launcher 正常安装；不使用普通 PlatformIO upload 覆盖 Launcher。`player-dev` 提供 P2 Library 串口开发入口，但不提前实现 P3 正式按键 UI。
 
-Gate A 固件启动后按一次物理 `T`，会先在 ADV 上核对合法 / 截断 Fixture 的 SHA-256，再自动验收 P1-01 / P1-02；全过程约 1 分钟，不要再按键。结果写入：
-
-```text
-/ADVWalkman/logs/p1-01-last.txt
-/ADVWalkman/logs/p1-02-last.txt
-```
-
-Gate A 真机通过后再构建 Gate B；Gate B 验收 Queue / Playback Mode 和双槽状态恢复。Gate B 只在首次启动时按一次 `T`，随后会自动软件重启；重启后不要再次按 `T`，固件会继续验证恢复为 Pause 且至少 3 秒完全静音。正常用时约半分钟，异常超时最多约 1 分钟。`T` 与串口测试命令只属于开发固件，不改变冻结的 V1 Keymap。
-
-Gate B 构建命令：
+P2 本地 Fixture 由已有无版权 P1 音频派生，包含多层 UTF-8 路径、1,000 个 scan-only 文件和 Metadata 边界样本。测试数据位于 Git 忽略目录，不提交仓库。microSD 例如挂载为 `D:\` 时：
 
 ```powershell
-.\tools\build_player.ps1 -Gate 2 -SdRoot D:\
+python .\tools\prepare_p2_library.py --sd-root D:\
+.\tools\build_player.ps1 -Target P2Gate -SdRoot D:\
 ```
+
+脚本只会重建带专用 marker 的 `/Music/ADVWalkmanP2Test/`；同名目录没有 marker 时会停止，不接触用户其他音乐。Gate 固件为：
+
+```text
+/firmware/ADV-Walkman-P2-Gate.bin
+```
+
+通过 M5Launcher 安装后启动，按一次物理 `T`，随后约 30～60 秒不要操作。Gate 会自动验证 P2-01～P2-04，屏幕只在阶段变化时刷新，最终结果写入：
+
+```text
+/ADVWalkman/logs/p2-01-last.txt
+/ADVWalkman/logs/p2-02-last.txt
+/ADVWalkman/logs/p2-03-last.txt
+/ADVWalkman/logs/p2-04-last.txt
+```
+
+PASS 后把 SD 插回 PC，执行只读复核：
+
+```powershell
+python .\tools\validate_p2_gate.py --sd-root D:\
+```
+
+历史 P1 Gate 仍保留独立构建入口 `-Target P1GateA` 与 `-Target P1GateB`，用于回归源码隔离；`T` 与串口命令都只是开发入口，不改变冻结的 V1 Keymap。
 
 ### 历史 P0 三候选构建
 

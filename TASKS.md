@@ -246,60 +246,68 @@ AC：
 
 ## P2-01 Recursive Folder Browser
 
-Status: DOING
+Status: DEVICE TEST
 
 AC：
 
-- [ ] `/Music/`
-- [ ] 多层目录
-- [ ] 中文路径
-- [ ] 隐藏文件过滤
-- [ ] 非 MP3 文件不进入 V1 可播放列表
+- [x] `/Music/`
+- [x] 多层目录
+- [x] 中文路径
+- [x] 隐藏文件过滤
+- [x] 非 MP3 文件不进入 V1 可播放列表
 - [ ] 播放时浏览目录不主动 Stop Audio
+
+实现与 PC Fixture 验收已通过；等待一次 P2 真机 Gate 验证播放中浏览。
 
 ---
 
 ## P2-02 Lazy Scan / Cache
 
-Status: TODO
+Status: DEVICE TEST
 
 AC：
 
-- [ ] 不整库常驻 RAM
-- [ ] 当前目录快速显示
-- [ ] 大目录有界内存
-- [ ] 缓存可淘汰
+- [x] 不整库常驻 RAM
+- [x] 当前目录按页显示
+- [x] 大目录有界内存
+- [x] 缓存可淘汰
 - [ ] 约 1000 首库规模可正常使用
 - [ ] 播放中扫描不造成明显断音
+
+4 个 SD session cache slot、3×32 项 RAM LRU page 与 Queue pin 已实现；1,000 项目录和播放并行仍等待真机 Gate。
 
 ---
 
 ## P2-03 Metadata
 
-Status: TODO
+Status: DEVICE TEST
 
 AC：
 
-- [ ] Title
-- [ ] Artist
-- [ ] Album
-- [ ] Track Number
-- [ ] 中文可显示
+- [x] Title
+- [x] Artist
+- [x] Album
+- [x] Track Number
+- [x] 中文 Metadata 可规范解析为 UTF-8（CJK 字形显示留给 P3）
 - [ ] Metadata 解析不长时间阻塞播放
-- [ ] 无 Metadata 时合理回退到文件名
+- [x] 无 Metadata 时合理回退到文件名
+
+ID3v2.3 / v2.4、四种文本编码、unsynchronization、extended header 与损坏标签 fallback 已通过 PC Fixture；播放并行等待真机 Gate。
 
 ---
 
 ## P2-04 Recent Tracks
 
-Status: TODO
+Status: DEVICE TEST
 
 AC：
 
-- [ ] 保存最近播放
-- [ ] 路径不存在时安全忽略
-- [ ] 不重复制造大量状态文件
-- [ ] 数量上限简单明确
+- [x] 播放累计 5 秒后保存最近播放，Pause 时间不计
+- [x] 路径不存在时安全忽略
+- [x] 仅使用 `recent-a.bin / recent-b.bin` A/B 双槽，不为每首歌制造状态文件
+- [x] 32 首上限、按完整路径去重且最新在前
+
+格式、CRC32、A/B 重载与 host validator 已通过；仍须真机 Gate 验证实际 SD 生命周期后才能标记 `DONE`。
 
 ---
 
