@@ -1330,7 +1330,7 @@ bool P2DeviceTestRunner::writeLog(size_t taskIndex, const char* status,
                static_cast<unsigned long>(reloadStore_.loaded()
                                               ? reloadStore_.generation()
                                               : recentStore_.generation()));
-    log.println("log_complete=1");
+    log.print("log_complete=1\n");
     log.flush();
     log.close();
 
