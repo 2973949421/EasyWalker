@@ -1,7 +1,7 @@
 # ADV Walkman
 
 > 工作名：ADV Walkman  
-> 当前阶段：P2 Music Library 已完成，待进入下一阶段计划
+> 当前阶段：P3A UI Foundation 已进入 `DEVICE TEST`，P1/P2 已完成并冻结
 > 平台：M5Stack Cardputer ADV
 
 ## 1. 项目是什么
@@ -70,6 +70,22 @@ V1 不以以下内容为目标：
 - 为未来假想需求提前搭建大型框架
 
 ## 5. 当前最重要的技术任务
+
+P3 已按 `P3A → P3B → P3C → P3D` 分步冻结，完整路线见
+[`docs/P3_DELIVERY.md`](docs/P3_DELIVERY.md)。当前 P3A 只建立真实可操作的竖屏
+UI、曲库 / 播放列表和跨页播放，不提前制作歌词、ASCII Cover、黑胶动画或完整
+Settings。
+
+P3A 构建与 SD 复制：
+
+```powershell
+.\tools\build_player.ps1 -Target P3AGate -SdRoot D:\
+```
+
+当前 Gate 固件：`/firmware/ADV-Walkman-P3A-Gate.bin`，大小 705,120 bytes，
+SHA-256 `766d5c489d5a78ca2c00071eab41e8c402be55ee7538a970c72e0f88c6138744`。
+通过 M5Launcher 安装后按屏幕逐步操作；无需记忆整套按键流程。Build Success
+只代表进入 `DEVICE TEST`，不代表 P3A 已完成。
 
 P0 Audio Backend Benchmark 已完成，V1 正式冻结 Candidate A：
 
@@ -159,6 +175,7 @@ B:\PlatformIO\isolated\adv-walkman-c\packages
 | [`AGENTS.md`](AGENTS.md) | Codex / Agent 开发规约 |
 | [`docs/PRD.md`](docs/PRD.md) | 产品目标、范围、体验与待确认事项 |
 | [`docs/TECH_DESIGN.md`](docs/TECH_DESIGN.md) | 技术架构、模块、数据流与技术原则 |
+| [`docs/P3_DELIVERY.md`](docs/P3_DELIVERY.md) | P3A/B/C/D 固定执行顺序、边界与 Gate |
 | [`docs/REFERENCES.md`](docs/REFERENCES.md) | 开源项目与官方资料参考总结 |
 | [`docs/AUDIO_BENCHMARK.md`](docs/AUDIO_BENCHMARK.md) | 音频底层 A/B/C 基准测试 |
 | [`TASKS.md`](TASKS.md) | Backlog（任务池）、优先级与 AC（验收标准） |

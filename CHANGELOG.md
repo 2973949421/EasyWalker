@@ -1,5 +1,19 @@
 # Changelog
 
+## V0.5 — P3A UI Foundation Development
+
+Date: 2026-08-26
+
+- 冻结 `P3A → P3B → P3C → P3D` 执行顺序，并新增 `docs/P3_DELIVERY.md` 作为阶段明细入口。
+- P3A 范围固定为竖屏 UI Shell、四页路由、可操作的一级目录曲库、支持子目录的 Playlist 与跨页播放；黑胶视觉、歌词、ASCII Cover、Settings 和 Screen-off 按后续阶段推进。
+- `/Music` 一级可见目录正式映射为曲库，根目录 MP3 使用合成“未分类”；子目录返回和当前文件夹 Queue 语义完成一致性修正。
+- 项目 Agent 路由增加 P3 文档强制读取规则，防止上下文切换后跳步或漂移。
+- 用户提供的 Crucifix X 日文 LRC 与中文翻译仅保存为 Git 忽略的 P3C 本地资源，不在 P3A 提前实现歌词渲染。
+- P3A 已实现真实 `Player / Playlist / Library / Settings` 路由、ADV 物理坐标输入解析、一级目录曲库、子目录 Playlist、当前文件夹 Queue 与跨页连续播放；异步目录页在 Enter 后会保留用户意图并在数据就绪后继续。
+- `player-dev`、`player-p3a-gate`、历史 P1 Gate A/B 与 P2 Gate 均重新构建通过；P3A Gate 为 705,120 bytes，占 `0x140000` Launcher 上限 53.8%。
+- SD 中 marker / manifest 完整匹配的 P1/P2 测试夹具目录已安全删除；`/Music/ADVWalkmanBenchmark/benchmark.mp3` 与 Player 状态、缓存和日志均保留。
+- `ADV-Walkman-P3A-Gate.bin` 已复制到 SD 并核对 SHA-256 `766d5c489d5a78ca2c00071eab41e8c402be55ee7538a970c72e0f88c6138744`；P3A 当前进入 `DEVICE TEST`，未提前标记完成。
+
 ## V0.4 — P2 Music Library Development
 
 Date: 2026-08-26

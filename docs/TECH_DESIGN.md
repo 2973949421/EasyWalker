@@ -649,6 +649,50 @@ P2 的 Metadata Reader 按需、cooperative 解析 MP3 ID3v2.3 / v2.4 的 `TIT2 
 
 ## 9. UI 架构
 
+P3 的工程交付顺序和 Gate 见 `P3_DELIVERY.md`。以下章节定义正式 UI 技术边界，
+不得用阶段性占位实现反向修改产品行为。
+
+### 9.0 P3A Foundation Types
+
+```cpp
+enum class UiPage : uint8_t {
+    Player,
+    Playlist,
+    Library,
+    Settings,
+};
+
+enum class UiAction : uint8_t {
+    None,
+    Up,
+    Down,
+    Left,
+    Right,
+    Confirm,
+    Back,
+    OpenSettings,
+};
+```
+
+`UiCoordinator` 只持有页面、光标、目录路径和 Dirty 状态；Transport / Queue 继续
+通过 `PlayerRuntime`，目录 / Metadata 继续通过 `LibraryRuntime`。Input Router 以
+Cardputer ADV 官方键盘的物理坐标和 Fn 状态生成 edge-triggered Action，不把
+方向键猜成标准 PC Arrow 字符。
+
+P3A 主循环顺序固定为：
+
+```text
+PlayerRuntime::service
+→ LibraryRuntime::service
+→ M5Cardputer.update
+→ InputRouter
+→ one bounded UI step
+```
+
+Cardputer ADV 无 PSRAM，P3A 不分配完整 `135×240×RGB565` Framebuffer；页面切换
+和选择变化使用 Dirty Region 与小型行缓冲。P3A 只接通普通页面导航，Player
+顶部 3×4 的完整产品 Action 仍按后续对应任务推进。
+
 ### 9.1 Display Orientation
 
 ```text
@@ -795,6 +839,14 @@ V1 只有四个实际页面：播放器、播放列表、曲库、设置；不�
 ```
 
 曲库是最外层内容页，Esc no-op。播放状态跨页面持续，但完整 3×4 控制只属于播放器页面。
+
+`/Music` 的可见一级目录按排序顺序映射为曲库；根目录 MP3 以合成项“未分类”
+暴露。Playlist 可以进入一级曲库下的子目录；在子目录按 Esc 返回父目录，在
+一级曲库根再次按 Esc 才返回 Library。选歌仍建立当前文件夹非递归 Queue。
+
+恢复状态进入 Player 后，如果用户按 Esc，Application 从当前 Track 路径安全派生
+父目录并请求 Library 打开。该入口只接受 `/Music` 自身或 `/Music/` 后代路径，
+拒绝 `..`、超长路径和其他根目录；不得通过恢复路径逃出 Music Root。
 
 曲库页面采用上方独立曲库封面、下方横向黑胶唱片堆叠选择带。当前项以上浮为主要高亮，可辅以提高亮度和露出更多标签；短名允许沿圆弧排列。Left / Right 切换、Enter 进入播放列表，动画必须 Dirty / Throttled、短且不阻塞音频。尺寸、圆弧角度、重叠比例和时长由 P3 真机校准。
 

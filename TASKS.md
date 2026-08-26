@@ -315,9 +315,25 @@ AC：
 
 # P3 — UI
 
+## P3 Delivery Gates
+
+执行明细见 `docs/P3_DELIVERY.md`，冻结顺序为：
+
+| Gate | Status | Tasks | Result |
+|---|---|---|---|
+| P3A UI Foundation | DEVICE TEST | P3-01、P3-08、P3-09；P3-07 功能骨架 | 自动构建通过，Gate 固件已写入 SD，等待一次真机引导验收 |
+| P3B Now Playing Chrome | TODO | P3-02 | Header / Footer 与播放状态反馈 |
+| P3C Media Resources | TODO | P3-03～06、P3-12 | 歌词、字体、ASCII Cover、View Selector |
+| P3D Product UI Completion | TODO | P3-07、P3-10、P3-11 | 黑胶曲库、设置、息屏与最终校准 |
+
+P3A 编译成功后进入 `DEVICE TEST`，不能提前把 P3-01 / 08 / 09 标为 `DONE`。
+P3-07 在 P3A 只完成可用骨架，最终视觉仍由 P3D 验收。
+
+---
+
 ## P3-01 Portrait UI Shell
 
-Status: TODO
+Status: DEVICE TEST
 
 AC：
 
@@ -417,7 +433,7 @@ AC：
 
 ## P3-07 Library UI
 
-Status: TODO
+Status: DOING — FUNCTIONAL FOUNDATION BUILT, P3A DEVICE TEST PENDING
 
 AC：
 
@@ -435,7 +451,7 @@ AC：
 
 ## P3-08 Playlist UI
 
-Status: TODO
+Status: DEVICE TEST
 
 AC：
 
@@ -449,12 +465,12 @@ AC：
 
 ## P3-09 Page Navigation & Cross-page Playback
 
-Status: TODO
+Status: DEVICE TEST
 
 AC：
 
 - [ ] 实际页面固定为播放器 / 播放列表 / 曲库 / 设置，无额外主页
-- [ ] 播放器 Esc → 播放列表；播放列表 Esc → 曲库
+- [ ] 播放器 Esc → 播放列表；播放列表在子目录先返回父目录，到曲库根后再 Esc → 曲库
 - [ ] 曲库 `S` → 设置；设置 Esc → 曲库；曲库 Esc no-op
 - [ ] 页面返回尽量保持当前歌曲、曲库和列表选择位置
 - [ ] 音频跨页面持续，不因退出播放器或列表而 Stop

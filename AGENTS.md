@@ -66,6 +66,11 @@ Agent 工作方式
 
 `docs/REFERENCES.md` 是参考资料，不是最终技术决策。最终采用方案以 `docs/TECH_DESIGN.md` 和已经完成的真机验证结果为准。
 
+P3 UI 阶段另有强制执行路由：开始任何 P3 计划、代码、构建或真机验收前，
+必须读取 `TASKS.md` 的当前状态和 `docs/P3_DELIVERY.md`。P3 按
+`P3A → P3B → P3C → P3D` 推进；不得因上下文压缩、Agent 切换或局部实现方便而
+跳过、重排或重新解释该顺序。产品行为仍以 PRD 为准，P3 明细不得复制回本文件。
+
 涉及 Cardputer ADV 硬件事实时，优先级为：
 
 ```text
