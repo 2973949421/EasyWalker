@@ -1,6 +1,28 @@
 #include "NowPlayingMedia.h"
 #include <algorithm>
 namespace adv_walkman { namespace player {
+const char* NowPlayingMedia::bootSelfCheck(){
+    const char* failure=nullptr;
+    selectTrack("/Music/ADVWalkmanBenchmark/benchmark.mp3");
+    for(uint32_t position:{0U,40600U,130000U}){
+        updatePosition(position,299260,true);const uint32_t start=millis();bool ready=false;
+        while(millis()-start<5000){
+            service();
+            if(timeline_.state()==MediaState::Error||timeline_.state()==MediaState::Missing){failure="boot_lyrics_resource";break;}
+            if(timeline_.windowReady() && renderer_.prepare(timeline_,*fonts_,position)){
+                const auto s=renderer_.stats();ready=!s.layoutError&&!s.invalidUtf8&&s.pages>=1;
+                if(position==0)ready&=timeline_.current()==-1&&s.glyphs==0;
+                else ready&=timeline_.current()>=0&&s.glyphs>0;
+                break;
+            }
+            delay(1);
+        }
+        if(failure||!ready){if(!failure)failure="boot_media_position_layout";break;}
+    }
+    const auto generation=generation_;release();
+    if(!failure&&(active_||frameInProgress_||generation_<=generation))failure="boot_media_cancel";
+    resetDiagnostics();return failure;
+}
 void NowPlayingMedia::cancelPreparation(){preparing_=layoutReady_=glyphsReady_=false;if(fonts_)fonts_->clearPins();++cancellations_;}
 void NowPlayingMedia::selectTrack(const char* path){
     cancelPreparation();frameInProgress_=false;active_=true;++generation_;timeline_.selectTrack(path);cover_.selectTrack(path);

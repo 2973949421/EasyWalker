@@ -107,7 +107,7 @@ void NowPlayingModel::tick(uint32_t nowMs) {
         dirty |= DirtyOverlay;
         ++overlayRevision;
     }
-    if (titleWidthPx <= NowPlayingGeometry::textWidth ||
+    if (!headerVisible || titleWidthPx <= NowPlayingGeometry::textWidth ||
         nowMs - animationAtMs_ < kAnimationIntervalMs) return;
     animationAtMs_ = nowMs;
     const uint32_t travelMs = scrollMs(titleWidthPx);

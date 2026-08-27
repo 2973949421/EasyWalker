@@ -2,11 +2,11 @@
 #include <cstdint>
 namespace adv_walkman { namespace player {
 struct MediaLayout {
-    static constexpr int height=188, top=6, bottom=8;
-    static constexpr int lyricHeight=height-top-bottom, cell=16, pitch=18;
+    static constexpr int height=216, top=6, bottom=8;
+    static constexpr int lyricHeight=height-top-bottom, cell=18, pitch=19;
     static constexpr int columns=6, bilingualGap=6;
-    static constexpr uint8_t cjkFace=2;
-    static constexpr int coverTop=(height-144)/2;
+    static constexpr uint8_t cjkFace=3, latinFace=6;
+    static constexpr int coverTop=(188-144)/2;
 };
 // A ready cover must never monopolize the cooperative resource worker.
 enum class MediaWork : uint8_t { None, Font, Lyrics, Cover };

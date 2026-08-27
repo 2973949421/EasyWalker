@@ -26,6 +26,15 @@ bool UiCoordinator::begin(M5GFX& display, PlayerRuntime& player,
     }
     if(!fonts_.begin()) return false;
     nowPlaying_.bindMedia(fonts_);
+    const char* fontCheck=nowPlaying_.bootFontSelfCheck();stats_.displaySelfChecks+=2;
+    if(!stats_.displaySelfFailure)stats_.displaySelfFailure=fontCheck;
+#if !defined(P3A_DEVICE_GATE)
+    // Real media parser/layout/cancellation, while Player remains restored
+    // Paused/Empty. No decoder, scripted seek, sound, or state-file write.
+    const char* mediaCheck=nowPlaying_.bootMediaSelfCheck();
+    stats_.displaySelfChecks+=4;
+    if(!stats_.displaySelfFailure)stats_.displaySelfFailure=mediaCheck;
+#endif
     nowPlaying_.setPreferredView(player.preferredNowPlayingView());
     std::strcpy(libraryRoot_, MusicLibrary::kMusicRoot);
     std::strcpy(libraryName_, "Uncategorized");
@@ -74,8 +83,13 @@ void UiCoordinator::service() {
     nowPlaying_.setActive(page_ == UiPage::Player, now);
     nowPlaying_.update(snapshot, current, *libraryRuntime_, now);
     nowPlaying_.setPreferredView(player_->preferredNowPlayingView());
-    if(page_==UiPage::Player) nowPlaying_.serviceMedia();
-    else fonts_.service();
+    // A call performs resource work OR drawing, never both in a single
+    // uninterruptible UI slice. Ready lyric stripes do not access storage.
+    resourceTurn_=!resourceTurn_;
+    if(resourceTurn_ && !nowPlaying_.presentingLyrics()){
+        if(page_==UiPage::Player)nowPlaying_.serviceMedia();else fonts_.service();
+        return;
+    }
     const char* error = externalError_;
     if (error[0] == '\0' && snapshot.error != PlayerError::None) {
         error = playerErrorName(snapshot.error);
@@ -373,8 +387,10 @@ void UiCoordinator::render() {
     buildRenderContext(context);
     // Warm visible CJK only, before drawing. Retry later while the one-step
     // worker loads the glyph. ASCII-only historical screens remain immediate.
-    if(!fonts_.requestUiWindow(context.libraryName,0,0,page_==UiPage::Library?194:123,1.5f)) {renderRetryRequested_=true;return;}
-    if(page_==UiPage::Playlist)for(const auto& item:context.rows) if(item.valid && !fonts_.requestUiWindow(item.label,0,0,94,1.5f)) {renderRetryRequested_=true;return;}
+    for(unsigned cp=32;cp<127;++cp)if(!fonts_.request(cp,FontCache::Latin12)){renderRetryRequested_=true;return;}
+    if(!fonts_.requestUiWindow(context.libraryName,12,0,page_==UiPage::Library?194:123,1)) {renderRetryRequested_=true;return;}
+    for(const char* text:{context.hint,context.error})if(text&&!fonts_.requestUiWindow(text,12,0,123,1)){renderRetryRequested_=true;return;}
+    if(page_==UiPage::Playlist)for(const auto& item:context.rows) if(item.valid && !fonts_.requestUiWindow(item.label,12,0,110,1)) {renderRetryRequested_=true;return;}
     CachedUiFont font(&fonts_);display_->setFont(&font);
     const uint32_t started = micros();
     switch (page_) {

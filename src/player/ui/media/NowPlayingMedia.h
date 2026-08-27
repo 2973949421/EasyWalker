@@ -17,6 +17,7 @@ class NowPlayingMedia final {
   public:
     void begin(FontCache& fonts){fonts_=&fonts;}
     void selectTrack(const char* path);void release();void service();
+    const char* bootSelfCheck(); // muted resource/model check, never Player seek
     void updatePosition(uint32_t positionMs,uint32_t durationMs,bool paused);
     void resetDiagnostics();
     void setPreferred(uint8_t value);bool toggleView();void requestRedraw();

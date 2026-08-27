@@ -19,7 +19,7 @@ void CoverRenderer::service(){
            mediaU16(bytes_+8)!=120||mediaU16(bytes_+10)!=144||mediaU16(bytes_+16)!=1||mediaU16(bytes_+18)!=0||
            mediaU32(bytes_+20)!=34560||file_.size()!=34588){fail("cover_header");return;}
         const unsigned cols=mediaU16(bytes_+12),rows=mediaU16(bytes_+14);
-        if(!((cols==26&&rows==20)||(cols==30&&rows==24)||(cols==34&&rows==26))){fail("cover_grid");return;}
+        if(!((cols==26&&rows==20)||(cols==30&&rows==24)||(cols==34&&rows==26)||(cols==40&&rows==32)||(cols==48&&rows==40))){fail("cover_grid");return;}
         expectedCrc_=mediaU32(bytes_+24);crc_=~0U;remaining_=34560;phase_=3;
     }else if(phase_==3){
         const unsigned length=std::min<uint32_t>(512,remaining_);errno=0;const int n=file_.read(bytes_,length);bytesRead_+=n>0?n:0;
@@ -39,8 +39,11 @@ void CoverRenderer::drawRow(lgfx::LGFXBase& canvas,int y,uint16_t background) co
         for(int row=0;row<std::min(2,int(canvas.height()));++row)
             for(unsigned x=0;x<120;++x)canvas.drawPixel(7+x,row,mediaU16(bytes_+row*240+2*x));
     }else if(state_!=MediaState::Ready){
-        canvas.setFont(&fonts::Font0);canvas.setTextSize(1.5f);canvas.setTextColor(0x8410,background);
-        canvas.drawString(state_==MediaState::Loading?"LOADING COVER":"NO COVER",12,72-y);
+        // Font-independent fallback graphic; normal UI never falls back to
+        // Font0 merely because a song lacks a jacket.
+        canvas.drawRect(43,68-y,48,48,0x8410);
+        canvas.drawCircle(67,92-y,13,0x8410);
+        canvas.fillCircle(67,92-y,3,0x8410);
     }
 }
 } }

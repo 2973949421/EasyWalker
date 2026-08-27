@@ -104,6 +104,7 @@ class UiCoordinator final {
     char externalError_[96] = {};
     bool dirty_ = true;
     bool renderRetryRequested_ = false;
+    bool resourceTurn_ = false;
     uint32_t lastRenderAtMs_ = 0;
     uint32_t lastLibraryGeneration_ = 0;
     LibraryState lastLibraryState_ = LibraryState::Idle;

@@ -28,6 +28,8 @@ class NowPlayingPresenter final {
   public:
     void begin();
     void bindMedia(FontCache& fonts) { fonts_=&fonts; media_.begin(fonts); }
+    const char* bootMediaSelfCheck(){return media_.bootSelfCheck();}
+    const char* bootFontSelfCheck();
     void serviceMedia() { media_.service(); }
     void setPreferredView(uint8_t view) { media_.setPreferred(view); }
     bool toggleView() { return media_.toggleView(); }
@@ -65,6 +67,7 @@ class NowPlayingPresenter final {
     uint32_t frameOverlayRevision_=0,frameContentRevision_=0;
     bool frameVolumeVisible_=false;
     bool overlayPending_=false,framePartial_=false;
+    int frameContentY_=NowPlayingGeometry::contentY;
     int contentEnd_=NowPlayingGeometry::contentHeight;
     uint8_t frameVolume_=128;
     uint8_t logNote_=0;

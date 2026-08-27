@@ -24,7 +24,7 @@ void beginPage(M5GFX& display, const char* title) {
     display.clearClipRect();
     display.fillScreen(kBackground);
     display.setTextWrap(false);
-    display.setTextSize(1.3f);
+    display.setTextSize(1.0f);
     display.setTextColor(kAccent, kBackground);
     display.setCursor(7, 7);
     display.print(title);
@@ -35,7 +35,7 @@ void footer(M5GFX& display, const char* hint) {
     constexpr int footerHeight = 44;
     const int top = display.height() - footerHeight;
     display.fillRect(0, top, display.width(), footerHeight, kPanel);
-    display.setTextSize(1.25f);
+    display.setTextSize(1.0f);
     const char* value = hint == nullptr ? "" : hint;
     const char* newline = std::strchr(value, '\n');
     display.setTextColor(kAccent, kPanel);
@@ -60,16 +60,16 @@ UiTextLayoutResult LibraryPageRenderer::render(
     display.fillRoundRect(10, 39, display.width() - 20, 112, 8, kPanel);
     display.drawRoundRect(10, 39, display.width() - 20, 112, 8, kAccent);
     display.setTextColor(kMuted, kPanel);
-    display.setTextSize(1.05f);
+    display.setTextSize(1.0f);
     display.setCursor(19, 53);
     display.print("COLLECTION");
     display.setTextColor(kText, kPanel);
-    display.setTextSize(1.5f);
+    display.setTextSize(1.0f);
     const UiTextLayoutResult nameLayout = UiTextLayout::draw(
         display, context.libraryName[0] == '\0' ? "Loading..."
                                                 : context.libraryName,
         textBox(19, 76, display.width() - 38, 38, 2));
-    display.setTextSize(1.15f);
+    display.setTextSize(1.0f);
     display.setTextColor(kAccent, kPanel);
     char count[32] = {};
     std::snprintf(count, sizeof(count), "%u / %u",
@@ -79,7 +79,7 @@ UiTextLayoutResult LibraryPageRenderer::render(
                   static_cast<unsigned>(context.catalogCount));
     UiTextLayout::draw(display, count,
                        textBox(19, 122, display.width() - 38, 20));
-    display.setTextSize(1.05f);
+    display.setTextSize(1.0f);
     display.setTextColor(kText, kBackground);
     display.setCursor(11, 161);
     display.print("LEFT / RIGHT");
@@ -99,7 +99,7 @@ UiTextLayoutResult LibraryPageRenderer::render(
 void PlaylistPageRenderer::render(M5GFX& display,
                                   const UiRenderContext& context) {
     beginPage(display, "PLAYLIST");
-    display.setTextSize(1.5f);
+    display.setTextSize(1.0f);
     display.setTextColor(kMuted, kBackground);
     UiTextLayout::draw(display,
                        context.libraryName[0] == '\0' ? "Loading..."
@@ -119,7 +119,7 @@ void PlaylistPageRenderer::render(M5GFX& display,
         display.fillRect(4, y, display.width() - 8, rowHeight - 2,
                          background);
         display.setTextColor(foreground, background);
-        display.setTextSize(1.5f);
+        display.setTextSize(1.0f);
         const char marker[] = {
             row.playing ? '>' : ' ',
             row.type == LibraryEntryType::Directory ? '/' : ' ', ' ', '\0'};
@@ -144,7 +144,7 @@ void SettingsPageRenderer::render(M5GFX& display,
                                   const UiRenderContext& context) {
     beginPage(display, "SETTINGS");
     display.setTextColor(kText, kBackground);
-    display.setTextSize(1.35f);
+    display.setTextSize(1.0f);
     display.setCursor(12, 50);
     display.print("P3A FOUNDATION");
     display.setTextSize(1.0f);

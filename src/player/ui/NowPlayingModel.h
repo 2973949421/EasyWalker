@@ -12,6 +12,8 @@ struct NowPlayingGeometry {
     static constexpr int headerHeight = 28;
     static constexpr int contentY = 28;
     static constexpr int contentHeight = 188;
+    static constexpr int contentTop(bool lyrics) { return lyrics?0:headerHeight; }
+    static constexpr int contentExtent(bool lyrics) { return footerY-contentTop(lyrics); }
     static constexpr int footerY = 216;
     static constexpr int footerHeight = 24;
     static constexpr int margin = 6;
@@ -85,6 +87,7 @@ class NowPlayingModel final {
     DisplayMetadataState metadataState = DisplayMetadataState::Fallback;
     uint8_t metadataWarning = 0;
     bool active = false;
+    bool headerVisible = true;
     uint8_t dirty = DirtyAll;
     uint32_t contentRevision = 0;
     uint32_t overlayRevision = 0;

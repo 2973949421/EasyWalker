@@ -15,8 +15,8 @@ constexpr uint16_t kPanel = 0x10E3;
 constexpr uint16_t kAccent = 0xFBE0;
 constexpr uint16_t kMuted = 0x8410;
 constexpr uint16_t kText = 0xFFFF;
-constexpr float kTitleSize = 1.75f;  // Font0: 8px * 1.75 = 14px
-constexpr float kSmallSize = 1.5f;   // Font0: 12px
+constexpr float kTitleSize = 1.0f;
+constexpr float kSmallSize = 1.0f;
 
 void formatTime(char* output, size_t capacity, uint32_t milliseconds) {
     const uint32_t seconds = milliseconds / 1000U;
@@ -29,6 +29,20 @@ void formatTime(char* output, size_t capacity, uint32_t milliseconds) {
 void NowPlayingPresenter::begin() {
     row_.setBuffer(pixels_, G::width, G::rowHeight, 16);
     row_.setTextWrap(false);
+}
+
+const char* NowPlayingPresenter::bootFontSelfCheck(){
+    if(!fonts_)return "font_cache_unbound";
+    const uint32_t started=millis();
+    while(!fonts_->requestUiWindow("ADVWalkmanBenchmark",12,0,220,1)){
+        fonts_->service();if(millis()-started>5000)return "font_warmup_timeout";delay(1);
+    }
+    prepareRow(18,kBackground,1);CachedUiFont font(fonts_,12);row_.setFont(&font);
+    const auto layout=UiTextLayout::measure(row_,"ADVWalkmanBenchmark",{19,76,97,38,2,3,true});
+    UiTextLayout::draw(row_,"ADVWalkman",{6,0,123,18,1,0,false});
+    bool ink=false;for(unsigned i=0;i<G::width*18;++i)ink|=row_.readPixel(i%G::width,i/G::width)!=kBackground;
+    row_.setFont(&fonts::Font0);
+    return layout.lineCount==2&&!layout.truncated&&!layout.layoutError&&layout.maxLineWidthPx<=97&&ink?nullptr:"actual_font_layout";
 }
 
 void NowPlayingPresenter::setActive(bool active, uint32_t nowMs) {
@@ -45,7 +59,7 @@ void NowPlayingPresenter::setActive(bool active, uint32_t nowMs) {
 
 void NowPlayingPresenter::measureTitle(uint32_t nowMs) {
     row_.setTextSize(kTitleSize);
-    CachedUiFont font(fonts_,1);if(fonts_)row_.setFont(&font);
+    CachedUiFont font(fonts_,14);if(fonts_)row_.setFont(&font);
     model_.setTitleWidth(UiTextLayout::singleLineWidth(row_, model_.title), nowMs);
     row_.setFont(&fonts::Font0);
 }
@@ -88,7 +102,11 @@ void NowPlayingPresenter::update(const PlayerSnapshot& snapshot,
             model_.metadataWarning = static_cast<uint8_t>(status.error);
         }
     }
+    const bool header= !fonts_ || media_.status().view==MediaView::Cover;
+    if(model_.headerVisible!=header){model_.headerVisible=header;contentRow_=0;overlayPending_=false;
+        media_.requestRedraw();model_.dirty=DirtyAll;measureTitle(nowMs);}
     model_.tick(nowMs);
+    if(!header)model_.clearDirty(DirtyTitle|DirtyArtist);
     if(logNote_ && nowMs-logNoteAt_>=1500){logNote_=0;model_.dirty|=DirtyStatus;}
     if (fonts_) {
         media_.updatePosition(snapshot.positionMs,snapshot.durationMs,snapshot.state!=PlayerState::Playing);
@@ -124,7 +142,7 @@ void NowPlayingPresenter::pushRow(M5GFX& display, int y) {
 void NowPlayingPresenter::drawContentSlice(int screenY, int height) {
     prepareRow(height, kBackground, kSmallSize);
     const bool card=fonts_ && !media_.frameInProgress() && (model_.hint[0]||model_.error[0]);
-    if(fonts_ && !card) media_.drawStripe(row_,screenY-G::contentY,height);
+    if(fonts_ && !card) media_.drawStripe(row_,screenY-frameContentY_,height);
     // All coordinates refer to the Content Stage; row clipping handles its
     // small stripe. P3C can replace this background painter without reflowing
     // either chrome or the volume overlay.
@@ -161,7 +179,9 @@ void NowPlayingPresenter::drawContentSlice(int screenY, int height) {
                       NowPlayingModel::volumePercent(volume));
         row_.setTextSize(1.0f);
         row_.setTextColor(kText);
+        CachedUiFont font(fonts_,10);row_.setFont(&font);
         row_.drawString(percent, G::overlayX, 138 - screenY);
+        row_.setFont(&fonts::Font0);
     }
 }
 
@@ -202,9 +222,11 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
         clearPage_ = false;
         ++stats_.pageClears;
     } else if (model_.dirty & DirtyTitle) {
-        if(fonts_ && !fonts_->requestUiWindow(model_.title,1,model_.titleOffsetPx,123,kTitleSize))return false;
+        // Measure the whole title before drawing a clipped visible window.
+        if(fonts_){bool invalid=false;const char* p=model_.title;while(*p){auto cp=mediaCodepoint(p,invalid);if(cp<256&&!fonts_->requestMetric(cp,FontCache::faceFor(cp,14)))return false;}
+            measureTitle(millis());if(!fonts_->requestUiWindow(model_.title,14,model_.titleOffsetPx,123,1))return false;}
         prepareRow(16, kBackground, kTitleSize);
-        CachedUiFont font(fonts_,1); if(fonts_)row_.setFont(&font);
+        CachedUiFont font(fonts_,14); if(fonts_)row_.setFont(&font);
         row_.setTextColor(kAccent, kBackground);
         UiTextLayout::drawScrolledLine(row_, model_.title[0] ? model_.title : "No track",
                                        {6, 1, 123, 15, 1, 0, false}, model_.titleOffsetPx);
@@ -213,7 +235,7 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
         ++stats_.titleDraws;
         row_.setFont(&fonts::Font0);
     } else if (model_.dirty & DirtyArtist) {
-        if(fonts_ && !fonts_->requestUiWindow(model_.artist,0,0,123,kSmallSize))return false;
+        if(fonts_ && !fonts_->requestUiWindow(model_.artist,12,0,123,1))return false;
         prepareRow(12, kBackground, kSmallSize);
         CachedUiFont font(fonts_); if(fonts_)row_.setFont(&font);
         UiTextLayout::draw(row_, model_.artist, {6, 0, 123, 12, 1, 0, true});
@@ -222,7 +244,9 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
         ++stats_.artistDraws;
         row_.setFont(&fonts::Font0);
     } else if (model_.dirty & (DirtyTime|DirtyStatus)) {
-        prepareRow(18, kBackground, 1.25f);
+        if(fonts_&&!fonts_->requestUiWindow("0123456789:/-?ASLOG VEDR",10,0,1000,1))return false;
+        prepareRow(18, kBackground, 1.0f);
+        CachedUiFont font(fonts_,10);if(fonts_)row_.setFont(&font);
         drawStateIcon(model_.state);
         // Only exceptional modes occupy an extra tiny marker. Normal/Original
         // are defaults, not two permanent words stealing a complete row.
@@ -238,6 +262,7 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
         std::snprintf(text, sizeof(text), "%s/%s", position, duration);
         UiTextLayout::draw(row_, logNote_?(logNote_==1?"LOG SAVED":"LOG ERROR"):text, {33, 2, 96, 16, 1, 0, true});
         pushRow(display, G::footerY);
+        row_.setFont(&fonts::Font0);
         model_.clearDirty(DirtyTime|DirtyStatus);
         ++stats_.timeDraws;++stats_.statusDraws;
     } else if (model_.dirty & DirtyProgress) {
@@ -298,20 +323,22 @@ bool NowPlayingPresenter::renderContentOne(M5GFX& display) {
         return true;
     }
     if(!media_.frameInProgress()) {
+        if(model_.volumeVisible && fonts_&&!fonts_->requestText("0123456789%",FontCache::Latin10))return false;
         const bool patch=overlayPending_ && media_.canPatchOverlay();
         if(!media_.beginFrame(millis()))return false;
+        frameContentY_=G::contentTop(media_.status().view==MediaView::Lyrics);
         framePartial_=patch;overlayPending_=false;
-        contentRow_=patch?G::overlayY-G::contentY:0;
-        contentEnd_=patch?contentRow_+G::overlayHeight:G::contentHeight;
+        contentRow_=patch?G::overlayY-frameContentY_:0;
+        contentEnd_=patch?contentRow_+G::overlayHeight:G::footerY-frameContentY_;
         if(patch)++stats_.overlayPatches;
         frameOverlayRevision_=model_.overlayRevision;frameContentRevision_=model_.contentRevision;
         frameVolumeVisible_=model_.volumeVisible;frameVolume_=model_.volume;
     }
     const int height=std::min(media_.stripeHeight(),contentEnd_-contentRow_);
     if(!media_.prepareStripe(contentRow_,height))return false;
-    drawContentSlice(G::contentY+contentRow_,height);
+    drawContentSlice(frameContentY_+contentRow_,height);
     if(framePartial_)display.setClipRect(G::overlayX,G::overlayY,G::overlayWidth,G::overlayHeight);
-    pushRow(display,G::contentY+contentRow_);
+    pushRow(display,frameContentY_+contentRow_);
     if(framePartial_)display.clearClipRect();
     contentRow_+=height;++stats_.contentSlices;
     if(contentRow_==contentEnd_){
