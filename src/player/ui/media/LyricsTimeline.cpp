@@ -29,20 +29,21 @@ void LyricsTimeline::release() {
     count_[0]=count_[1]=0;current_=-2;windowReady_=false;alternative_[0]=0;
 }
 bool LyricsTimeline::selectTrack(const char* track) {
-    release();error_="none";alternativeCount_=0;offsetMs_[0]=offsetMs_[1]=0;translationHant_=false;
+    release();error_="none";failure_=ResourceFailure{};alternativeCount_=0;offsetMs_[0]=offsetMs_[1]=0;translationHant_=false;
     hasText_[0]=hasText_[1]=false;
     std::memset(usedTranslation_,0,sizeof(usedTranslation_));
     if(!mediaResourcePath(track,"/Lyrics","",base_,sizeof(base_))) { fail("lyric_path");return false; }
     work_=new(std::nothrow) Work{};if(!work_){fail("lyrics_memory");return false;}
     state_=MediaState::Loading;phase_=1;language_=0;++revision_;return true;
 }
-void LyricsTimeline::fail(const char* reason) { error_=reason;state_=MediaState::Error;phase_=0;file_.close();directory_.close();windowReady_=false;++revision_; }
+void LyricsTimeline::fail(const char* reason) { failure_.set(reason,"parse",errno);error_=reason;state_=MediaState::Error;phase_=0;file_.close();directory_.close();windowReady_=false;++revision_; }
 void LyricsTimeline::openLanguage(bool original) {
     char path[576];
     if(original && alternative_[0])std::snprintf(path,sizeof(path),"%s",alternative_);
     else std::snprintf(path,sizeof(path),"%s%s",base_,original?".lrc":(translationHant_?".zh-Hant.lrc":".zh-Hans.lrc"));
-    file_=SD.open(path,FILE_READ);lineLength_=0;readOffset_=lineOffset_=0;eof_=false;
-    if(file_ && !file_.setBufferSize(512)){fail("lrc_buffer");return;}
+    openedLanguage_=original?0:1;ResourceFailure attempt;
+    const auto opened=openResource(file_,path,512,attempt);lineLength_=0;readOffset_=lineOffset_=0;eof_=false;
+    if(opened==MediaState::Error){failure_=attempt;fail(attempt.reason);return;}
     if(file_ && file_.size()>128*1024)fail("lrc_file_limit");
 }
 bool LyricsTimeline::parseLine(bool index) {
@@ -72,8 +73,9 @@ bool LyricsTimeline::parseLine(bool index) {
     return true;
 }
 bool LyricsTimeline::readIndexSlice() {
-    const int n=file_.read(work_->io,sizeof(work_->io));
-    if(n<0){fail("lrc_read");return false;}bytesRead_+=n;
+    const size_t wanted=std::min<size_t>(sizeof(work_->io),file_.size()-file_.position());
+    errno=0;const int n=file_.read(work_->io,wanted);
+    if(n!=int(wanted)){failure_.set("lrc_read","read",errno,wanted,n);fail("lrc_read");return false;}bytesRead_+=n;
     for(int i=0;i<n;++i) {
         const char c=work_->io[i];++readOffset_;
         if(c==0){fail("lrc_nul");return false;}
@@ -92,7 +94,7 @@ void LyricsTimeline::service() {
     if(phase_==1) { openLanguage(true);if(state_==MediaState::Error)return;phase_=file_?6:2; }
     else if(phase_==2) {
         char parent[560];std::snprintf(parent,sizeof(parent),"%s",base_);char* slash=std::strrchr(parent,'/');if(slash)*slash=0;
-        directory_=SD.open(parent,FILE_READ);phase_=3;if(!directory_){state_=MediaState::Missing;phase_=0;}
+        errno=0;directory_=SD.open(parent,FILE_READ);phase_=3;if(!directory_){const int code=errno;failure_.set(code==ENOENT?"not_found":"directory_open","directory",code);state_=code==ENOENT?MediaState::Missing:MediaState::Error;error_=failure_.reason;phase_=0;++revision_;}
     } else if(phase_==3) {
         fs::File entry=directory_.openNextFile();
         if(!entry){directory_.close();if(alternativeCount_>1)fail("ambiguous_original_lrc");else if(alternativeCount_==1)phase_=4;else {state_=MediaState::Missing;phase_=0;++revision_;}}
@@ -105,7 +107,7 @@ void LyricsTimeline::service() {
                 ++alternativeCount_;std::snprintf(alternative_,sizeof(alternative_),"%.*s/%s",int(basename-base_-1),base_,filename);
             }
         }
-    } else if(phase_==4) {openLanguage(true);if(state_!=MediaState::Error)phase_=file_?6:0;if(!file_)state_=MediaState::Missing;}
+    } else if(phase_==4) {openLanguage(true);if(state_==MediaState::Error)return;phase_=file_?6:0;if(!file_)state_=MediaState::Missing;}
     else if(phase_==5) {
         openLanguage(false);if(state_==MediaState::Error)return;
         if(file_)phase_=6;else if(!translationHant_)translationHant_=true;else {phase_=8;pairAt_=0;}
@@ -152,15 +154,24 @@ void LyricsTimeline::loadWindowSlice() {
         char path[576];
         if(!lang && alternative_[0])std::snprintf(path,sizeof(path),"%s",alternative_);
         else std::snprintf(path,sizeof(path),"%s%s",base_,!lang?".lrc":(translationHant_?".zh-Hant.lrc":".zh-Hans.lrc"));
-        file_=SD.open(path,FILE_READ);lineOffset_=(lang?work_->cues[1][pair].offset:original.offset)&kOffsetMask;lineLength_=0;
-        if(!file_ || !file_.setBufferSize(512) || !file_.seek(lineOffset_)){fail("lrc_window_open");return;}
+        openedLanguage_=lang;ResourceFailure attempt;const auto opened=openResource(file_,path,512,attempt);
+        lineOffset_=(lang?work_->cues[1][pair].offset:original.offset)&kOffsetMask;lineLength_=0;
+        if(opened!=MediaState::Loading){failure_=attempt;fail("lrc_window_open");return;}
+        errno=0;if(!file_.seek(lineOffset_)){failure_.set("lrc_window_seek","seek",errno);fail("lrc_window_seek");return;}
         return;
     }
-    const int n=file_.read(work_->io,512);if(n<0){fail("lrc_window_read");return;}bytesRead_+=n;bool done=n==0;
+    const size_t wanted=std::min<size_t>(512,file_.size()-file_.position());errno=0;
+    const int n=file_.read(work_->io,wanted);if(n!=int(wanted)){failure_.set("lrc_window_read","read",errno,wanted,n);fail("lrc_window_read");return;}bytesRead_+=n;bool done=n==0;
     for(int i=0;i<n;++i){const char c=work_->io[i];if(c==0){fail("lrc_nul");return;}if(c=='\n'){done=true;break;}if(c!='\r'){if(lineLength_>=1024){fail("lrc_line_limit");return;}work_->line[lineLength_++]=c;}}
     if(done || file_.position()>=file_.size()){if(!parseLine(false))return;file_.close();++loadSlot_;}
 }
 uint32_t LyricsTimeline::startMs() const {return current_>=0 && work_ ? work_->cues[0][current_].time : 0;}
+uint32_t LyricsTimeline::cueStart(int index) const {return index>=0 && index<count_[0] && work_?work_->cues[0][index].time:0;}
+uint32_t LyricsTimeline::cueEnd(int index) const {return index+1<count_[0]?cueStart(index+1):(durationMs_>cueStart(index)?durationMs_:cueStart(index)+10000);}
+void LyricsTimeline::failurePath(char* output,size_t size) const {
+    if(!openedLanguage_ && alternative_[0])std::snprintf(output,size,"%s",alternative_);
+    else std::snprintf(output,size,"%s%s",base_,!openedLanguage_?".lrc":(translationHant_?".zh-Hant.lrc":".zh-Hans.lrc"));
+}
 uint32_t LyricsTimeline::endMs() const {
     if(!work_ || !count_[0])return durationMs_;
     if(current_+1<count_[0])return work_->cues[0][current_+1].time;

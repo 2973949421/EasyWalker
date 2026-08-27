@@ -1,6 +1,7 @@
 #pragma once
 #include <SD.h>
 #include "MediaTypes.h"
+#include "ResourceIo.h"
 
 namespace adv_walkman { namespace player {
 class LyricsTimeline final {
@@ -12,12 +13,16 @@ class LyricsTimeline final {
     void updatePosition(uint32_t positionMs,uint32_t durationMs);
     MediaState state() const { return state_; }
     const char* error() const { return error_; }
+    const ResourceFailure& failure() const { return failure_; }
+    void failurePath(char* output,size_t size) const;
     bool hasLyrics() const { return state_==MediaState::Ready && count_[0]>0; }
     bool windowReady() const { return windowReady_; }
     int current() const { return current_; }
     uint32_t revision() const { return revision_; }
     uint32_t startMs() const;
     uint32_t endMs() const;
+    uint32_t cueStart(int index) const;
+    uint32_t cueEnd(int index) const;
     const char* text(int relative,unsigned language) const;
     uint16_t count(unsigned language) const { return count_[language&1]; }
     uint32_t bytesRead() const { return bytesRead_; }
@@ -35,6 +40,8 @@ class LyricsTimeline final {
     fs::File file_,directory_;
     char base_[560]{},alternative_[560]{};
     const char* error_="none";
+    ResourceFailure failure_{};
+    uint8_t openedLanguage_=0;
     MediaState state_=MediaState::Idle;
     uint16_t count_[2]{},sortAt_=0,pairAt_=0;
     uint8_t usedTranslation_[64]{};
