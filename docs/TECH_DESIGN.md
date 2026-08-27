@@ -710,12 +710,13 @@ Portrait 基线冻结为 `rotation 2`。V1 不使用 IMU 自动旋转 UI。
 初始布局：
 
 ```text
-Header         ~26 px
-Content Stage ~184 px
-Footer         ~30 px
+Header          34 px  (y=0)
+Content Stage  168 px  (y=34)
+Footer          38 px  (y=202)
 ```
 
-允许真机原型小范围调整。
+135×240、rotation 2、水平边距 6 px。Title 约 14 px，Artist / Footer 约 12 px。
+P3B Content 只显示开发占位与 Gate 引导，不能覆盖 Header / Footer。
 
 ### 9.2.1 Text Layout Contract
 
@@ -731,10 +732,11 @@ drawable rect + active font + text size + UTF-8 text + max lines + overflow poli
 - 使用当前字体的实际像素度量计算每行可用宽度，并扣除页面 margin / padding；
 - 只在合法 UTF-8 字符边界断行或截断，不拆开中文、日文等多字节字符；
 - 不能假设文本含空格；无空格长名称也要在能容纳的字符边界断行；
-- P3A Library 曲库名和 Player 文件名最多两行，最后一行仍超限时显示省略号；
+- P3A Library 曲库名最多两行，最后一行仍超限时显示省略号；旧 Player 两行占位在
+  P3B 替换为单行 Title 滚动；
 - Playlist 顶部曲库名及各歌曲 / 目录行使用单行省略，播放 / 目录标记先测量并预留宽度；
 - 状态、Footer 每条显式提示、版本和固定数值区默认单行，超限时省略；Now Playing 的长 Title
-  在 P3B 可进一步使用规定的 Marquee；
+  在 P3B 使用规定的 Marquee；
 - 根据字体 line height 和区域高度共同限制行数，绘制时设置 clip rect 作为最后保护；
 - 完整调试路径不进入正式产品 UI；需要提示时显示 basename 或明确缩略形式。
 
@@ -769,7 +771,47 @@ Title / Artist 能完整显示时保持静态。超长 Title：
 hold 5s → scroll left once → hold 5s → repeat
 ```
 
-滚动速度初始目标约 `20–25 px/s`，允许真机调整。
+初始速度 `24 px/s`，最多 20 次/s；暂停不停止动画，换歌、标题更新或重新进入 Player
+重置开头计时。Artist 单行省略，不同步滚动。Title 使用完整有界文本度量和裁剪，
+不得因为 UiTextLayout 的 128-byte 行缓冲丢掉后半段。
+
+### 9.3.1 P3B Display Model and Partial Rendering
+
+`NowPlayingModel` / `NowPlayingPresenter` 只持有歌曲显示副本、真实 Snapshot、动画
+时钟、音量浮层与区域 Dirty 标记，不拥有 Decoder、Queue 或 Session。
+`LibraryRuntime::requestMetadataPath()` 独立于浏览目录，复用现有单 Reader / 12 项缓存；
+只接受已经规范化的 `/Music/...mp3` 路径，拒绝 `..`、`.` 和空路径段，不暗中转换 key。
+结果通过 `metadataForPath()` 核对。Player 与 Playlist 各自保留显示副本，读取失败
+或标签警告时保留文件名回退，不影响音频。Reader 的 192-byte 文件名回退不替换
+Player 自己的完整 512-byte 有界名称，以免长文件名在滚动前就被截断。
+
+时间 / 进度只来自 Snapshot；恢复 Pause 且 duration=0 时总时长为 `--:--`、进度未知，
+不额外 Probe。播放模式只显示 NORM / ONE / ALL / SHUF；异常组合显示 MODE? 并记录
+原始值。P3B 音效只显示实际 Original，不实现 DSP。
+
+标题、Artist、时间 / 进度、状态行与 Content 独立更新。非 Player 页面不因秒数变化
+重绘；页面切换允许一次完整初始化。固定 `135×18×2=4860 bytes` RGB565 行缓冲复用，
+不分配全屏 Sprite；UiTextLayout 面向 `lgfx::LovyanGFX`，绘制不读 SD。
+主循环继续 Player → Library → 输入 → 一次有界 UI 工作。
+
+`notifyVolumeAdjusted(volume, nowMs)` 只接收已调节音量的显示事件，不改变音频音量。
+左侧浮层覆盖 Content，不改变其布局；3 秒后局部恢复。未收到事件不显示，离页隐藏。
+真实按键仍留 P4；联合 Gate 使用明确显示测试事件，不调实际音量。
+
+P3B 本地验证与设备验证区分：可注入时间检查、布局检查编入测试支持；联合 Gate
+才验证实际显示。连续播放窗口 Audio Error / Backpressure=0、PCM gap≤70 ms，日志
+`/ADVWalkman/logs/p3b-last.txt` 独立记录显示与音频失败，不覆盖 P3A 文本结论。
+
+测试交接：`P3BChecks` 包含编译期 geometry / timing / volume 断言，及待设备执行的
+`checkP3BModel()`、`checkP3BDrawing(135×18 scratch)`、
+`checkP3BOverlayRestoration(presenter)`。后者复用同一行缓冲，逐条带核对浮层隐藏后的
+背景像素与原背景一致，不分配另一个屏幕缓冲。
+联合 Gate 先停止音频运行这些显示检查；再预热真实 44.1 kHz 长曲，清零音频诊断，
+等首个新 PCM 提交后 `P3BValidation::begin()`，持续 `sample()` 至少 10 秒；
+保存测量快照后停止音频，再 `writeLog()`。显示确认和浮层确认必须真实取得；
+未执行的窗口标 SKIPPED，不由原 P3A Gate 推导 B 的 PASS。
+`tools/check_p3b.py --artifacts` 是 PC 几何 / 参考 / 源码契约与生成物检查，不能代替
+上述设备函数或用户可见显示验收。本阶段不增加独立 P3B Gate 安装。
 
 ### 9.4 Now Playing View Selector
 

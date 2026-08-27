@@ -311,21 +311,22 @@ Original    Tape        Radio       Vocal Clear
 基本结构：
 
 ```text
-Header        约 26 px
+Header        34 px
 歌曲身份
 
-Content Stage 约 184 px
+Content Stage 168 px
 歌词 / ASCII Cover
 
-Footer        约 30 px
-进度 / 音效 / 音量
+Footer        38 px
+时间 / 进度 / 状态 / 播放模式 / 音效
 ```
 
 以上像素是设计基线，真机允许小范围调整。
 
 #### Header
 
-显示 Song Title 与 Artist。
+显示 Song Title 与 Artist，水平边距 6 px、左对齐。优先采用 Metadata；Title 缺失时
+回退为去掉扩展名的文件名，Artist 缺失时留空。Title 单行约 14 px，Artist 约 12 px。
 
 长标题：
 
@@ -334,7 +335,9 @@ Footer        约 30 px
 超出宽度 → 静止约 5 秒 → 缓慢向左滚动一遍 → 静止约 5 秒 → 循环
 ```
 
-滚动应克制，避免持续与歌词横向移动争夺注意力。
+滚动初始速度 24 px/s、最多 20 次/s；开头和末尾各停 5 秒，末尾停留后返回开头。
+暂停时仍滚动；换歌、Title 更新或重新进入 Player 时从开头重新计时。
+Artist 超长时单行省略，不与 Title 同时滚动。滚动应克制，避免持续争夺歌词注意力。
 
 #### Content Stage
 
@@ -362,10 +365,16 @@ View 切换不得改变当前歌曲、播放 / 暂停、进度、Queue、Sound P
 
 - 当前时间 / 总时长
 - 进度条
+- 播放 / 暂停 / 停止 / 错误状态与 `NORM / ONE / ALL / SHUF` 播放模式
 - 当前 Sound Preset
-- Volume
 
-Footer 在歌词 / ASCII 两种状态下保持稳定。
+Footer 约 12 px，在歌词 / ASCII 两种状态下保持稳定。时间读取真实播放状态；重启
+恢复尚未首次播放时显示恢复位置与 `--:--` 总时长，进度未知，不为显示额外 Probe。
+旧状态含非标准 Repeat / Shuffle 组合时显示 `MODE?`，不静默修改播放状态。
+
+音量改为 Content Stage 左侧的临时细竖条与百分比浮层，不常驻 Footer，不挤压内容。
+最后一次调节后显示 3 秒，再次调节重新计时；128/255 显示约 50%。进入页面、恢复
+或普通重绘不主动显示，离开 Player 立即隐藏；消失时只恢复覆盖区域。
 
 ### 8.3 Lyrics（歌词）
 
@@ -420,9 +429,9 @@ Footer 在歌词 / ASCII 两种状态下保持稳定。
 
 - 中文 / CJK：楷体约 `16 px`
 - 英文：Times New Roman 约 `12 px`
-- Song Title：约 `12 px`
-- Artist：约 `10 px`
-- Footer：约 `10 px`
+- Song Title：约 `14 px`
+- Artist：约 `12 px`
+- Footer：约 `12 px`
 
 真机原型允许约 `±2 px` 微调。
 

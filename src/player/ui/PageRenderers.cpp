@@ -52,14 +52,6 @@ void footer(M5GFX& display, const char* hint) {
                        textBox(7, top + 24, display.width() - 14, 18));
 }
 
-const char* basenameOf(const char* path) {
-    if (path == nullptr || path[0] == '\0') {
-        return "none";
-    }
-    const char* slash = std::strrchr(path, '/');
-    return slash == nullptr ? path : slash + 1;
-}
-
 }  // namespace
 
 UiTextLayoutResult LibraryPageRenderer::render(
@@ -145,32 +137,6 @@ void PlaylistPageRenderer::render(M5GFX& display,
                            textBox(12, 90, display.width() - 24, 32, 2));
     }
     footer(display, context.hint == nullptr ? "UP/DOWN + ENTER\nESC: BACK"
-                                            : context.hint);
-}
-
-void PlayerPageRenderer::render(M5GFX& display,
-                                const UiRenderContext& context) {
-    beginPage(display, "NOW PLAYING");
-    display.fillRoundRect(10, 42, display.width() - 20, 126, 7, kPanel);
-    display.setTextColor(kMuted, kPanel);
-    display.setTextSize(1.1f);
-    display.setCursor(18, 55);
-    display.print("PLAYING");
-    display.setTextColor(kText, kPanel);
-    display.setTextSize(1.35f);
-    UiTextLayout::draw(display, basenameOf(context.currentTrack),
-                       textBox(18, 76, display.width() - 36, 38, 2));
-    display.setTextSize(1.15f);
-    display.setTextColor(kAccent, kPanel);
-    char state[64] = {};
-    std::snprintf(state, sizeof(state), "%s  %lu.%03lus",
-                  context.playerState == nullptr ? "EMPTY"
-                                                 : context.playerState,
-                  static_cast<unsigned long>(context.positionMs / 1000U),
-                  static_cast<unsigned long>(context.positionMs % 1000U));
-    UiTextLayout::draw(display, state,
-                       textBox(18, 119, display.width() - 36, 20));
-    footer(display, context.hint == nullptr ? "FN+ESC\nBACK TO LIST"
                                             : context.hint);
 }
 

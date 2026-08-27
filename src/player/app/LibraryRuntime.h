@@ -44,6 +44,12 @@ class LibraryRuntime final {
     // Metadata requests are on demand. The latest successful result is copied
     // out by metadata(); warnings remain visible through metadataStatus().
     LibraryResult requestMetadata(size_t entryIndex);
+    // Exact canonical /Music/... key; independent of browser generation.
+    // Reject aliases (.., ., empty components) rather than changing the key.
+    LibraryResult requestMetadataPath(const char* path);
+    bool metadataForPath(const char* path, Mp3Metadata& output) const;
+    const char* metadataRequestPath() const;
+    static bool isMetadataPath(const char* path);
     bool metadata(Mp3Metadata& output) const;
     Mp3MetadataStatus metadataStatus() const;
     size_t metadataCacheSize() const;
@@ -63,6 +69,7 @@ class LibraryRuntime final {
     LibraryResult tryPendingSelection();
     void serviceMetadata();
     LibraryResult tryPendingMetadata();
+    LibraryResult startMetadataReader();
     bool observeRecent(uint32_t now);
     void serviceRecentStorage(uint32_t now);
     bool recentStoragePending(uint32_t now) const;
@@ -91,6 +98,7 @@ class LibraryRuntime final {
     bool latestMetadataReady_ = false;
     bool pendingMetadataPath_ = false;
     bool metadataRequestActive_ = false;
+    bool metadataFromEntry_ = true;
     size_t pendingMetadataEntry_ = 0;
     uint32_t pendingMetadataGeneration_ = 0;
     char pendingMetadataDirectory_[kTrackPathCapacity] = {};

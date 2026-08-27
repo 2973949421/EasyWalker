@@ -51,11 +51,6 @@ class PlaylistPageRenderer final {
     static void render(M5GFX& display, const UiRenderContext& context);
 };
 
-class PlayerPageRenderer final {
-  public:
-    static void render(M5GFX& display, const UiRenderContext& context);
-};
-
 class SettingsPageRenderer final {
   public:
     static void render(M5GFX& display, const UiRenderContext& context);

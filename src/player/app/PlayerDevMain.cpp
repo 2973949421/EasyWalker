@@ -32,7 +32,7 @@ void renderBootFailure(const char* reason) {
     display.setTextColor(TFT_ORANGE, TFT_BLACK);
     display.setTextSize(1.0f);
     display.setCursor(7, 8);
-    display.println("ADV Walkman P3A ERROR");
+    display.println("ADV Walkman ERROR");
     display.setTextColor(TFT_WHITE, TFT_BLACK);
     UiTextLayout::draw(display, reason == nullptr ? "unknown" : reason,
                        {7, 35, 121, 70, 4, 3, true});
@@ -63,7 +63,7 @@ void setup() {
     const bool uiReady = libraryReady &&
                          ui.begin(M5Cardputer.Display, player, libraryRuntime);
     Serial.printf(
-        "boot app=adv-walkman-p3a version=%s sd=%d player=%d library=%d ui=%d "
+        "boot app=adv-walkman-p3b version=%s sd=%d player=%d library=%d ui=%d "
         "display=%dx%d rotation=%u\n",
         ADV_WALKMAN_VERSION, sdReady, playerReady, libraryReady, uiReady,
         M5Cardputer.Display.width(), M5Cardputer.Display.height(),
@@ -87,7 +87,7 @@ void setup() {
 
 void loop() {
     // Audio remains first. Library, keyboard and one bounded dirty render
-    // follow; no full-screen framebuffer or continuous animation is used.
+    // follow; title animation is capped at 20 fps, without a full framebuffer.
     player.service();
     libraryRuntime.service();
     M5Cardputer.update();

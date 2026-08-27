@@ -1,7 +1,7 @@
 # ADV Walkman
 
 > 工作名：ADV Walkman  
-> 当前阶段：P3A 文本修复已完成代码与本地构建，仍为 `DEVICE TEST`，等待 Gate A-fix+B+C；P1/P2 已完成并冻结
+> 当前阶段：P3B 代码与本地验证完成，P3A/B 均为 `DEVICE TEST`，等待 Gate A-fix+B+C；P3C 为 `TODO`
 > 平台：M5Stack Cardputer ADV
 
 ## 1. 项目是什么
@@ -73,8 +73,8 @@ V1 不以以下内容为目标：
 
 P3 已按 `P3A → P3B → P3C → P3D` 分步冻结，完整路线见
 [`docs/P3_DELIVERY.md`](docs/P3_DELIVERY.md)。当前 P3A 只建立真实可操作的竖屏
-UI、曲库 / 播放列表和跨页播放，不提前制作歌词、ASCII Cover、黑胶动画或完整
-Settings。
+UI、曲库 / 播放列表和跨页播放。P3B 在其上实现正式 Now Playing 歌曲信息、滚动、
+进度和状态，仍不提前制作歌词、ASCII Cover、黑胶动画或完整 Settings。
 
 `0.5.1-p3a.gate` 已通过按键、页面路由、跨页播放和音频连续性的真机 Gate；当前仍
 保持 `DEVICE TEST`，因为真实曲库名 `ADVWalkmanBenchmark` 暴露了卡片文字越界。
@@ -93,20 +93,36 @@ Now Playing、字体、歌词、ASCII Cover 与 View Selector。其后只剩 P3D
 ```powershell
 .\tools\build_player.ps1 -Target Dev
 .\tools\build_player.ps1 -Target P3AGate
+.\tools\build_player.ps1 -Target P2Gate
+& 'B:\PlatformIO\penv\Scripts\python.exe' tools/check_p3b.py --artifacts
 ```
 
-2026-08-27 两个环境均构建成功，版本均为 `0.5.2-p3a.textfix`，低于
-`0x140000`（1,310,720 bytes）Launcher 上限：
+P3A 历史文本修复 `0.5.2-p3a.textfix` 两个构建为 708,176 / 714,608 bytes；
+当前 Dev / P3A 回归版本更新为 `0.6.0-p3b.chrome`，本地生成物记录如下，
+Launcher 上限仍为 `0x140000`（1,310,720 bytes）：
 
 | 本地生成物 | 大小 / bytes | SHA-256 |
 |---|---:|---|
-| `artifacts/ADV-Walkman-Dev.bin` | 708,176 | `fc892763fa720f44369518081b5e5f569baad2953dd32fd71443cd156328355f` |
-| `artifacts/ADV-Walkman-P3A-Gate.bin` | 714,608 | `63082df77db51175720472127e9899448f97aa3f705e5f3f663fc760c7e22ae3` |
+| `artifacts/ADV-Walkman-Dev.bin` | 715,552 | `f7daf3c01477ffdf65e2e56252cc6d05d5dc3719572e56c824447a864cc7d913` |
+| `artifacts/ADV-Walkman-P3A-Gate.bin` | 721,744 | `f320147dc5e427a28ed7794479464e08590d36051aadff11df1997b4ed90ef54` |
+| `artifacts/ADV-Walkman-P2-Gate.bin` | 724,256 | `b839e90ae78b2f82a649961401f809f2db47288a85ac15ffe16b015732b72fe3` |
+
+2026-08-27 三个环境均构建通过。P2 保留历史版本 `0.4.4-p2.final-gate`，这次只做
+Metadata 接口兼容构建，不表示重新执行 P2 真机 Gate。
+
+Dev / P3A 静态 RAM 为 109,176 / 110,040 bytes，比文本修复各增加 6,640 bytes，
+其中固定 RGB565 行缓冲为 4,860 bytes；没有全屏 Sprite。
 
 Gate 新增实际曲库名的行数、像素宽度、截断、UTF-8 和布局错误日志；
 `ADVWalkmanBenchmark` 必须完整显示为两行，失败独立归因为 `library_text_layout`。
 原有方向、按键、页面和音频条件保持不变。下次 A-fix+B+C 复用这组断言；联合固件
 尚未实现。本轮没有改写 SD，最后已验收的历史版本仍为 `0.5.1-p3a.gate`。
+
+P3B 自动检查包含 10 项 PC 几何 / 时间参考 / 源码契约检查，以及构建时执行的
+实际动画 / 音量公式 constexpr 断言。可注入时钟的完整模型检查、M5GFX 像素裁剪、
+浮层背景恢复和 P3B 日志支持已编译，但没有在 ADV 上执行；不能据此声称屏幕或
+音频通过。P3C 接入联合 Gate 时复用这些支持，P3B 连续播放窗口仍要求 Error /
+Backpressure=0、PCM gap≤70 ms。P3B 不增加安装步骤。
 
 P0 Audio Backend Benchmark 已完成，V1 正式冻结 Candidate A：
 
@@ -143,7 +159,7 @@ microSD 已挂载为例如 `D:\` 时，可一并复制并复核 SHA-256：
 .\tools\build_player.ps1 -SdRoot D:\
 ```
 
-目标位置为 `/firmware/ADV-Walkman-Dev.bin`，由 M5Launcher 正常安装；不使用普通 PlatformIO upload 覆盖 Launcher。当前 `player-dev` 已是 P3A UI 开发入口，P2 自动验收仍使用独立的 `P2Gate`。
+目标位置为 `/firmware/ADV-Walkman-Dev.bin`，由 M5Launcher 正常安装；不使用普通 PlatformIO upload 覆盖 Launcher。当前 `player-dev` 已是 P3B UI 开发入口，P2 自动验收仍使用独立的 `P2Gate`。
 
 P2 本地 Fixture 由已有无版权 P1 音频派生，包含多层 UTF-8 路径、1,000 个 scan-only 文件、长 common-prefix 排序样本和 Metadata 边界样本。测试数据位于 Git 忽略目录，不提交仓库。千文件目录使用只读目录项枚举与 4 KiB 批量缓存写入；设备端抽查 32 个分页 / LRU / 首尾代表点，PC 端仍全量核对 Fixture。Gate 还会只读使用已经验收的 `/Music/ADVWalkmanBenchmark/benchmark.mp3` 作为持续播放音频；准备脚本只核对其大小和 SHA-256，不复制、删除或改写该歌曲。microSD 例如挂载为 `D:\` 时：
 
@@ -298,10 +314,15 @@ Content Stage
 View                       → Lyrics ↔ Cover
 
 Footer
-进度 / Sound Preset / Volume
+时间 / 进度 / 播放状态 / Play Mode / Sound Preset
 ```
 
 Header / Footer 不随 View 切换变化。切换不影响歌曲、播放状态、进度、Queue、Sound Preset 或 Volume。`preferred_now_playing_view` 默认 `LYRICS` 并跨歌曲、跨重启保留；无歌词歌曲临时退化为 Cover 时不覆盖该偏好，下一首重新有歌词后会恢复 Lyrics。
+
+P3B 确认三区高度为 34 / 168 / 38 px；Title 约 14 px、Artist / Footer 约 12 px。
+Title 单行，长标题首尾各停 5 秒、24 px/s 滚动，暂停不冻结；Artist 单行省略。
+音量不常驻 Footer，改为 Content 左侧 3 秒临时浮层；本阶段仅提供显示事件接口，
+P4 才接入真实按键。P3B 音效仍为实际 Original，不表示其他 DSP 已实现。
 
 歌词：
 

@@ -15,6 +15,7 @@ bool UiCoordinator::begin(M5GFX& display, PlayerRuntime& player,
     display_ = &display;
     player_ = &player;
     libraryRuntime_ = &libraryRuntime;
+    nowPlaying_.begin();
     std::strcpy(libraryRoot_, MusicLibrary::kMusicRoot);
     std::strcpy(libraryName_, "Uncategorized");
 
@@ -58,21 +59,36 @@ void UiCoordinator::service() {
     const PlayerSnapshot snapshot = player_->snapshot();
     char current[kTrackPathCapacity] = {};
     player_->currentPath(current, sizeof(current));
-    const uint32_t playerSecond = snapshot.positionMs / 1000U;
+    const uint32_t now = millis();
+    nowPlaying_.setActive(page_ == UiPage::Player, now);
+    nowPlaying_.update(snapshot, current, *libraryRuntime_, now);
+    const char* error = externalError_;
+    if (error[0] == '\0' && snapshot.error != PlayerError::None) {
+        error = playerErrorName(snapshot.error);
+    }
+    nowPlaying_.setContent(hint_, error);
     if (library.state() != lastLibraryState_ ||
         library.currentGeneration() != lastLibraryGeneration_ ||
         snapshot.state != lastPlayerState_ ||
-        playerSecond != lastPlayerSecond_ ||
         std::strcmp(current, lastCurrentTrack_) != 0) {
         lastLibraryState_ = library.state();
         lastLibraryGeneration_ = library.currentGeneration();
         lastPlayerState_ = snapshot.state;
-        lastPlayerSecond_ = playerSecond;
         setPath(lastCurrentTrack_, sizeof(lastCurrentTrack_), current);
         dirty_ = true;
     }
 
-    const uint32_t now = millis();
+    if (page_ == UiPage::Player) {
+        if (now - lastRenderAtMs_ >= kMinimumRenderIntervalMs &&
+            nowPlaying_.renderOne(*display_)) {
+            lastRenderAtMs_ = now;
+            ++stats_.renderCount;
+            stats_.renderMaxUs = std::max(stats_.renderMaxUs,
+                                          nowPlaying_.stats().renderMaxUs);
+        }
+        dirty_ = false;
+        return;
+    }
     if (dirty_ && now - lastRenderAtMs_ >= kMinimumRenderIntervalMs) {
         renderRetryRequested_ = false;
         render();
@@ -207,10 +223,18 @@ bool UiCoordinator::currentTrackPath(char* output, size_t capacity) const {
     return player_ != nullptr && player_->currentPath(output, capacity);
 }
 
+void UiCoordinator::notifyVolumeAdjusted(uint8_t volume, uint32_t nowMs) {
+    // Presentation only; actual volume adjustment is owned by P4.
+    nowPlaying_.notifyVolumeAdjusted(volume, nowMs);
+}
+
 void UiCoordinator::setPage(UiPage page) {
     if (page_ != page) {
         page_ = page;
         ++stats_.pageTransitions;
+        nowPlaying_.setActive(page == UiPage::Player, millis());
+        // A visible Player may have replaced the shared Metadata request.
+        if (page == UiPage::Playlist) metadataRequested_ = false;
     }
     dirty_ = true;
 }
@@ -291,7 +315,8 @@ void UiCoordinator::serviceSelectedMetadata() {
     const Mp3MetadataStatus status = libraryRuntime_->metadataStatus();
     if (status.state == Mp3MetadataState::Ready) {
         Mp3Metadata metadata;
-        if (libraryRuntime_->metadata(metadata) && metadata.title.value[0] != '\0' &&
+        if (libraryRuntime_->metadataForPath(selectedMetadataPath_, metadata) &&
+            metadata.title.value[0] != '\0' &&
             std::strcmp(selectedMetadataTitle_, metadata.title.value) != 0) {
             std::strncpy(selectedMetadataTitle_, metadata.title.value,
                          sizeof(selectedMetadataTitle_) - 1);
@@ -314,7 +339,7 @@ void UiCoordinator::render() {
             PlaylistPageRenderer::render(*display_, context);
             break;
         case UiPage::Player:
-            PlayerPageRenderer::render(*display_, context);
+            // Player is handled by the bounded NowPlayingPresenter path.
             break;
         case UiPage::Settings:
             SettingsPageRenderer::render(*display_, context);

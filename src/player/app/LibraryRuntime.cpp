@@ -164,6 +164,11 @@ LibraryResult LibraryRuntime::tryPendingSelection() {
 }
 
 LibraryResult LibraryRuntime::requestMetadata(size_t entryIndex) {
+    metadataReader_.cancel();
+    metadataRequestActive_ = false;
+    pendingMetadataPath_ = false;
+    metadataFromEntry_ = true;
+    metadataPath_[0] = '\0';
     if (library_.state() != LibraryState::Ready) {
         latestMetadataReady_ = false;
         latestMetadataStatus_ = Mp3MetadataStatus{};
@@ -241,6 +246,53 @@ LibraryResult LibraryRuntime::tryPendingMetadata() {
     }
     pendingMetadataPath_ = false;
 
+    return startMetadataReader();
+}
+
+bool LibraryRuntime::isMetadataPath(const char* path) {
+    if (path == nullptr || std::strncmp(path, "/Music/", 7) != 0 ||
+        std::strlen(path) > kMaxTrackPathBytes) {
+        return false;
+    }
+    const char* component = path + 7;
+    for (const char* cursor = component;; ++cursor) {
+        if (*cursor == '\\' || (*cursor != '\0' &&
+            static_cast<unsigned char>(*cursor) < 0x20)) {
+            return false;
+        }
+        if (*cursor != '/' && *cursor != '\0') {
+            continue;
+        }
+        const size_t length = static_cast<size_t>(cursor - component);
+        if (length == 0 || (length == 1 && component[0] == '.') ||
+            (length == 2 && component[0] == '.' && component[1] == '.')) {
+            return false;
+        }
+        if (*cursor == '\0') {
+            return length >= 4 && component[length - 4] == '.' &&
+                   (component[length - 3] == 'm' || component[length - 3] == 'M') &&
+                   (component[length - 2] == 'p' || component[length - 2] == 'P') &&
+                   component[length - 1] == '3';
+        }
+        component = cursor + 1;
+    }
+}
+
+LibraryResult LibraryRuntime::requestMetadataPath(const char* path) {
+    if (fs_ == nullptr || !isMetadataPath(path)) {
+        return LibraryResult::Error;
+    }
+    metadataReader_.cancel();
+    metadataFromEntry_ = false;
+    pendingMetadataPath_ = false;
+    latestMetadataReady_ = false;
+    latestMetadataStatus_ = Mp3MetadataStatus{};
+    std::memcpy(metadataPath_, path, std::strlen(path) + 1);
+    metadataRequestActive_ = true;
+    return startMetadataReader();
+}
+
+LibraryResult LibraryRuntime::startMetadataReader() {
     Mp3MetadataError cachedWarning = Mp3MetadataError::None;
     if (metadataCache_.lookup(metadataPath_, latestMetadata_, &cachedWarning)) {
         metadataRequestActive_ = false;
@@ -260,7 +312,7 @@ LibraryResult LibraryRuntime::tryPendingMetadata() {
 }
 
 void LibraryRuntime::serviceMetadata() {
-    if (metadataRequestActive_ &&
+    if (metadataRequestActive_ && metadataFromEntry_ &&
         (std::strcmp(pendingMetadataDirectory_, library_.currentPath()) != 0 ||
          pendingMetadataGeneration_ != library_.currentGeneration() ||
          library_.state() == LibraryState::Error)) {
@@ -298,6 +350,16 @@ bool LibraryRuntime::metadata(Mp3Metadata& output) const {
     }
     output = latestMetadata_;
     return true;
+}
+
+bool LibraryRuntime::metadataForPath(const char* path,
+                                    Mp3Metadata& output) const {
+    return path != nullptr && std::strcmp(path, metadataPath_) == 0 &&
+           metadata(output);
+}
+
+const char* LibraryRuntime::metadataRequestPath() const {
+    return metadataPath_;
 }
 
 Mp3MetadataStatus LibraryRuntime::metadataStatus() const {

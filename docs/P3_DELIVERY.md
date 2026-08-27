@@ -44,11 +44,18 @@ Gate A-fix+B+C 真机确认文本不越界后，P3-01 / P3-08 / P3-09 才完成�
 ## 3. P3B — Now Playing Chrome
 
 - 实现 Title / Artist Header、克制的长标题滚动；
-- 实现时间、总时长、进度、Play Mode、Sound Preset、Volume Footer；
+- 固定 Header / Content / Footer 为 34 / 168 / 38 px，边距 6 px；Title 约 14 px、其余约 12 px；
+- 实现真实时间、总时长、进度、状态、Play Mode 和 Original Footer；音量为左侧 3 秒临时浮层，真实按键留 P4；
 - 复用 P3A 文本布局能力：Header / Footer 先保证不越界，Title / Artist 再按本阶段
-  规则决定静态、两行或克制滚动；状态和数值字段保持单行并在必要时省略；
+  规则决定单行静态或 24 px/s 滚动、首尾各停 5 秒；Artist 单行省略，暂停不冻结标题；
 - 建立 Player 页面 Dirty Region，Content Stage 仍允许使用明确 fallback；
 - 不在该阶段伪造歌词、封面或字体资源。
+
+P3B `0.6.0-p3b.chrome` 已完成代码、10 项 PC 检查、编译期时钟 / 音量公式断言，
+Dev / P3A Gate / P2 Gate 三环境构建均通过。只生成本地固件，没有复制 SD 或安装。
+按路径 Metadata、局部行缓冲、动画时钟与浮层测试支持由 B 完成；完整时钟 / 像素
+检查仅编译，实际显示和音频条件仍待 Gate A-fix+B+C。
+P3A/B 均为 DEVICE TEST，P3C 保持 TODO；不得以这些构建结果提前标记 DONE。
 
 ## 4. P3C — Media Resources
 

@@ -7,6 +7,7 @@
 
 #include "LibraryCatalog.h"
 #include "PageRenderers.h"
+#include "NowPlayingPresenter.h"
 #include "UiTypes.h"
 #include "player/app/LibraryRuntime.h"
 #include "player/app/PlayerRuntime.h"
@@ -29,6 +30,8 @@ class UiCoordinator final {
     UiPage page() const;
     UiStats stats() const;
     bool currentTrackPath(char* output, size_t capacity) const;
+    void notifyVolumeAdjusted(uint8_t volume, uint32_t nowMs);
+    const NowPlayingPresenter& nowPlaying() const { return nowPlaying_; }
 
   private:
     enum class PendingNavigation : uint8_t {
@@ -96,12 +99,12 @@ class UiCoordinator final {
     uint32_t lastLibraryGeneration_ = 0;
     LibraryState lastLibraryState_ = LibraryState::Idle;
     PlayerState lastPlayerState_ = PlayerState::Empty;
-    uint32_t lastPlayerSecond_ = UINT32_MAX;
     char lastCurrentTrack_[kTrackPathCapacity] = {};
     UiStats stats_{};
     // Fixed six-row scratch, not an all-library cache. Keep complete UTF-8
     // names off the small Arduino loop stack and alive through render().
     UiRenderContext renderContext_{};
+    NowPlayingPresenter nowPlaying_;
 };
 
 }  // namespace player

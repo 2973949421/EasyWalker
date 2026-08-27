@@ -1,5 +1,25 @@
 # Changelog
 
+## V0.6 — P3B Now Playing Chrome
+
+Date: 2026-08-27
+
+- `0.6.0-p3b.chrome` 完成 34 / 168 / 38 px 信息区布局、Title / Artist、真实进度与状态、
+  长标题首尾各 5 秒 / 24 px/s / 最多 20 fps 滚动；Pause 不冻结动画。
+- 音量从常驻 Footer 改为左侧 3 秒临时显示浮层；不接入 P4 按键、不改变音频音量。
+- 复用 P3A 布局并扩展至 LovyanGFX 公共基类；完整标题按 UTF-8 安全小块处理，不在
+  128-byte 缓冲边界截掉尾部。单个固定 4,860-byte RGB565 行缓冲替代 Player 整页秒刷。
+- 按路径核对异步 Metadata，浏览目录变化不取消独立歌曲请求；保留原目录项接口。
+  缺标签 / 标签损坏保留完整文件名回退，避免解析器较小的 fallback 覆盖长文件名。
+- 本地检查发现并修正 Original 底栏宽度，完整名称需要 72 px；状态图形和模式独立布局。
+  旧 Repeat / Shuffle 非标准组合显示 MODE?、日志保留原值，不更改播放语义。
+- 10 项 PC 几何 / 参考 / 源码契约检查通过，构建期实际 timing / volume 公式断言通过；
+  完整可注入时钟、M5GFX 像素裁剪、浮层背景恢复及独立 P3B 日志支持已编译，尚未执行真机。
+- Dev / P3A Gate / P2 Gate 构建通过，大小 715,552 / 721,744 / 724,256 bytes；均低于
+  1,310,720-byte 上限。Dev / P3A 静态 RAM 为 109,176 / 110,040 bytes；SHA-256 见 README。
+- 没有改音频 Backend、Queue / Session、Library Engine、AGENTS 或 Flash；未复制 SD、
+  未烧录、未运行历史 Gate。P3A/B 保持 DEVICE TEST，P3C 为 TODO，等待 Gate A-fix+B+C。
+
 ## V0.5 — P3A UI Foundation Development
 
 Date: 2026-08-26

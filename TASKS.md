@@ -322,7 +322,7 @@ AC：
 | Gate | Status | Tasks | Result |
 |---|---|---|---|
 | P3A UI Foundation | DEVICE TEST | P3-01、P3-08、P3-09；P3-07 功能骨架 | `0.5.1` 功能 Gate PASS；`0.5.2` 文本修复及本地构建完成，待 Gate A-fix+B+C 回归 |
-| P3B Now Playing Chrome | TODO | P3-02 | 独立实施；与 P3C 及 P3A 文本修复合并真机验收 |
+| P3B Now Playing Chrome | DEVICE TEST | P3-02 | `0.6.0` 代码、自动检查及三环境构建完成；待联合 Gate 验收 |
 | P3C Media Resources | TODO | P3-03～06、P3-12 | 独立实施；Gate A-fix+B+C 验收歌词、字体、ASCII Cover、View Selector |
 | P3D Product UI Completion | TODO | P3-07、P3-10、P3-11 | 黑胶曲库、设置、息屏与最终校准 |
 
@@ -351,8 +351,8 @@ Device Validation — 等待 Gate A-fix+B+C：
 - [ ] 原有方向、按键、页面导航与音频连续性无回归
 - [ ] 联合 Gate 先报告 P3A 文本回归，再进入 B/C 验收；结果通过后才更新 P3A 完成状态
 
-构建大小与 SHA-256 见 README 当前交付记录。P3B/C 本轮未开始；内置字体的中日文
-字形能力不在本次修复范围，正式字体仍由 P3C 完成。
+上述为 P3A 文本修复的历史构建记录；P3B 的当前进度见下文 P3-02。
+内置字体的中日文字形能力不在文本修复范围，正式字体仍由 P3C 完成。
 
 ---
 
@@ -374,16 +374,31 @@ AC：
 
 ## P3-02 Now Playing Header / Footer
 
-Status: TODO
+Status: DEVICE TEST
 
-AC：
+Automatic Validation — 2026-08-27：
 
-- [ ] Title / Artist 可显示
+- [x] 按路径 Metadata、显示模型、局部行缓冲、标题滚动、三秒音量显示事件接口已实现
+- [x] 10 项 PC 几何 / 时间参考 / 源码契约检查通过；编译期实际 timing / volume 公式断言通过
+- [x] 完整可注入时钟检查、M5GFX 裁剪和浮层背景恢复检查已编译；尚未在设备执行
+- [x] Dev / P3A Gate / P2 Gate 均构建成功，715,552 / 721,744 / 724,256 bytes，均低于 `0x140000`
+- [x] 生成物大小及 SHA-256 见 README；没有复制 SD、烧录或执行 P1/P2 历史设备测试
+- [x] `P3BValidation` 保留独立显示 / 音频归因及 70 ms PCM 条件；未执行不写成 PASS
+
+Device AC — 等待 Gate A-fix+B+C，不用构建结果代替：
+
+- [ ] 34 / 168 / 38 px 三段布局、6 px 左右边距；Title 约 14 px，Artist / Footer 约 12 px
+- [ ] 按歌曲路径核对异步 Title / Artist；缺失时分别回退文件名 / 留空，不串歌
 - [ ] 复用 P3A 文本布局；Header / Footer 在长文本和不同字号下均不越界
 - [ ] 长 Title 静止约 5 秒后滚动一遍
 - [ ] 滚动完成后再次静止约 5 秒
-- [ ] Footer 显示当前时间 / 总时长、进度条、Sound Preset、Volume
+- [ ] 24 px/s、最多 20 fps；Pause 继续滚动，换歌 / 更新标题 / 重入页面重置
+- [ ] Footer 显示真实时间 / 总时长、进度、状态、NORM / ONE / ALL / SHUF 和 Original
+- [ ] 恢复后未知总时长显示 --:-- / 未知进度，不额外 Probe；非标准组合显示 MODE? 并保留原值
+- [ ] 左侧音量浮层仅收到事件才显示，0 / 128 / 255 对应 0 / 50 / 100%，3 秒隐藏并局部恢复
+- [ ] 不接入实际音量按键；标题 / 时间 / 状态局部刷新，非 Player 不因秒数整页重绘
 - [ ] Header 动画不持续抢占歌词视觉
+- [ ] Gate A-fix+B+C 真机显示通过，连续音频窗口 Error / Backpressure=0、PCM gap≤70 ms
 
 ---
 
