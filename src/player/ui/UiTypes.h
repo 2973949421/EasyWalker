@@ -24,6 +24,7 @@ enum class UiAction : uint8_t {
     Confirm,
     Back,
     OpenSettings,
+    ToggleView,
 };
 
 struct RawKeyEvent {

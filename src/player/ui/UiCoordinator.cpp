@@ -16,6 +16,9 @@ bool UiCoordinator::begin(M5GFX& display, PlayerRuntime& player,
     player_ = &player;
     libraryRuntime_ = &libraryRuntime;
     nowPlaying_.begin();
+    if(!fonts_.begin()) return false;
+    nowPlaying_.bindMedia(fonts_);
+    nowPlaying_.setPreferredView(player.preferredNowPlayingView());
     std::strcpy(libraryRoot_, MusicLibrary::kMusicRoot);
     std::strcpy(libraryName_, "Uncategorized");
 
@@ -62,10 +65,14 @@ void UiCoordinator::service() {
     const uint32_t now = millis();
     nowPlaying_.setActive(page_ == UiPage::Player, now);
     nowPlaying_.update(snapshot, current, *libraryRuntime_, now);
+    nowPlaying_.setPreferredView(player_->preferredNowPlayingView());
+    if(page_==UiPage::Player) nowPlaying_.serviceMedia();
+    else fonts_.service();
     const char* error = externalError_;
     if (error[0] == '\0' && snapshot.error != PlayerError::None) {
         error = playerErrorName(snapshot.error);
     }
+    if(error[0]=='\0' && (fonts_.stats().ioErrors || fonts_.stats().missing))error="FONT MISSING";
     nowPlaying_.setContent(hint_, error);
     if (library.state() != lastLibraryState_ ||
         library.currentGeneration() != lastLibraryGeneration_ ||
@@ -79,8 +86,7 @@ void UiCoordinator::service() {
     }
 
     if (page_ == UiPage::Player) {
-        if (now - lastRenderAtMs_ >= kMinimumRenderIntervalMs &&
-            nowPlaying_.renderOne(*display_)) {
+        if (nowPlaying_.renderOne(*display_)) {
             lastRenderAtMs_ = now;
             ++stats_.renderCount;
             stats_.renderMaxUs = std::max(stats_.renderMaxUs,
@@ -153,6 +159,10 @@ bool UiCoordinator::handleAction(UiAction action) {
         }
 
         case UiPage::Player:
+            if(action==UiAction::ToggleView) {
+                if(nowPlaying_.toggleView()) player_->setPreferredNowPlayingView(static_cast<uint8_t>(nowPlaying_.mediaStatus().preferred));
+                return true;
+            }
             if (action == UiAction::Back) {
                 return restorePlaylistForCurrentTrack();
             }
@@ -328,6 +338,11 @@ void UiCoordinator::serviceSelectedMetadata() {
 void UiCoordinator::render() {
     UiRenderContext& context = renderContext_;
     buildRenderContext(context);
+    // Warm visible CJK only, before drawing. Retry later while the one-step
+    // worker loads the glyph. ASCII-only historical screens remain immediate.
+    if(!fonts_.requestUiWindow(context.libraryName,0,0,page_==UiPage::Library?194:123,1.5f)) {renderRetryRequested_=true;return;}
+    if(page_==UiPage::Playlist)for(const auto& item:context.rows) if(item.valid && !fonts_.requestUiWindow(item.label,0,0,94,1.5f)) {renderRetryRequested_=true;return;}
+    CachedUiFont font(&fonts_);display_->setFont(&font);
     const uint32_t started = micros();
     switch (page_) {
         case UiPage::Library:
@@ -346,6 +361,7 @@ void UiCoordinator::render() {
             break;
     }
     const uint32_t elapsed = micros() - started;
+    display_->setFont(&fonts::Font0);
     ++stats_.renderCount;
     stats_.renderMaxUs = std::max(stats_.renderMaxUs, elapsed);
 }

@@ -11,11 +11,12 @@ namespace player {
 // the physical 4x14 coordinates and modifier state, not PC-style Arrow events.
 class InputRouter final {
   public:
-    bool poll(UiAction& action, RawKeyEvent& raw);
+    bool poll(UiAction& action, RawKeyEvent& raw, bool playerPage=false);
 
   private:
     static constexpr uint32_t kDebounceMs = 80;
     uint32_t lastAcceptedAtMs_ = 0;
+    bool viewHeld_=false;
 };
 
 }  // namespace player

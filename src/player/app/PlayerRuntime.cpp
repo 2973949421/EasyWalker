@@ -121,6 +121,13 @@ void PlayerRuntime::setShuffleEnabled(bool enabled) {
     requestCheckpoint();
 }
 
+void PlayerRuntime::setPreferredNowPlayingView(uint8_t view) {
+    view = view == 1 ? 1 : 0;
+    if (preferredNowPlayingView_ == view) return;
+    preferredNowPlayingView_ = view;
+    requestCheckpoint();  // No synchronous SD write or transport change.
+}
+
 void PlayerRuntime::service() {
     // Audio always receives service before a bounded storage step.
     controller_.service();
@@ -250,6 +257,7 @@ bool PlayerRuntime::restoreFromState() {
 }
 
 bool PlayerRuntime::restoreSession(PersistedSession& session) {
+    preferredNowPlayingView_ = session.preferredNowPlayingView == 1 ? 1 : 0;
     const bool savedShuffleEnabled = session.shuffleEnabled;
     const uint16_t savedCurrentIndex = session.currentIndex;
     const uint32_t savedPositionMs = session.positionMs;
@@ -375,6 +383,7 @@ void PlayerRuntime::captureSession(PersistedSession& output) const {
     output.sourceOffset = player.sourceByteOffset;
     output.repeatMode = static_cast<uint8_t>(player.repeatMode);
     output.shuffleEnabled = queue.shuffleEnabled;
+    output.preferredNowPlayingView = preferredNowPlayingView_;
     output.orderCount = static_cast<uint16_t>(queue.orderCount);
     output.orderCursor = static_cast<uint16_t>(queue.orderCursor);
     output.historyCount = static_cast<uint8_t>(

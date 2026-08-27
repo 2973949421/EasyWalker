@@ -264,7 +264,7 @@ def build(download=False, fonts=False):
 def batch(audio_root: Path, image_root: Path, output: Path, grid):
     used = set()
     for audio in sorted(audio_root.rglob('*')):
-        if audio.suffix.lower() not in ('.mp3','.flac','.wav'):
+        if not audio.is_file() or audio.suffix.lower() not in ('.mp3','.flac','.wav'):
             continue
         relative = audio.relative_to(audio_root).with_suffix('')
         key = relative.as_posix().casefold()
@@ -283,6 +283,7 @@ def batch(audio_root: Path, image_root: Path, output: Path, grid):
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(data)
         image.save(destination.with_suffix('.preview.png'))
+        image.resize((image.width*4,image.height*4),Image.Resampling.NEAREST).save(destination.with_suffix('.preview-4x.png'))
         print(f'COVER={destination}')
 
 

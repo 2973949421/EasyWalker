@@ -25,6 +25,8 @@ class PlayerRuntime final {
     bool seekToMs(uint32_t targetMs);
     void setRepeatMode(RepeatMode mode);
     void setShuffleEnabled(bool enabled);
+    uint8_t preferredNowPlayingView() const { return preferredNowPlayingView_; }
+    void setPreferredNowPlayingView(uint8_t view);
 
     void service();
     PlayerSnapshot snapshot() const;
@@ -72,6 +74,7 @@ class PlayerRuntime final {
     bool queueSaveWasPending_ = false;
     bool queuePublicationBlocked_ = false;
     bool persistenceSuspended_ = false;
+    uint8_t preferredNowPlayingView_ = 0;
     uint32_t nextPersistenceAttemptAtMs_ = 0;
     uint32_t activeQueueGeneration_ = 0;
     uint32_t lastCheckpointAtMs_ = 0;

@@ -568,8 +568,10 @@ Artist/Album/Track
 
 /ADVWalkman/
   fonts/
-    kaiti_16.vlw
-    times_12.vlw
+    cjk-12.vlw / cjk-12.idx
+    cjk-14.vlw / cjk-14.idx
+    cjk-16.vlw / cjk-16.idx
+    latin-12.vlw / latin-12.idx
   config.*
   cache/
 ```
@@ -871,11 +873,14 @@ previous group | current group | next group
 dim              highlight       dim
 ```
 
-换句时整组向左移动。
+换句时整组向左移动，初始 200 ms / 最多 12 fps。中文块右、原文块左，每列向下、
+同语言向左续列；长句先多列，极长句才阅读分页，短语言不重复消失。分页按相邻
+时间戳区间分配；Pause 以 Player position 冻结，Seek 直接定位。前奏提示与首句预览
+保持 Lyrics。内框 123×160 px，CJK 16 px、列距 2 px、双语间距 6 px。
 
 CJK：楷体约 `16 px`，正常竖排。
 
-Latin：Times New Roman 约 `12 px`，每个 glyph 单独旋转 90°后沿纵轴布局；不是整句整体旋转。V1 UI 不跟随设备物理旋转。
+Latin：Times New Roman 约 `12 px`，每个 glyph 单独顺时针旋转 90°后沿纵轴布局；不是整句整体旋转。V1 UI 不跟随设备物理旋转。
 
 ### 9.6 Font Storage
 
@@ -883,11 +888,17 @@ Latin：Times New Roman 约 `12 px`，每个 glyph 单独旋转 90°后沿纵轴
 
 ```text
 /ADVWalkman/fonts/
-  kaiti_16.vlw
-  times_12.vlw
+  cjk-12.vlw / cjk-12.idx
+  cjk-14.vlw / cjk-14.idx
+  cjk-16.vlw / cjk-16.idx
+  latin-12.vlw / latin-12.idx
 ```
 
 Flash 只保留最小 fallback。字体加载失败不得影响 Audio Core。
+
+P3C 格式、缓存预算、分步加载、帧调度与联合 Gate 的实现约定见
+[`P3C_IMPLEMENTATION.md`](P3C_IMPLEMENTATION.md)。不使用 M5GFX 直接从 SD 在 draw
+路径中加载整套 VLW；字模有只读索引，渲染只访问已经准备好的 RAM。
 
 ### 9.7 Color ASCII Cover
 

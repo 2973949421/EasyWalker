@@ -195,6 +195,11 @@ P3BCheckResult checkP3BOverlayRestoration(NowPlayingPresenter& presenter) {
     return r;
 }
 
+P3BCheckResult checkP3BPresenterDrawing(NowPlayingPresenter& presenter) {
+    presenter.prepareRow(18,TFT_BLACK,1.0f);
+    return checkP3BDrawing(presenter.row_);
+}
+
 void P3BValidation::begin(const char* path, uint32_t nowMs) {
     *this = P3BValidation{};
     if (!LibraryRuntime::isMetadataPath(path)) {

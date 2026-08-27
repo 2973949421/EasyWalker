@@ -38,9 +38,12 @@ void capturePrimary(RawKeyEvent& raw) {
 
 }  // namespace
 
-bool InputRouter::poll(UiAction& action, RawKeyEvent& raw) {
+bool InputRouter::poll(UiAction& action, RawKeyEvent& raw, bool playerPage) {
     action = UiAction::None;
     raw = RawKeyEvent{};
+    const bool viewDown=hasCoordinate(12,1);
+    const bool viewEdge=viewDown&&!viewHeld_;
+    viewHeld_=viewDown;
     if (!M5Cardputer.Keyboard.isChange() ||
         !M5Cardputer.Keyboard.isPressed()) {
         return false;
@@ -69,6 +72,10 @@ bool InputRouter::poll(UiAction& action, RawKeyEvent& raw) {
         } else if (hasCoordinate(12, 3)) {
             action = UiAction::Right;
         }
+    } else if (playerPage && viewEdge && raw.keyCount==1 && !state.ctrl && !state.alt && !state.shift) {
+        // Portrait top 3x4, second row/second button: printed ']' at the
+        // official keyboard matrix (12,1). Not a global letter-V shortcut.
+        action=UiAction::ToggleView;
     } else if (state.enter) {
         action = UiAction::Confirm;
     } else if (hasCoordinate(3, 2)) {

@@ -35,6 +35,8 @@ const char* uiActionName(UiAction action) {
             return "BACK";
         case UiAction::OpenSettings:
             return "SETTINGS";
+        case UiAction::ToggleView:
+            return "VIEW";
     }
     return "UNKNOWN";
 }

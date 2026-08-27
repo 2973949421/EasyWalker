@@ -7,6 +7,7 @@ from PIL import Image
 from prepare_p3_media import LOCAL, PACKAGE, parse_lrc, pair_cues, validate_cover
 from inspect_player_state import parse_session_payload
 from preview_p3_lyrics import Fonts,layout,render
+from validate_p3abc_gate import validate,fields,VERSION
 
 
 class P3CChecks(unittest.TestCase):
@@ -75,6 +76,13 @@ class P3CChecks(unittest.TestCase):
         self.assertGreater(original[0][1],original[10][1])
         for page in range(pages):render('界'*120,'中文',fonts,page)
 
+    def test_dense_latin_page_uses_bounded_full_capacity(self):
+        fonts=Fonts()
+        glyphs,pages=layout('i'*1024,'中文',fonts)
+        self.assertGreater(len(glyphs),100)
+        self.assertLessEqual(len(glyphs),240)
+        for page in range(pages):render('i'*1024,'中文',fonts,page)
+
     def test_pause_seek_pagination_reference(self):
         choose=lambda ms,n,start,end:min(n-1,max(0,ms-start)*n//max(1,end-start))
         self.assertEqual(choose(5000,4,0,10000),2)
@@ -107,6 +115,32 @@ class P3CChecks(unittest.TestCase):
     def test_view_fallback_does_not_overwrite_preference(self):
         view=lambda has,preferred:preferred if has else 1
         for preferred in (0,1):self.assertEqual([view(has,preferred) for has in (True,False,True)],[preferred,1,preferred])
+
+    def test_log_validator_rejects_missing_or_weakened_evidence(self):
+        # Synthetic dictionaries test the validator, NOT device acceptance.
+        a=dict(version=VERSION,result='PASS',library_text_lines='2',library_text_width_px='90',
+               library_text_available_px='97',library_text_truncated='0',library_text_invalid_utf8='0',
+               library_text_layout_error='0',library_text_is_benchmark='1',orientation='135x240',rotation='2',
+               sample_rate='44100',player_state='PLAYING',backpressure='0',pcm_gap_over_100ms='0',
+               player_error='NONE',audio_error='none',pcm_buffers='20')
+        audio=dict(sample_rate='44100',backpressure='0',audio_error='none',audio_error_events='0',pcm_buffers='100',pcm_gap_max_us='70000')
+        b=dict(audio,version=VERSION,result='PASS',task_executed='1',measurement_ms='60000',
+               model_failure='none',draw_failure='none',overlay_failure='none',audio_failure='none')
+        c=dict(audio,version=VERSION,result='RUNNING',final_result='PASS',restore_view='cover',
+               measurement_frames='20',measurement_resource_bytes='1000',media_budget_bytes='48000')
+        for key in ('task_executed','display_confirmed','lyrics_confirmed','cover_confirmed','view_key_confirmed',
+                    'pause_checked','seek_checked','fallback_checked','audio_user_confirmed','reboot_checked','restore_paused'):
+            c[key]='1'
+        for key in ('font_missing','font_io_errors','font_draw_misses','lyrics_layout_error','lyrics_invalid_utf8'):c[key]='0'
+        self.assertTrue(validate([a,b,c]))
+        for which,key,value in ((0,'result','FAIL'),(0,'library_text_lines','1'),(0,'rotation','0'),
+                                (1,'task_executed','0'),(1,'pcm_gap_max_us','70001'),(2,'final_result','FAIL'),
+                                (2,'reboot_checked','0'),(2,'audio_user_confirmed','0'),(2,'font_draw_misses','1'),
+                                (2,'measurement_resource_bytes','0'),(2,'media_budget_bytes','49153'),(2,'version','old')):
+            logs=[a.copy(),b.copy(),c.copy()];logs[which][key]=value
+            with self.subTest(which=which,key=key):
+                with self.assertRaises(ValueError):validate(logs)
+        self.assertEqual(fields('final_result=PASS\nfinal_result=FAIL')['final_result'],'FAIL')
 
 
 if __name__=='__main__':unittest.main(verbosity=2)

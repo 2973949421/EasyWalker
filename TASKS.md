@@ -323,7 +323,7 @@ AC：
 |---|---|---|---|
 | P3A UI Foundation | DEVICE TEST | P3-01、P3-08、P3-09；P3-07 功能骨架 | `0.5.1` 功能 Gate PASS；`0.5.2` 文本修复及本地构建完成，待 Gate A-fix+B+C 回归 |
 | P3B Now Playing Chrome | DEVICE TEST | P3-02 | `0.6.0` 代码、自动检查及三环境构建完成；待联合 Gate 验收 |
-| P3C Media Resources | TODO | P3-03～06、P3-12 | 独立实施；Gate A-fix+B+C 验收歌词、字体、ASCII Cover、View Selector |
+| P3C Media Resources | DEVICE TEST | P3-03～06、P3-12 | `0.7.0` 代码、25 项 PC 检查、Session 自测及六环境构建完成；仅本地交付，待联合真机 |
 | P3D Product UI Completion | TODO | P3-07、P3-10、P3-11 | 黑胶曲库、设置、息屏与最终校准 |
 
 P3A 编译成功后进入 `DEVICE TEST`，不能提前把 P3-01 / 08 / 09 标为 `DONE`。
@@ -404,7 +404,17 @@ Device AC — 等待 Gate A-fix+B+C，不用构建结果代替：
 
 ## P3-03 Lyrics Renderer
 
-Status: TODO
+Status: DEVICE TEST
+
+P3C Automatic Validation — 2026-08-27：
+
+- [x] 字体 / LRC / ASCII / View / Session 与联合 Gate 已实现；15 项媒体检查和 10 项 P3B 检查通过
+- [x] 29 组真实歌词全部使用生成的 SD 字模做像素边界检查；密集 Latin 与极长句分页参考检查通过
+- [x] Session 自测通过，旧零值 / 非法 View 值回退 Lyrics；没有改变原歌曲和 Queue 语义
+- [x] Dev、P3ABC、P3A、P1 A/B、P2 六环境构建通过，均在 `0x140000` 内
+- [x] 资源包与预览仅在 Git 忽略的本地目录；未写 SD、未烧录；详细记录见 `docs/P3C_VALIDATION.md`
+
+以下行为与音频条件仍需联合 Gate / 人工显示确认，不以以上自动检查勾选真机 AC。
 
 AC：
 
@@ -420,12 +430,15 @@ AC：
 - [ ] 中文默认楷体约 16 px，英文 Times New Roman 约 12 px
 - [ ] 字体大小允许真机约 ±2 px 微调
 - [ ] UI 不自动旋转
+- [ ] 中文右 / 原文左、同语言右起续列；长句先完整多列，仅极长句自动阅读分页
+- [ ] 前奏提示与首句预览，Pause 冻结分页，Seek 直接定位，换句 200 ms / ≤12 fps
+- [ ] LRC BOM / offset / 多时间戳、128 KiB / 512 cues / 1024-byte line 边界明确处理
 
 ---
 
 ## P3-04 Font Loading
 
-Status: TODO
+Status: DEVICE TEST
 
 AC：
 
@@ -439,7 +452,7 @@ AC：
 
 ## P3-05 Color ASCII Cover Tool
 
-Status: TODO
+Status: DEVICE TEST
 
 目标：建立 PC 端机械批处理，不使用 Agent 一张一张生成。
 
@@ -461,7 +474,7 @@ AC：
 
 ## P3-06 ASCII Cover Renderer
 
-Status: TODO
+Status: DEVICE TEST
 
 AC：
 
@@ -555,7 +568,7 @@ AC：
 
 ## P3-12 Now Playing View Selector
 
-Status: TODO
+Status: DEVICE TEST
 
 AC：
 
@@ -570,6 +583,7 @@ AC：
 - [ ] 切换和 Cover / Lyrics 资源读取不造成可感知音频卡顿
 - [ ] 其他页面不派发 `View` Action，也不暗中改变偏好
 - [ ] 无歌词提示若实现，必须轻量且非阻塞；提示本身不是 V1 必做项
+- [ ] 联合 Gate PASS 后 Enter 回普通曲库、保持暂停；同版本下一次启动不自动重跑
 
 ---
 

@@ -55,9 +55,15 @@ P3B `0.6.0-p3b.chrome` 已完成代码、10 项 PC 检查、编译期时钟 / �
 Dev / P3A Gate / P2 Gate 三环境构建均通过。只生成本地固件，没有复制 SD 或安装。
 按路径 Metadata、局部行缓冲、动画时钟与浮层测试支持由 B 完成；完整时钟 / 像素
 检查仅编译，实际显示和音频条件仍待 Gate A-fix+B+C。
-P3A/B 均为 DEVICE TEST，P3C 保持 TODO；不得以这些构建结果提前标记 DONE。
+P3A/B/C 均为 DEVICE TEST；P3C 本地实现与六环境构建完成，不得提前标记 DONE。
 
 ## 4. P3C — Media Resources
+
+2026-08-27 实施基线为 `61692f0`。已确认的七项选择：长句先展开多列；前奏提示与
+首句预览；同语言从右向左续列；仅极长句自动阅读分页；使用 Crucifix X 官方单曲
+封面；中文右 / 原文左；联合 PASS 后 Enter 回到暂停的普通曲库界面，无需另装 Dev。
+联合验收保持 Gate A-fix+B+C，自动部分目标 3–5 分钟，用户确认时间另计。
+本轮先生成本地资源和固件，用户确认 SD 在 PC 后才同步，不改变 MP3 或清理其他文件。
 
 - 完成 LRC 解析、双语时间轴配对、竖排歌词与 SD 字体；
 - 用正式中日文字体的实际 glyph metrics 完成 UTF-8 / CJK 排版适配；不得按字节数
@@ -66,6 +72,15 @@ P3A/B 均为 DEVICE TEST，P3C 保持 TODO；不得以这些构建结果提前�
 - 完成 `preferredNowPlayingView`、Lyrics / Cover Selector 与 Session 持久化；
 - 使用用户提供的 Crucifix X 日文 LRC 与本地中文翻译作为首个真实资源 Gate；
 - 歌词、封面源图与字体默认保存在 Git 忽略的本地资源区，许可证明确后才考虑提交。
+
+P3C 实现说明见 `P3C_IMPLEMENTATION.md`，构建记录见 `P3C_VALIDATION.md`。
+本地 15 项媒体检查 + 10 项 P3B 检查、Session 自测与 29 组真实歌词字模检查通过；
+下一步仅是用户确认 SD 在 PC 后同步联合包并真机验收，不重新规划或提前实施 P3D。
+字体采用独立 B 盘工具环境、SD VLW + 索引；媒体读取分步执行，绘制不访问 SD。
+联合 Gate 同时包含冷资源加载和实际动画负载，不放宽 44.1 kHz / Error=0 /
+Backpressure=0 / PCM gap≤70ms。脚本 Pause/Seek/重启前提示，重启后验证 Paused 和
+View；PASS 后 Enter 进入普通曲库，同版本不再自动跑 Gate。未接到 SD 在 PC 的确认，
+本轮不复制任何资源，也不删除旧音乐、固件或状态。
 
 ## 5. P3D — Product UI Completion
 

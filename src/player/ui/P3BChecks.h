@@ -15,6 +15,7 @@ struct P3BCheckResult {
 // These do not use the real Player, modify volume or write to SD.
 P3BCheckResult checkP3BModel();
 P3BCheckResult checkP3BDrawing(lgfx::LovyanGFX& scratchRow);
+P3BCheckResult checkP3BPresenterDrawing(NowPlayingPresenter& presenter);
 P3BCheckResult checkP3BOverlayRestoration(NowPlayingPresenter& presenter);
 
 // Reusable combined-Gate support. Capture during a continuous Playing window

@@ -42,6 +42,8 @@ struct PersistedSession {
     uint32_t sourceOffset = 0;
     uint8_t repeatMode = 0;
     bool shuffleEnabled = false;
+    // Session v1 reserved byte 21: 0=Lyrics, 1=Cover. Not audio state.
+    uint8_t preferredNowPlayingView = 0;
 
     uint16_t orderCount = 0;
     uint16_t orderCursor = 0;

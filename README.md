@@ -1,7 +1,7 @@
 # ADV Walkman
 
 > 工作名：ADV Walkman  
-> 当前阶段：P3B 代码与本地验证完成，P3A/B 均为 `DEVICE TEST`，等待 Gate A-fix+B+C；P3C 为 `TODO`
+> 当前阶段：P3C 本地实现与构建完成；P3A/B/C 均为 `DEVICE TEST`，等待一次联合验收
 > 平台：M5Stack Cardputer ADV
 
 ## 1. 项目是什么
@@ -71,6 +71,51 @@ V1 不以以下内容为目标：
 
 ## 5. 当前最重要的技术任务
 
+### P3C 当前交付入口
+
+版本 `0.7.0-p3c.media`：字体、中文右 / 原文左的竖排双语歌词、长句多列 / 极长句
+分页、彩色 ASCII 封面、实体 View 和 Session 偏好保存。仍不是 P4 完整盲操播放器。
+唯一下一次安装是 `ADV-Walkman-P3ABC-Gate.bin`，同时回归 A 文本与验收 B/C。
+P3D 黑胶曲库 / Settings / 息屏不在本轮。
+
+本地媒体检查 15 项、既有 P3B 检查 10 项、Session 自测及 29 组真实歌词像素边界
+检查通过；Dev / 联合 Gate / P3A / P1 A/B / P2 共六环境构建通过。大小与完整 SHA-256
+集中记录在 `docs/P3C_VALIDATION.md`，不将这些结果当成真机 PASS。
+
+本地入口（没有写 SD、没有烧录）：
+
+```powershell
+.\tools\build_player.ps1 -Target Dev
+.\tools\build_player.ps1 -Target P3ABCGate
+& '.\.venv-media\Scripts\python.exe' tools/check_p3c.py
+& 'B:\PlatformIO\penv\Scripts\python.exe' tools/check_p3b.py
+```
+
+- 资源包：`test-data/local/p3-media/package/`，字体 / 歌词 / 原图均不提交 Git。
+- 三档封面及歌词像素预览：`test-data/local/p3-media/previews/`。
+- 重建资源：独立 `.venv-media` 使用 `tools/media-requirements.txt`；执行
+  `tools/prepare_p3_media.py --fonts`。只有首次取官方单曲图才需 `--download`。
+- 批处理：`prepare_p3_media.py --audio-root <Music> --image-root <CoverSource> --output <covers>`。
+- 用户确认 SD 在 PC 后，才执行 `tools/sync_p3_media.py --sd-root D:\`。它只复制本次
+  package 和联合固件，核对原曲及拷贝结果，不重写 MP3，不清理旧固件或状态。
+
+真机屏幕逐步引导：A 原导航 → 前奏 / Header 确认 → 双语长句确认 → View（顶部
+第二排第二颗）→ Cover 确认 → 自动连续播放 / 浮层 → 听感确认 → Pause/Seek、无歌词
+回退、保存并重启一次。Enter 确认，确认页 Fn+Esc 表示不通过。脚本动作前有提示，
+自动部分目标 3–5 分钟，等待人确认不计时。`PASS` 后 Enter 可直接回曲库继续试用，
+保持暂停；同版本下次启动不自动重跑。
+
+测试后只需 SD 回 PC，读取：
+
+```powershell
+& 'B:\PlatformIO\penv\Scripts\python.exe' tools/validate_p3abc_gate.py --sd-root D:\
+```
+
+技术细节见 [`P3C_IMPLEMENTATION.md`](docs/P3C_IMPLEMENTATION.md)，构建与验收记录见
+[`P3C_VALIDATION.md`](docs/P3C_VALIDATION.md)。以下保留 A/B 历史记录，不代表当前 artifact。
+
+### A/B 历史实施记录
+
 P3 已按 `P3A → P3B → P3C → P3D` 分步冻结，完整路线见
 [`docs/P3_DELIVERY.md`](docs/P3_DELIVERY.md)。当前 P3A 只建立真实可操作的竖屏
 UI、曲库 / 播放列表和跨页播放。P3B 在其上实现正式 Now Playing 歌曲信息、滚动、
@@ -88,7 +133,7 @@ UI、曲库 / 播放列表和跨页播放。P3B 在其上实现正式 Now Playin
 用户下一次实机操作将安装一份 Gate A-fix+B+C 固件，一次确认曲库名换行并验收
 Now Playing、字体、歌词、ASCII Cover 与 View Selector。其后只剩 P3D Gate。
 
-本轮只做本地构建，不复制 SD、不要求单独安装：
+以下是 P3B 当时的本地构建入口，不是当前联合交付的安装清单：
 
 ```powershell
 .\tools\build_player.ps1 -Target Dev
@@ -98,7 +143,7 @@ Now Playing、字体、歌词、ASCII Cover 与 View Selector。其后只剩 P3D
 ```
 
 P3A 历史文本修复 `0.5.2-p3a.textfix` 两个构建为 708,176 / 714,608 bytes；
-当前 Dev / P3A 回归版本更新为 `0.6.0-p3b.chrome`，本地生成物记录如下，
+P3B 当时的 Dev / P3A 回归版本为 `0.6.0-p3b.chrome`，历史生成物记录如下，
 Launcher 上限仍为 `0x140000`（1,310,720 bytes）：
 
 | 本地生成物 | 大小 / bytes | SHA-256 |
@@ -116,7 +161,7 @@ Dev / P3A 静态 RAM 为 109,176 / 110,040 bytes，比文本修复各增加 6,64
 Gate 新增实际曲库名的行数、像素宽度、截断、UTF-8 和布局错误日志；
 `ADVWalkmanBenchmark` 必须完整显示为两行，失败独立归因为 `library_text_layout`。
 原有方向、按键、页面和音频条件保持不变。下次 A-fix+B+C 复用这组断言；联合固件
-尚未实现。本轮没有改写 SD，最后已验收的历史版本仍为 `0.5.1-p3a.gate`。
+现已由 P3C 实现，但仍未真机验收。P3B 当时没有改写 SD，最后已验收的历史版本为 `0.5.1-p3a.gate`。
 
 P3B 自动检查包含 10 项 PC 几何 / 时间参考 / 源码契约检查，以及构建时执行的
 实际动画 / 音量公式 constexpr 断言。可注入时钟的完整模型检查、M5GFX 像素裁剪、

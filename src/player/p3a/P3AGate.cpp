@@ -11,11 +11,12 @@ namespace adv_walkman {
 namespace player {
 
 void P3AGate::begin(int16_t displayWidth, int16_t displayHeight,
-                    uint8_t displayRotation) {
+                    uint8_t displayRotation,bool excludeHumanWait) {
     displayWidth_ = displayWidth;
     displayHeight_ = displayHeight;
     displayRotation_ = displayRotation;
     startedAtMs_ = millis();
+    lastTickAtMs_ = startedAtMs_;automaticMs_=0;excludeHumanWait_=excludeHumanWait;
     minimumHeap_ = ESP.getFreeHeap();
     setStep(Step::Orientation);
 }
@@ -95,7 +96,9 @@ void P3AGate::service(UiCoordinator& ui, PlayerRuntime& player) {
     }
     minimumHeap_ = std::min(minimumHeap_, ESP.getFreeHeap());
     const uint32_t now = millis();
-    if (now - startedAtMs_ > kGateTimeoutMs) {
+    if(!waitingForHuman())automaticMs_+=now-lastTickAtMs_;
+    lastTickAtMs_=now;
+    if ((excludeHumanWait_?automaticMs_:now-startedAtMs_) > kGateTimeoutMs) {
         char reason[64] = {};
         std::snprintf(reason, sizeof(reason), "timeout_%s", stepName(step_));
         finish(false, reason, ui, player);
@@ -293,6 +296,14 @@ bool P3AGate::finished() const {
 
 bool P3AGate::passed() const {
     return step_ == Step::Passed;
+}
+
+bool P3AGate::waitingForHuman() const {
+    return step_==Step::Orientation || step_==Step::LibraryLeft ||
+        step_==Step::LibraryRight || step_==Step::LibraryEnter ||
+        step_==Step::PlaylistUp || step_==Step::PlaylistDown ||
+        step_==Step::PlaylistEnter || step_==Step::PlayerBack ||
+        step_==Step::PlaylistBack || step_==Step::SettingsOpen || step_==Step::SettingsBack;
 }
 
 bool P3AGate::libraryTextPasses(const UiStats& stats) {

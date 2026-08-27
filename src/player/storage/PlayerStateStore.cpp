@@ -156,6 +156,7 @@ bool encodeSession(
     writeLe16(output + 16, session.orderCount);
     writeLe16(output + 18, session.orderCursor);
     output[20] = session.historyCount;
+    output[21] = session.preferredNowPlayingView == 1 ? 1 : 0;
 
     uint32_t offset = 24;
     for (uint16_t index = 0; index < session.orderCount; ++index) {
@@ -189,6 +190,7 @@ bool decodeSession(
     output.orderCount = readLe16(input + 16);
     output.orderCursor = readLe16(input + 18);
     output.historyCount = input[20];
+    output.preferredNowPlayingView = input[21] == 1 ? 1 : 0;
 
     const uint32_t expected =
         24 + (static_cast<uint32_t>(output.orderCount) * 2) +

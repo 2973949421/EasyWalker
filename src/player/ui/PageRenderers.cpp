@@ -99,7 +99,7 @@ UiTextLayoutResult LibraryPageRenderer::render(
 void PlaylistPageRenderer::render(M5GFX& display,
                                   const UiRenderContext& context) {
     beginPage(display, "PLAYLIST");
-    display.setTextSize(1.0f);
+    display.setTextSize(1.5f);
     display.setTextColor(kMuted, kBackground);
     UiTextLayout::draw(display,
                        context.libraryName[0] == '\0' ? "Loading..."
@@ -119,7 +119,7 @@ void PlaylistPageRenderer::render(M5GFX& display,
         display.fillRect(4, y, display.width() - 8, rowHeight - 2,
                          background);
         display.setTextColor(foreground, background);
-        display.setTextSize(1.05f);
+        display.setTextSize(1.5f);
         const char marker[] = {
             row.playing ? '>' : ' ',
             row.type == LibraryEntryType::Directory ? '/' : ' ', ' ', '\0'};

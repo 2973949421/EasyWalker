@@ -1,5 +1,30 @@
 # Changelog
 
+## V0.7 — P3C Media / Combined Gate (device validation pending)
+
+Date: 2026-08-27
+
+- 固化七项已确认选择：长句先多列；前奏提示；同语言右起续列；极长句自动分页；
+  官方 Crucifix X 单曲图；中文右 / 原文左；PASS 后回普通曲库试用，不另装 Dev。
+- 独立 B 盘 `.venv-media` 固定 Pillow 12.3.0 / fontTools 4.63.0，生成本地私有
+  CJK 12/14/16、Latin 12 的 VLW / 索引与缺字报告，保留日文原稿和原 MP3。
+- 字符 mask / 密度 / 原图颜色驱动三档 ASCII，120×144 保持比例；ACOV v1 RGB565LE
+  头、长度与 CRC32 校验。输出小图 / 放大图，资源不提交 Git。
+- 分步 LRC 索引、300ms 最近未用配对、竖排双语与阅读分页；Latin glyph 顺时针旋转。
+  缺失 / 坏资源有 fallback，不干扰音频。SD 字模只在 service 读入缓存，渲染不读 SD。
+- 修正每条带等待 20ms 的调度，冻结逻辑帧并公平绘制；避免长标题整串预取耗尽缓存，
+  浮层变更在下一完整帧恢复当前内容。没有全屏 Sprite 或新的 Audio task。
+- 缓存与文件 I/O 一并纳入 48 KiB 媒体预算；限制 Arduino 默认 4 KiB stdio buffer，
+  用 17 KiB 字模缓存、独立 Latin advance 与紧凑位置记录避免长句缓存循环等待。
+- 仅接通 Player View 实体键；Session v1 预留 byte21 保存偏好，旧状态兼容。
+  不改变 Queue/Transport/音量，P3D/P4 保持原路线。
+- 联合 Gate 复用 A/B 检查、真实媒体冷加载 / 切换、60 秒连续窗口、Pause/Seek、
+  缺资源回退和一次重启。三份日志独立归因，C 重启前后证据保留，未执行标 SKIPPED。
+- 本轮只准备本地固件和 package，不复制 SD、不烧录。构建和 PC 检查的最终记录见
+  `docs/P3C_VALIDATION.md`；A-fix/B/C 尚需联合真机和人工显示确认，不能提前标 DONE。
+- 本地 15+10 项检查、Session 自测和六环境构建通过；P3C 推进至 DEVICE TEST。
+  Gate 含真正冷字体 / LRC / Cover 加载，确认时间另计，70 ms 音频条件不放宽。
+
 ## V0.6 — P3B Now Playing Chrome
 
 Date: 2026-08-27

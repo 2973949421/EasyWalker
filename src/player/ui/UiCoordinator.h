@@ -24,6 +24,9 @@ class UiCoordinator final {
     // Deterministic test entry; changes only the visible page and browser.
     // It does not stop or alter the restored Player state.
     void showLibrary();
+    void showPlayer() { setPage(UiPage::Player); }
+    FontCache& fonts() { return fonts_; }
+    NowPlayingPresenter& presenterForValidation() { return nowPlaying_; }
     void setHint(const char* hint);
     void setExternalError(const char* error);
 
@@ -105,6 +108,7 @@ class UiCoordinator final {
     // names off the small Arduino loop stack and alive through render().
     UiRenderContext renderContext_{};
     NowPlayingPresenter nowPlaying_;
+    FontCache fonts_;
 };
 
 }  // namespace player

@@ -3,6 +3,7 @@
 #include <M5GFX.h>
 #include "NowPlayingModel.h"
 #include "player/app/LibraryRuntime.h"
+#include "media/NowPlayingMedia.h"
 
 namespace adv_walkman {
 namespace player {
@@ -25,6 +26,12 @@ struct NowPlayingRenderStats {
 class NowPlayingPresenter final {
   public:
     void begin();
+    void bindMedia(FontCache& fonts) { fonts_=&fonts; media_.begin(fonts); }
+    void serviceMedia() { media_.service(); }
+    void setPreferredView(uint8_t view) { media_.setPreferred(view); }
+    bool toggleView() { return media_.toggleView(); }
+    NowPlayingMediaStatus mediaStatus() const { return media_.status(); }
+    const LyricsTimeline& lyrics() const { return media_.timeline(); }
     void setActive(bool active, uint32_t nowMs);
     void update(const PlayerSnapshot& snapshot, const char* path,
                 LibraryRuntime& library, uint32_t nowMs);
@@ -37,11 +44,19 @@ class NowPlayingPresenter final {
 
   private:
     friend P3BCheckResult checkP3BOverlayRestoration(NowPlayingPresenter& presenter);
+    friend P3BCheckResult checkP3BPresenterDrawing(NowPlayingPresenter& presenter);
     void measureTitle(uint32_t nowMs);
     void prepareRow(int height, uint16_t background, float textSize);
     void drawContentSlice(int screenY, int height);
     void pushRow(M5GFX& display, int y);
     void drawStateIcon(PlayerState state);
+    bool renderContentOne(M5GFX& display);
+    FontCache* fonts_=nullptr;
+    NowPlayingMedia media_;
+    bool preferContent_=false;
+    uint32_t frameOverlayRevision_=0,frameContentRevision_=0;
+    bool frameVolumeVisible_=false;
+    uint8_t frameVolume_=128;
     NowPlayingModel model_;
     NowPlayingRenderStats stats_;
     // Owned buffer must outlive the Sprite which borrows it.

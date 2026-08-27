@@ -13,7 +13,7 @@ namespace player {
 class P3AGate final {
   public:
     void begin(int16_t displayWidth, int16_t displayHeight,
-               uint8_t displayRotation);
+               uint8_t displayRotation,bool excludeHumanWait=false);
     // Returns true only when the Gate consumes an action instead of forwarding
     // it to UiCoordinator (the initial orientation confirmation).
     bool beforeAction(UiAction action, const RawKeyEvent& raw, UiPage page);
@@ -23,6 +23,7 @@ class P3AGate final {
     const char* hint() const;
     bool finished() const;
     bool passed() const;
+    bool waitingForHuman() const;
     // Reused by the later A-fix+B+C Gate; validates the actual rendered name,
     // not a separate synthetic measurement that could mask a renderer bug.
     static bool libraryTextPasses(const UiStats& stats);
@@ -64,6 +65,8 @@ class P3AGate final {
 
     Step step_ = Step::Orientation;
     uint32_t startedAtMs_ = 0;
+    uint32_t lastTickAtMs_ = 0,automaticMs_ = 0;
+    bool excludeHumanWait_ = false;
     uint32_t playbackStartedAtMs_ = 0;
     int16_t displayWidth_ = 0;
     int16_t displayHeight_ = 0;
