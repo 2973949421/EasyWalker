@@ -106,6 +106,13 @@ P3B 模型 / 像素检查使用同一行缓冲。媒体冷加载、整帧和 Vie
 同版本 PASS marker 防止下次自动重跑；PASS 后 Enter 回到 Library，保持暂停。
 日志验证和人工显示确认前所有 A-fix/B/C 状态仍为 DEVICE TEST。
 
+`0.7.2` Gate 计时修正：service 入口保存阶段身份和开始时刻；本轮工作结束后重新
+读取 millis，仅对未切换的、非终态、非人工等待阶段执行 45 秒检查。Measure / A
+仍由原有专属逻辑控制。不能拿入口的旧 now 减 transition 新写入的 phaseAt；正常
+millis 回绕仍按 uint32 差处理。失败日志增加阶段开始 / 观测时刻与实际已用毫秒。
+`test/p3abc/phase_timing.cpp` 通过现有 ESP32 编译器执行同一 constexpr 判断函数的
+13 项断言；旧算法注入测试必须失败，不用 Python 重写参考算法来代替 C++ 判定。
+
 打开失败只在明确 ENOENT 时归类 Missing；否则记录 Error、组件、路径、操作、errno、
 期望 / 实际读取长度。先快照失败现场，再暂停并清理。连续测量未开始时写 NA，
 失败现场与测量数据不得混用；保留首因，后续未执行写 SKIPPED。Gate 使用独立提示卡，

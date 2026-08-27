@@ -323,7 +323,7 @@ AC：
 |---|---|---|---|
 | P3A UI Foundation | DEVICE TEST | P3-01、P3-08、P3-09；P3-07 功能骨架 | `0.5.1` 功能 Gate PASS；`0.5.2` 文本修复及本地构建完成，待 Gate A-fix+B+C 回归 |
 | P3B Now Playing Chrome | DEVICE TEST | P3-02 | `0.6.0` 代码、自动检查及三环境构建完成；待联合 Gate 验收 |
-| P3C Media Resources | DEVICE TEST | P3-03～06、P3-12 | `0.7.0` 真机 C 资源失败；`0.7.1` 单键 / 整帧 / 资源诊断修复，等待新版联合验收 |
+| P3C Media Resources | DEVICE TEST | P3-03～06、P3-12 | `0.7.1` 启动误报阶段超时；`0.7.2` 修复 Gate 计时，等待新版联合验收 |
 | P3D Product UI Completion | TODO | P3-07、P3-10、P3-11 | 黑胶曲库、设置、息屏与最终校准 |
 
 P3A 编译成功后进入 `DEVICE TEST`，不能提前把 P3-01 / 08 / 09 标为 `DONE`。
@@ -336,6 +336,11 @@ P3-07 在 P3A 只完成可用骨架，最终视觉仍由 P3D 验收。
 
 ### P3ABC Fix — 2026-08-27
 
+- `0.7.1` 新日志：105 ms 即报 `preflight / phase_timeout`；输入自检和 12 文件名额 /
+  关闭恢复已通过，A/B SKIPPED。原因是 Gate 用旧 now 减切换后的新 phaseAt，uint32
+  下溢；不能归因于用户操作或资源读取失败。
+- `0.7.2-p3c.timer` 只修 Gate 计时，增加同一 C++ 函数的 13 项编译期回归与旧缺陷反例；
+  阶段时限 45 秒、总自动时限 5 分钟及音频 / 显示阈值不变。真机状态仍 DEVICE TEST。
 - 原 `0.7.0`：A 导航和长名两行 PASS，B SKIPPED，C 为 `real_track_media_missing_or_bad`。
   SD 资源与交付包一致；默认 5 文件名额是风险，但旧日志不能证明其为唯一根因。
 - `0.7.1-p3c.fix`：完整键盘位图、25 ms 去抖、单键导航；歌词整组准备 / pin / 呈现，

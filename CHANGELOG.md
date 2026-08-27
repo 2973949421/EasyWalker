@@ -1,5 +1,17 @@
 # Changelog
 
+## V0.7.2 — Fix P3ABC phase-transition timeout
+
+Date: 2026-08-27
+
+- `0.7.1` 真机累计 105 ms 即失败；输入和文件名额自检通过，媒体仍 Loading，A/B
+  SKIPPED。已留存原日志；这是 Gate 计时下溢，不是 SD 或耳机诊断结果。
+- 阶段切换后不检查旧阶段时间，超时使用工作结束后的新时刻；不覆盖 PASS/FAIL 终态。
+  45 秒阶段 / 5 分钟总时限和 70/100/200 ms 音频 / 显示阈值均未放宽。
+- 同一 C++ 超时函数的 13 项编译期断言覆盖阶段切换、真实超时和 millis 回绕；旧算法
+  被同一测试拒绝。只重建联合 Gate，资源、Dev/P3A、音频及 Queue/Session 不变。
+- 验证 / SD 交付记录见 `docs/P3C_VALIDATION.md`；仍需真机联合验收，不提前 DONE。
+
 ## V0.7.1 — P3ABC single-key / complete lyric frames / resource diagnostics
 
 Date: 2026-08-27

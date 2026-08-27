@@ -32,6 +32,7 @@ class P3ABCGate final {
     uint32_t positionAt_=0,bufferAt_=0,viewBase_=0,minimumHeap_=UINT32_MAX,heapAt_=0;
     uint32_t pausedPosition_=0,pausedPage_=0,measuredFrames_=0,measuredReads_=0;
     uint32_t measuredMs_=0;
+    uint32_t failurePhaseAt_=0,failureObservedAt_=0;
     uint8_t pulse_=0;
     bool modelRan_=false,bRan_=false,cRan_=false,displayOk_=false,lyricsOk_=false,coverOk_=false;
     bool pauseOk_=false,seekOk_=false,fallbackOk_=false,rebootOk_=false;

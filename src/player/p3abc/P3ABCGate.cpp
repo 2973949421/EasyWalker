@@ -1,4 +1,5 @@
 #include "P3ABCGate.h"
+#include "GatePhaseTiming.h"
 #include <SD.h>
 #include <M5Cardputer.h>
 #include <algorithm>
@@ -114,6 +115,7 @@ bool P3ABCGate::beforeAction(UiAction action,const RawKeyEvent& raw,UiCoordinato
 }
 void P3ABCGate::service(UiCoordinator& ui,PlayerRuntime& player){
     if(phase_==Phase::Disabled || phase_==Phase::Passed || phase_==Phase::Failed)return;
+    const GatePhaseStamp entered{static_cast<uint8_t>(phase_),phaseAt_};
     const uint32_t now=millis();if(!waitsForHuman())autoMs_+=now-lastAt_;lastAt_=now;
     minimumHeap_=std::min(minimumHeap_,ESP.getFreeHeap());
     if(autoMs_>300000){fail("automatic_timeout_5min",ui,player);return;}
@@ -272,7 +274,17 @@ void P3ABCGate::service(UiCoordinator& ui,PlayerRuntime& player){
         }break;
     default:break;
     }
-    if(!waitsForHuman() && now-phaseAt_>45000 && phase_!=Phase::Measure && phase_!=Phase::A)fail("phase_timeout",ui,player);
+    // A transition above may have recorded a start later than `now`.
+    // Use a fresh clock and do not apply an old phase's timeout to its successor
+    // or overwrite a terminal result. Measure/A retain their own limits.
+    const GatePhaseStamp current{static_cast<uint8_t>(phase_),phaseAt_};
+    const uint32_t checkedAt=millis();
+    const bool eligible=!waitsForHuman() && phase_!=Phase::Measure && phase_!=Phase::A &&
+        phase_!=Phase::Disabled && phase_!=Phase::Passed && phase_!=Phase::Failed;
+    if(gatePhaseTimedOut(entered,current,checkedAt,eligible)){
+        failureComponent_="gate";
+        fail("phase_timeout",ui,player);
+    }
 }
 void P3ABCGate::closeQuotaFiles(){for(auto& f:quotaFiles_)if(f){std::fclose(f);f=nullptr;}}
 
@@ -291,6 +303,7 @@ bool P3ABCGate::checkResources(UiCoordinator& ui,PlayerRuntime& player,bool requ
 
 void P3ABCGate::captureFailure(UiCoordinator& ui,PlayerRuntime& player){
     if(haveFailure_)return;
+    failurePhaseAt_=phaseAt_;failureObservedAt_=millis();
     haveFailure_=true;failurePhase_=phase_;failureAudio_=player.snapshot();failureMedia_=ui.nowPlaying().mediaStatus();failureFont_=ui.fonts().stats();
     if(!player.currentPath(failureTrack_,sizeof(failureTrack_)))std::snprintf(failureTrack_,sizeof(failureTrack_),"%s",ui.nowPlaying().model().path);
 }
@@ -317,7 +330,9 @@ bool P3ABCGate::writeCLog(const char* result,UiCoordinator& ui,PlayerRuntime& pl
     f.printf("sd_additional_global_slot_bytes=%u\n",unsigned(additionalSdFileSlotsBytes()));
     f.printf("measurement_started=%d\nmeasurement_ms=%lu\n",measurementStarted_,(unsigned long)measuredMs_);
     f.printf("failure_captured=%d\n",haveFailure_);
+    f.printf("phase_timer_limit_ms=%lu\n",(unsigned long)kGatePhaseTimeoutMs);
     if(haveFailure_){
+        f.printf("failure_phase_started_at_ms=%lu\nfailure_observed_at_ms=%lu\nfailure_phase_elapsed_ms=%lu\n",(unsigned long)failurePhaseAt_,(unsigned long)failureObservedAt_,(unsigned long)(failureObservedAt_-failurePhaseAt_));
         f.printf("failure_track=%s\nfailure_player_state=%s\nfailure_sample_rate=%lu\nfailure_audio_error=%s\nfailure_backpressure=%lu\nfailure_pcm_gap_max_us=%lu\nfailure_pcm_buffers=%lu\n",failureTrack_[0]?failureTrack_:"none",playerStateName(failureAudio_.state),(unsigned long)failureAudio_.sampleRateHz,audioErrorName(failureAudio_.audioError),(unsigned long)failureAudio_.backpressureEvents,(unsigned long)failureAudio_.pcmSubmitGapMaxUs,(unsigned long)failureAudio_.pcmBuffersSinceReset);
         f.printf("failure_resource_generation=%lu\nfailure_lyrics_state=%s\nfailure_cover_state=%s\nfailure_font_io_errors=%lu\nfailure_font_missing=%lu\nfailure_font_capacity_errors=%lu\n",(unsigned long)failureMedia_.generation,mediaStateName(failureMedia_.lyrics),mediaStateName(failureMedia_.cover),(unsigned long)failureFont_.ioErrors,(unsigned long)failureFont_.missing,(unsigned long)failureFont_.capacityErrors);
     }

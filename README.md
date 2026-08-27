@@ -1,7 +1,7 @@
 # ADV Walkman
 
 > 工作名：ADV Walkman  
-> 当前阶段：P3ABC `0.7.1` 修复与联合验收；A/B/C 仍为 `DEVICE TEST`
+> 当前阶段：P3ABC `0.7.2` Gate 计时修复与联合验收；A/B/C 仍为 `DEVICE TEST`
 > 平台：M5Stack Cardputer ADV
 
 ## 1. 项目是什么
@@ -73,13 +73,17 @@ V1 不以以下内容为目标：
 
 ### P3C 当前交付入口
 
-版本 `0.7.1-p3c.fix`：字体、中文右 / 原文左的竖排双语歌词、长句多列 / 极长句
+联合 Gate 版本 `0.7.2-p3c.timer`：保留 `0.7.1` 的字体、中文右 / 原文左的竖排双语歌词、长句多列 / 极长句
 分页、彩色 ASCII 封面、实体 View 和 Session 偏好保存。仍不是 P4 完整盲操播放器。
 唯一下一次安装是 `ADV-Walkman-P3ABC-Gate.bin`，同时回归 A 文本与验收 B/C。
 P3D 黑胶曲库 / Settings / 息屏不在本轮。
 
 初版真机 A 导航和两行通过，B 未执行，C 资源失败；资源包并未漏放。修复采用单键
 导航、整组歌词准备与呈现、资源前置检查、具体失败日志；取消横移与“前奏”标签。
+`0.7.1` 随后的启动测试在累计 105 ms 时误报 `preflight / phase_timeout`，A/B 尚未开始。
+`0.7.2` 只修正 Gate 的阶段计时：阶段切换后不使用旧时间判定新阶段；真正 45 秒超时
+不变。13 项同一 C++ 判定函数的编译期测试通过，并确认旧实现会被测试拒绝。
+普通 Dev / P3A 固件仍为 `0.7.1`；本次只重建和交付联合 Gate，不改产品或音频。
 本地媒体检查 15 项、既有 P3B 检查 10 项及新增修复检查 8 项；六环境构建结果、大小与完整 SHA-256
 集中记录在 `docs/P3C_VALIDATION.md`，不将这些结果当成真机 PASS。
 
@@ -91,6 +95,7 @@ P3D 黑胶曲库 / Settings / 息屏不在本轮。
 & '.\.venv-media\Scripts\python.exe' tools/check_p3c.py
 & '.\.venv-media\Scripts\python.exe' tools/check_p3abc_fix.py
 & 'B:\PlatformIO\penv\Scripts\python.exe' tools/check_p3b.py
+& 'B:\PlatformIO\penv\Scripts\python.exe' tools/check_p3abc_timer.py
 ```
 
 - 资源包：`test-data/local/p3-media/package/`，字体 / 歌词 / 原图均不提交 Git。
@@ -104,8 +109,9 @@ P3D 黑胶曲库 / Settings / 息屏不在本轮。
   将 SD 上旧 Dev / P2 Gate / P3A Gate 三个 BIN 备存 PC 后移除；当前 Walkman 安装项
   只保留 `/firmware/ADV-Walkman-P3ABC-Gate.bin`。Bruce、UIFlow2、原曲和状态未改。
 
-本轮 `0.7.1` 已仅覆盖同名联合 BIN（761168 bytes），PC/SD SHA-256 一致；资源未变，
-没有再次复制媒体，也未清理其他文件。启动先自动检查资源，失败会
+`0.7.2` 计时修复已覆盖同名联合 BIN（761360 bytes），PC/SD Hash 一致；详见
+`docs/P3C_VALIDATION.md`。资源未变，
+不再次复制媒体，也不清理其他文件。启动先自动检查资源，失败会
 标出组件 / 阶段 / 具体原因；通过才出现单键说明卡。
 真机顺序：Library 左 / 右 / Enter → Playlist 上 / 下 / Enter → 播放后单键 Esc；
 剩余 A 页面路由自动回归。随后提示卡说明 B/C 看什么，再清除提示，分别显示真实

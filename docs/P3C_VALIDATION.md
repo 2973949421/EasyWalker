@@ -1,6 +1,31 @@
 # P3C validation record
 
-Current fix baseline: `991d54c`; target: `0.7.1-p3c.fix`.
+Current timer-fix baseline: `d3b3182`; target: `0.7.2-p3c.timer`.
+
+## 0.7.2 阶段计时修复
+
+- `0.7.1` 实机日志：`automatic_ms=105`，`preflight / phase_timeout`；A/B 为 SKIPPED。
+  输入自检通过；12 个文件打开达到预期上限，关闭后重开通过；媒体仍 Loading，无已报
+  资源错误，连续测量未开始。三份日志已保存在 `test-data/local/p3-media/failure-0.7.1/`。
+- 根因：service 入口旧 now 减去 transition 新 phaseAt，uint32 下溢后大于 45000。
+  现修为阶段身份检查 + 工作后新时刻，终态不再落入超时判定；不放宽任何限值。
+- `check_p3abc_timer.py` 用现有 ESP32 C++ 编译器执行同一判定函数的 13 项 constexpr
+  断言；注入旧算法时，明确在 `phase transition underflow regression` 处失败。另检查
+  Gate 接线确实使用工作后的 millis。不是仅有 Python 参考计算，也不是 ADV 已通过。
+- 原有 33 项本地检查通过。本次只改联合 Gate；Dev/P3A 仍为 0.7.1，历史 P1/P2 和
+  Benchmark 不重建。音频、资源、字体、输入及渲染代码不改。
+
+### 构建与交付 — 2026-08-27
+
+- `player-p3abc-gate` 构建成功；版本 `0.7.2-p3c.timer`。
+- `ADV-Walkman-P3ABC-Gate.bin`：**761360 bytes**，小于原 `0x140000` 上限；静态 RAM
+  117568 bytes。没有调整媒体内存预算、资源、音频、分区或依赖。
+- SHA-256：`081b67b58fd8dfc00889e81cb93e44b87ab0747026adf506b33a2870390d29c6`。
+- 最终 BIN 已确认包含新版本和阶段耗时诊断；D 盘仍在线，仅覆盖
+  `D:\firmware\ADV-Walkman-P3ABC-Gate.bin`，复制后 Hash 一致。
+- 原 SD 日志仍保留；音乐、字体、歌词、封面、状态和其他 BIN 均未改。
+- 13 项 C++ 编译期断言、旧缺陷拒绝检查、调用接线检查及既有 33 项 PC 检查通过。
+  本次修复尚未在 ADV 上运行，A/B/C 保持 DEVICE TEST，不宣称媒体 / 音频已通过。
 
 ## 0.7.1 修复与验证
 

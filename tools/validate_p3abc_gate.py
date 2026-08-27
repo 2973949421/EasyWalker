@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 from inspect_player_state import inspect_file
 
-VERSION='0.7.1-p3c.fix'
+VERSION='0.7.2-p3c.timer'
 
 def fields(text):
     result={}
@@ -72,6 +72,7 @@ def diagnose(logs):
     return (f"A={logs[0].get('result','missing')} B={logs[1].get('result','missing')} "
             f"C={c.get('final_result',c.get('result','missing'))}; "
             f"phase={c.get('primary_failure_phase','unknown')} "
+            f"phase_elapsed_ms={c.get('failure_phase_elapsed_ms','NA')} "
             f"component={c.get('resource_component','unknown')} "
             f"reason={c.get('primary_failure','unknown')} "
             f"operation={c.get('resource_operation','unknown')} path={c.get('resource_path','unknown')} "
