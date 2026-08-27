@@ -148,7 +148,11 @@ def cover_ascii(source: Path, columns: int, rows: int):
     for char in RAMP:
         mask = Image.new('L', (10, 16))
         ImageDraw.Draw(mask).text((0, -1), char, font=font, fill=255)
-        masks.append(mask)
+        # Remove unused font-cell margins, not per-character bounding boxes:
+        # punctuation stays small while glyph strokes use the limited pixels.
+        masks.append(mask.crop((0,1,8,13)))
+    samples=[list(mask.resize((4,6),Image.Resampling.LANCZOS).get_flattened_data()) for mask in masks]
+    densities=[sum(small)/len(small)/255 for small in samples]
     chars = []
     for row in range(rows):
         line = ''
@@ -163,16 +167,16 @@ def cover_ascii(source: Path, columns: int, rows: int):
             level = sum(luminance)/len(luminance)/255
             candidate_scores = []
             for n, mask in enumerate(masks):
-                small = list(mask.resize((4, 6), Image.Resampling.LANCZOS).get_flattened_data())
-                density = sum(small)/len(small)/255
+                small = samples[n]
+                density = densities[n]
                 # Normalized spatial contrast plus overall glyph density.
                 shape = sum(((a/255-level)-(b/255-density))**2 for a,b in zip(luminance,small))/24
-                candidate_scores.append(shape + 2.5*(density-math.sqrt(level)*0.55)**2)
+                candidate_scores.append(shape + 2.5*(density-math.sqrt(level)*0.8)**2)
             chosen = min(range(len(RAMP)), key=candidate_scores.__getitem__)
             line += RAMP[chosen]
             rgb = tile.resize((1, 1), Image.Resampling.BOX).getpixel((0, 0))
             # Compensate glyph negative space without converting to a bitmap.
-            rgb = tuple(min(255, round(v*1.6)) for v in rgb)
+            rgb = tuple(min(255, round(v*1.35)) for v in rgb)
             mask = ImageOps.autocontrast(masks[chosen].resize((x1-x0, y1-y0), Image.Resampling.LANCZOS))
             canvas.paste(rgb, (x0, y0, x1, y1), mask)
         chars.append(line)
@@ -223,7 +227,7 @@ def build(download=False, fonts=False):
         preview.save(preview_dir / f'crucifix-x-{cols}x{rows}.png')
         preview.resize((480,576), Image.Resampling.NEAREST).save(preview_dir / f'crucifix-x-{cols}x{rows}-4x.png')
         (preview_dir / f'crucifix-x-{cols}x{rows}.txt').write_text(chars, encoding='utf-8')
-        if (cols, rows) == (30,24):
+        if (cols, rows) == (34,26):
             (cover_dir / 'benchmark.cover.adv').write_bytes(data)
     source_dir = PACKAGE / 'CoverSource/ADVWalkmanBenchmark'
     source_dir.mkdir(parents=True, exist_ok=True)
@@ -294,7 +298,7 @@ if __name__ == '__main__':
     parser.add_argument('--audio-root', type=Path)
     parser.add_argument('--image-root', type=Path)
     parser.add_argument('--output', type=Path)
-    parser.add_argument('--grid', choices=['26x20','30x24','34x26'], default='30x24')
+    parser.add_argument('--grid', choices=['26x20','30x24','34x26'], default='34x26')
     args = parser.parse_args()
     if args.audio_root:
         if not args.image_root or not args.output:

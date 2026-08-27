@@ -3,9 +3,9 @@
 namespace adv_walkman { namespace player {
 struct MediaLayout {
     static constexpr int height=188, top=6, bottom=8;
-    static constexpr int lyricHeight=height-top-bottom, cell=14, pitch=16;
-    static constexpr int columns=7, bilingualGap=6;
-    static constexpr uint8_t cjkFace=1;
+    static constexpr int lyricHeight=height-top-bottom, cell=16, pitch=18;
+    static constexpr int columns=6, bilingualGap=6;
+    static constexpr uint8_t cjkFace=2;
     static constexpr int coverTop=(height-144)/2;
 };
 // A ready cover must never monopolize the cooperative resource worker.

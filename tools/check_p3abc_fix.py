@@ -44,7 +44,7 @@ class FixChecks(unittest.TestCase):
                 unique = {g[0] for g in glyphs}
                 total = 0
                 for char in unique:
-                    name = 'latin-12' if ord(char)<256 else 'cjk-14'
+                    name = 'latin-12' if ord(char)<256 else 'cjk-16'
                     record = fonts.records[name][ord(char)]
                     total += record[2]*record[3]
                 self.assertLessEqual(total, 16*1024)

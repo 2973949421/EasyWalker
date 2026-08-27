@@ -4,7 +4,7 @@ import re
 import zlib
 from pathlib import Path
 
-VERSION='0.7.3-p3c.free'
+VERSION='0.7.4-p3c.tune'
 
 def checkpoints(data):
     result=[]
@@ -31,6 +31,9 @@ def evaluate(record):
     problems=[]
     if record.get('result')=='FAIL':problems.append('device_reported_failure')
     if record.get('failure_reason')!='none':problems.append(record.get('failure_reason','missing_failure_field'))
+    level=int(record.get('volume',-1));raw=int(record.get('speaker_volume_raw',-1))
+    if not 0<=level<=255 or int(record.get('speaker_volume_cap',-1))!=63 or raw!=(level*63+127)//255:
+        problems.append('volume_policy')
     for key,limit in [('audio_errors',0),('backpressure',0),('pcm_gap_max_us',70000),('present_max_us',100000),('lyric_late_max_ms',200)]:
         if int(record[key])>limit:problems.append(key)
     if problems:return 'FAIL',sorted(set(problems))

@@ -28,6 +28,7 @@ bool hasMp3Extension(const char* path) {
 }  // namespace
 
 bool PlayerRuntime::begin(bool restoreSavedState) {
+    setVolume(VolumePolicy::initialLevel);
     if (!engine_.begin()) {
         return false;
     }

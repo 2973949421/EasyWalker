@@ -48,6 +48,7 @@ void FreeSession::observe(const UiCoordinator& ui,const PlayerRuntime& player){
     }else playing_=false;
     if(s.audioError!=AudioError::None || s.error!=PlayerError::None || audioErrors_)fail("audio","player_audio_error");
     if(backpressure_)fail("audio","backpressure");
+    if(player.rawSpeakerVolume()!=VolumePolicy::toRaw(player.volume()))fail("audio","volume_policy");
     if(pcmGapMaxUs_>70000)fail("audio","pcm_gap_over_70ms");
     if(playing_ && now-playingAt_>2000 && s.pcmLastSubmitAgeUs>2000000)fail("audio","pcm_stalled");
     const auto u=ui.stats();
@@ -97,6 +98,8 @@ void FreeSession::prepare(const UiCoordinator& ui,const PlayerRuntime& player){
     append("schema=1\nversion=%s\nmode=free\nresult=%s\nhuman_review=PENDING\na_auto=%s\nb_auto=%s\nc_auto=%s\n",ADV_WALKMAN_VERSION,failure_[0]?"FAIL":a&&b&&c?"READY_FOR_REVIEW":"INCOMPLETE",a?"COVERED":"INCOMPLETE",b?"COVERED":"INCOMPLETE",c?"COVERED":"INCOMPLETE");
     append("coverage_scope=free_main_path\nnot_exercised=scripted_seek,reboot_view_persistence\ndisplay_selfchecks=%u\ndisplay_self_failure=%s\n",ui.stats().displaySelfChecks,ui.stats().displaySelfFailure?ui.stats().displaySelfFailure:"none");
     append("resource_expected=%ld\nresource_actual=%ld\nrepeat_raw=%u\nshuffle_raw=%u\n",(long)resourceExpected_,(long)resourceActual_,unsigned(s.repeatMode),s.shuffleEnabled);
+    append("speaker_volume_raw=%u\nspeaker_volume_cap=%u\nheap_free=%lu\n",player.rawSpeakerVolume(),VolumePolicy::maximumRaw,(unsigned long)ESP.getFreeHeap());
+    append("lyric_font_px=%u\nlyric_columns=%u\nadjacent_preview=0\n",unsigned(MediaLayout::cell),unsigned(MediaLayout::columns));
     append("failure_component=%s\nfailure_reason=%s\nresource_path=%s\nresource_operation=%s\nresource_errno=%d\n",component_[0]?component_:"none",failure_[0]?failure_:"none",resourcePath_[0]?resourcePath_:"NA",resourceOperation_[0]?resourceOperation_:"NA",resourceErrno_);
     append("elapsed_ms=%lu\ntrack=%s\npage=%s\nplayer_state=%s\nposition_ms=%lu\nsample_rate=%lu\nvolume=%u\npreferred_view=%u\n",(unsigned long)(millis()-started_),track_,uiPageName(ui.page()),playerStateName(s.state),(unsigned long)s.positionMs,(unsigned long)s.sampleRateHz,player.volume(),player.preferredNowPlayingView());
     append("input_selfcheck=%u\nactions=%lu\nnav_mask=%lu\nvolume_events=%lu\nplay_events=%lu\nview_events=%lu\nlibrary_text_seen=%u\nlibrary_text_ok=%u\nlibrary_width_px=%lu\n",inputCheck_,(unsigned long)actions_,(unsigned long)nav_,(unsigned long)volumeEvents_,(unsigned long)playEvents_,(unsigned long)viewEvents_,textSeen_,textOk_,(unsigned long)libraryWidth_);

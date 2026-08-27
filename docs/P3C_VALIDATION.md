@@ -1,6 +1,54 @@
 # P3C validation record
 
-Current baseline: `d8cdd55`; target: `0.7.3-p3c.free`.
+Current baseline: `03b2180`; target: `0.7.4-p3c.tune`.
+
+## 0.7.4 用户真机校准 — 2026-08-27
+
+### 本次读到的0.7.3证据（不是新版结果）
+
+- 原始自由试用日志已留存 `test-data/local/p3-media/trial-0.7.3/p3-free-last.txt`，
+  73292 bytes，45份CRC有效检查点；SD日志不删除。
+- 最后elapsed640597ms：Lyrics / Cover Ready，122歌词帧、3封面帧、42次自然换句；
+  完整呈现最大91890µs、到期更新最大141ms；没有字体 / 媒体加载失败。
+- Audio Error0 / Backpressure0，最长连续播放113473ms；PCM提交间隔先到92054µs，
+  后到93100µs。两个上升段最近操作有Back，但旧日志不能证明单一阻塞源；不能写PASS。
+- A导航覆盖不足、B/C主路径有覆盖；用户认可基本效果，提出仅当前句、增字、降音量、
+  更细ASCII、英文整词换列。资源准备最大2101777µs为预取墙钟时间，不等同显示迟到。
+- minimum heap86132 bytes；静态媒体预算48700 bytes。不把最低值本身当内存泄漏证据。
+
+### 本轮修改与自动验证
+
+- 只显示当前双语cue，首句前留空；CJK16、六列、英文整词优先换列，极长词安全拆分。
+  29组真实字模全分页边界检查；首次长句完整，当前组续列不变暗。
+- VolumePolicy逻辑0～255→raw0～63，启动raw32；真实setter及显示事件保持分离，
+  日志增加speaker_volume_raw / speaker_volume_cap / heap_free。
+- ASCII默认34×26，收紧共用字格空白和密度拟合，仍120×144 / ACOV v1 / 34588 bytes。
+  已检查放大PC预览；不宣称设备观感或听感已通过。
+- 重复Esc等待RestorePlaylist完成，不重复openPath打断同一目录扫描；保留70ms阈值。
+- 本地检查覆盖字模 / 所有29组分页、英文整词和极长词、封面RGB565 / CRC与字符网格、
+  全256音量映射、启动限幅路径、日志完整性、旧调度失败反例。无新工具链或全屏Sprite。
+
+### 最终构建与SD交付
+
+- 42项PC检查通过（P3B10 / P3C15 / fix8 / free9）；生产C++头的编译期断言覆盖
+  单词边界 / 限幅 / 布局 / 输入 / 公平调度，旧调度反例必须失败。旧计时器13断言继续通过。
+- 最终Dev与联合自由试用构建成功，0.7.4-p3c.tune；共享Runtime的P1 Gate A亦构建通过。
+  P3A / P1B / P2 / Benchmark不重复构建或交付，本次不声称历史构建产物已更新。
+
+| 最终产物 | Bytes | Static RAM bytes | SHA-256 |
+|---|---:|---:|---|
+| Dev | 746096 | 120040 | `84cdc181e81f11c093291ed2a8b185c18f915ac1b1725e1fb3e694ac146c9654` |
+| P3ABC自由试用 | 746160 | 120040 | `505629f58ffc2e1d9308550926437542eda8ef5fc1876923ae171aec80e91eb0` |
+
+- 均通过1310720 bytes上限与48KiB媒体预算编译断言；静态RAM不等同剩余Heap。
+- 已覆盖 `D:\firmware\ADV-Walkman-P3ABC-Gate.bin`，PC构建 / artifacts / SD Hash一致。
+- 唯一变化的媒体是 `D:\ADVWalkman\covers\ADVWalkmanBenchmark\benchmark.cover.adv`，
+  34588 bytes，SHA-256 `cc23d15c33d14521b023b6eaf85be2783d0445dd2335bf688e9173616bbcec22`。
+  同步更新资源校验清单，按旧清单验证文件归属；字体16px已在SD，不重复复制字体。
+- 原benchmark大小及Hash仍符合既有11972484 / 4003b057…db51d63；音乐、两份LRC、
+  原图、状态、日志和其他BIN均未改。无设备Flash / 分区 / eFuse或Git push操作。
+- A/B/C仍DEVICE TEST；这次没有新版ADV运行证据，不宣称93ms音频峰值已解决，
+  也不宣称新响度、可读性和封面已获人工确认。继续自由使用、15秒后台日志、T保存。
 
 ## 0.7.3 自由试用修复 — 2026-08-27
 

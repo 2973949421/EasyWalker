@@ -1,5 +1,21 @@
 # Changelog
 
+## V0.7.4 — Current lyrics, whole words and calibrated volume
+
+Date: 2026-08-27
+
+- 按用户真机反馈去除暗色前后句和前奏首句预览；只显示当前完整双语组，CJK14→16，
+  六列、174px可用高度；当前长句正常续列 / 分页。英文单词优先整体换列，修复n / ever
+  这类不必要拆词；超长词才逐字折列，保持旋转竖排。
+- 音量显示0～100%映射M5.Speaker raw0～63，新100%为旧约25%，启动50%为raw32。
+  全部256逻辑档位编译期校验单调 / 限幅；不更换Backend、不保存旧高音量。
+- 原官方封面默认30×24→34×26，收紧字格空白 / 密度拟合；仍为真实彩色ASCII，
+  不增加ACOV文件大小、设备画布或内存。歌词原文、译文、时间戳、MP3本轮均不改。
+- 0.7.3日志45份完整检查点，42次自然换句，呈现91.890ms / 延迟141ms，Audio Error0 /
+  Backpressure0；但PCM93.100ms仍超70ms。重复Esc不再重启同一待完成目录扫描，
+  不声称此防重入已证明解决音频峰值。阈值不改，A/B/C仍DEVICE TEST。
+- 维持普通界面自由试用与后台日志；构建 / SD交付事实见P3C_VALIDATION。
+
 ## V0.7.3 — Fair media loading and free-session usability
 
 Date: 2026-08-27

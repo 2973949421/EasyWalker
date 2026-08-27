@@ -1,6 +1,6 @@
 """PC pixel/reference preview using the ACTUAL generated SD glyphs.
 
-Not a claim of device validation. Mirrors seven-column/page rules for layout QA.
+Not a claim of device validation. Mirrors six-column/current-cue page rules.
 """
 import struct
 from functools import lru_cache
@@ -10,44 +10,51 @@ from prepare_p3_media import LOCAL,PACKAGE,parse_lrc,pair_cues
 class Fonts:
     def __init__(self):
         self.records={};self.bitmaps={}
-        for name in ('cjk-14','latin-12'):
+        for name in ('cjk-16','latin-12'):
             stem=PACKAGE/'ADVWalkman/fonts'/name
             idx=stem.with_suffix('.idx').read_bytes()
             self.records[name]={r[0]:r for r in (struct.unpack_from('<IIHHhhhHI',idx,i) for i in range(16,len(idx),24))}
             self.bitmaps[name]=stem.with_suffix('.vlw').read_bytes()
 
     def glyph(self,char):
-        name='latin-12' if ord(char)<256 else 'cjk-14'
+        name='latin-12' if ord(char)<256 else 'cjk-16'
         _,offset,w,h,adv,dx,dy,px,_=self.records[name][ord(char)]
         mask=Image.frombytes('L',(max(w,1),max(h,1)),self.bitmaps[name][offset:offset+w*h]) if w*h else Image.new('L',(1,1))
-        return mask,dx,dy,max(4,w,adv) if name=='latin-12' else 14
+        return mask,dx,dy,max(4,w,adv) if name=='latin-12' else 16
 
 def columns(text,fonts):
-    result=[[]] if text else [];y=0
-    for char in text:
+    result=[[]] if text else [];y=0;in_word=False
+    word=lambda c:c.isascii() and (c.isalnum() or c in "'-")
+    for i,char in enumerate(text):
         mask,dx,dy,step=fonts.glyph(char)
-        if y+step>174:result.append([]);y=0
+        whole=0
+        if word(char) and not in_word:
+            for c in text[i:]:
+                if not word(c) or whole>174:break
+                whole+=fonts.glyph(c)[3]
+        if y+step>174 or (y>0 and 0<whole<=174 and y+whole>174):result.append([]);y=0
         result[-1].append((char,y));y+=step
+        in_word=word(char)
     return result
 
 def layout(original,chinese,fonts,page=0):
     left,right=columns(original,fonts),columns(chinese,fonts)
     nl,nr=len(left),len(right);sl,sr=nl,nr
-    if sl+sr>7:
-        if not nr:sl,sr=7,0
-        elif not nl:sl,sr=0,7
-        elif nr<=3:sr,sl=nr,7-nr
-        elif nl<=3:sl,sr=nl,7-nl
-        else:sl,sr=3,4
+    if sl+sr>6:
+        if not nr:sl,sr=6,0
+        elif not nl:sl,sr=0,6
+        elif nr<=3:sr,sl=nr,6-nr
+        elif nl<=3:sl,sr=nl,6-nl
+        else:sl,sr=3,3
     pl=(nl+sl-1)//sl if sl else 1;pr=(nr+sr-1)//sr if sr else 1
     pages=max(pl,pr);page=min(page,pages-1)
-    width=(sl+sr)*16+(6 if sl and sr else 0)-2
+    width=(sl+sr)*18+(6 if sl and sr else 0)-2
     edge=67+max(width,0)//2
     glyphs=[]
-    for block,slots,count,end in ((right,sr,pr,edge),(left,sl,pl,edge-sr*16-(6 if sr else 0))):
+    for block,slots,count,end in ((right,sr,pr,edge),(left,sl,pl,edge-sr*18-(6 if sr else 0))):
         first=min(page,count-1)*slots if count>1 else 0
         for col,values in enumerate(block[first:first+slots]):
-            for char,y in values:glyphs.append((char,end-col*16-14,6+y))
+            for char,y in values:glyphs.append((char,end-col*18-16,6+y))
     return glyphs,pages
 
 def render(original,chinese,fonts,page=0,intro=False):
@@ -57,11 +64,12 @@ def render(original,chinese,fonts,page=0,intro=False):
     draw.text((33,218),'0:00/4:59' if intro else '2:24/4:59',fill='white')
     draw.rectangle((6,220,8,229),fill='#ffcc00');draw.rectangle((11,220,13,229),fill='#ffcc00')
     draw.line((6,237,128,237),fill='#888888')
+    if intro:return image,1
     glyphs,pages=layout(original,chinese,fonts,page)
     for char,x,y in glyphs:
         mask,dx,dy,_=fonts.glyph(char)
         if ord(char)<256 or char in '《》「」『』“”‘’（）—':mask=mask.transpose(Image.Transpose.ROTATE_270);dx=dy=0
-        elif char in '，、。':dx,dy=14-mask.width,0
+        elif char in '，、。':dx,dy=16-mask.width,0
         assert 6<=x+dx and x+dx+mask.width<=129,(char,x,dx,mask.width)
         assert 6<=y+dy and y+dy+mask.height<=180,(char,y,dy,mask.height)
         image.paste((132,130,132) if intro else (255,255,255),(x+dx,28+y+dy),mask)

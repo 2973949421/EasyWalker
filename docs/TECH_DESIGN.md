@@ -806,7 +806,10 @@ buffer。不可拆分 SD 操作可超软预算，真实 burst / PCM 耗时仍记
 如果歌词代次或页面已变化则显示当前整帧，不能贴回过时截图。
 本次授权提前接通固定 PlayerKeys：Vol+ (13,0)、Vol− (12,0)、Play/Pause (13,1)/(13,2)、
 View (12,1)，来自官方键盘坐标。UiCoordinator 先调用真实音量 setter / play / pause，
-再派发显示事件；音量步长 8，默认 128，未增加音量存档或改 Queue / Session。
+再派发显示事件；逻辑音量步长 8，默认 128，未增加音量存档或改 Queue / Session。
+0.7.4 的 VolumePolicy 在 PlayerRuntime 边界统一映射 raw=(level*63+127)/255；
+启动先设置 raw32 再 begin，最大 raw63。UI 与日志 volume 仍是逻辑刻度，另记
+speaker_volume_raw / speaker_volume_cap，避免百分比与硬件值混淆。P0 历史基准不改。
 
 P3B 本地验证与设备验证区分：可注入时间检查、布局检查编入测试支持；真机才验证
 实际显示。连续播放 Audio Error / Backpressure=0、PCM gap≤70 ms。0.7.3 使用
@@ -876,22 +879,25 @@ LyricLine { timestamp, original, chinese }
 渲染：
 
 ```text
-previous group | current group | next group
-dim              highlight       dim
+original block | Chinese block
+      current cue only
 ```
 
 换句取消横移动画；目标组布局与全部字模就绪后，固定帧数据，再分条带快速呈现。
 准备时不擦旧画面；自然播放最多提前 2 秒预取下一句 / 分页。中文块右、原文块左，每列向下、
 同语言向左续列；长句先多列，极长句才阅读分页，短语言不重复消失。分页按相邻
-时间戳区间分配；Pause 以 Player position 冻结，Seek 直接定位。前奏仅暗色首句预览，
-没有“前奏”标签，首组双语按同一完整布局仅降低亮度。内框 123×174 px，CJK 14 px、
-列距 2 px、双语间距 6 px、最多七列。MediaLayout 定义这些公共常量。
+时间戳区间分配；Pause 以 Player position 冻结，Seek 直接定位。仅当前组显示，
+首句前 Content 留空；前后句只可在内部预取，不呈现暗色预览。内框 123×174 px，
+CJK 16 px、列距 2 px、双语间距 6 px、最多六列。MediaLayout 定义这些公共常量。
+VerticalWords 按真实 Latin advance 预量整个英文单词；本列放不下则整体换列，
+超过整列的超长词才拆字符。计列与放置共用 advanceColumn，保证分页不会漏字。
+词内 ASCII 撇号 / 连字符保留；lookahead 超过一列即停止，无额外动态内存。
 自然换句到期后显示延迟 ≤200 ms、单次完整呈现 ≤100 ms；Seek / View 取消旧代次。
 呈现期固定 glyph，不读媒体 SD 文件、不允许 Header 淘汰它们，在有界 UI burst 内
 连续推进已准备条带，然后返回音频；100 / 200 ms 限值不变。
 Gate 提示卡和真实媒体互斥，不把 STEP / 确认文字压在歌词上。
 
-CJK：楷体约 `14 px`，正常竖排；小标点右上定位，括号 / 书名号 / 引号旋转。
+CJK：楷体约 `16 px`，正常竖排；小标点右上定位，括号 / 书名号 / 引号旋转。
 
 Latin：Times New Roman 约 `12 px`，每个 glyph 单独顺时针旋转 90°后沿纵轴布局；不是整句整体旋转。V1 UI 不跟随设备物理旋转。
 
@@ -927,7 +933,9 @@ PC Tool 负责：
 - 为每首歌曲输出独立 `/ADVWalkman/covers/<relative>/<basename>.cover.adv`；
 - 不建立 Album / Folder 共享封面或运行时 fallback 数据库。
 
-初始网格候选：26×20 / 30×24 / 34×26，默认先测 30×24。
+网格保留 26×20 / 30×24 / 34×26，0.7.4 默认 34×26。收紧字体单元共用空白边，
+不单独放大标点；字符形状 / 密度拟合与原图取色不变。ACOV v1、120×144、34588 bytes
+总文件大小不变，不增加设备画布或工作集。
 
 `.cover.adv` 使用小型 Header（Magic / Width / Height / Pixel Format）加 RGB565 Pixels。候选画布约 120×144 px，需在 135×240 逻辑竖屏真机原型中与 Header / Footer 一起校准，不在文档阶段伪装成固定像素规格。
 

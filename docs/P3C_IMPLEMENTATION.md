@@ -1,4 +1,4 @@
-# P3C media contract — 0.7.3-p3c.free
+# P3C media contract — 0.7.4-p3c.tune
 
 这是 `TECH_DESIGN.md` 的媒体格式 / 实现细节附件，不改变 P3 分阶段路线。
 
@@ -23,7 +23,8 @@ fontPixels / reserved。按 Unicode 排序，设备每轮最多四条索引读�
 每条 24 bytes，不扫描整套 VLW。一次不可分割 SD 调用的耗时另记。
 
 ASCII 使用真实字符 mask 的形状 / 密度与原图颜色拟合，保持 contain 比例和留白，
-不是直接缩小 JPG。三档 26×20、30×24、34×26；默认 30×24，120×144 canvas。
+不是直接缩小 JPG。三档26×20、30×24、34×26；默认34×26，120×144 canvas。
+裁去共用字格空白边，调整密度拟合；不按单字bbox放大标点，输出格式与大小不变。
 批处理按相对路径和 basename，冲突报错。每曲独立文件，无封面 JSON 数据库。
 
 ACOV v1 Header 为 28 bytes，小端 `<4sHHHHHHHHII>`：magic / version / headerSize /
@@ -46,13 +47,13 @@ payloadLength34560 / CRC32。设备先分步校验，再按行预读并绘制；
 本机 Arduino 2.0.16 VFS 默认 stdio buffer 为 4096 bytes，资源文件显式设置为
 index=128、VLW=256、LRC/Cover=512 bytes，不改全局库。Latin 排版只读 metric，
 advance 独立保留；显示前要求当前完整布局的全部 glyph bitmap 就绪并 pin，按字体分组
-预取，显示结束再解除 pin。密集 Latin 每页最多 301 glyph，
+预取，显示结束再解除 pin。密集 Latin 每页最多258 glyph，
 使用 8-byte 紧凑位置记录。离开 Player 释放
 歌词工作集和资源句柄，字体缓存供其他页面使用；不可见动画不推进。
 
 横排 UI 保留 Font0 ASCII 度量以保持 Benchmark 两行回归；非 ASCII 使用原生
 CJK em cell。只预取可见文本窗口，避免长 Title 超过缓存容量时反复逐出、永远无法绘制。
-歌词采用真实 Latin advance / bitmap extent 与 CJK 原生 14 px cell；先整帧准备字模，
+歌词采用真实Latin advance / bitmap extent与CJK原生16 px cell；先整帧准备字模，
 不能边等字模边擦除旧句。缓存容量不足明确报错，不静默扩容。
 
 SD 挂载显式 `max_files=12`。当前 SDK `sizeof(FIL)=4136`，含 4096-byte FatFs cache；
@@ -69,7 +70,7 @@ line 上限，错误明确。基础文件优先；缺基础时扫描唯一非中
 简体优先繁体，最近未用时间戳 ≤300ms 配对，等距取较早项。基础时间轴驱动显示；
 同时间多记录稳定保存，播放定位取最后一个同时间记录。缺译文不影响原文显示。
 
-没有歌词横移动画，也没有“前奏”标签；前奏只显示暗色首句预览。正常播放最多提前
+没有歌词横移动画，也没有“前奏”标签；只显示当前双语组，首句前Content留空。正常播放最多提前
 2 秒准备下一句 / 下一分页。同一逻辑帧冻结布局与字模，使用 generation / frame id
 取消 Seek、换歌、View 后的旧任务；准备时保留上一完整画面。
 准备期字体 / 歌词 / 封面按轮次公平服务，不让封面帧反复抢占冷歌词；Loading 不等于
@@ -78,14 +79,18 @@ Missing。完整呈现期优先完成 18px 条带，UI burst 最多64步 / 16ms�
 歌词到期后 ≤200 ms 更新；记录耗时、missed deadline、取消和呈现中 I/O 违规。
 Volume overlay 只有3px细条和透明背景数字；若同歌曲代次 / 同歌词页则只重建25×82
 覆盖区域，否则显示当前整帧，不恢复过期截图。帧内浮层更新下一帧兑现。135×18行缓冲仍唯一。
-歌词每条带至多 18 行，Cover 每次预读 / 绘制 2 行（480 bytes）。前后组必须连同译文
-完整容纳才显示，不只显示半组；无可用空间就隐藏预览。
+歌词每条带至多18行，Cover每次预读 / 绘制2行（480 bytes）。不呈现前后句预览；
+内部相邻窗口仅用于预取。当前句完整续列均高亮，六列放不下才分页。
+英文整词按实际advance预量：剩余列高不足则换列，只有词长超过174px才允许拆分。
+计列与放置共享advanceColumn / VerticalWords；无新的数组或动态分配。
 
 ## 3. View / persistence / keys
 
 Player 使用官方物理坐标、按下边沿，不按 Fn / Shift / Ctrl / Alt。View (12,1)，
-本次确认前置 Vol+ (13,0)、Vol− (12,0)、两个 Play/Pause (13,1)/(13,2)。音量±8，
-先真实调整再触发显示；不存档音量。旧字母 V 不恢复，其余盲操 / DSP 仍在 P4。
+本次确认前置Vol+ (13,0)、Vol− (12,0)、两个Play/Pause (13,1)/(13,2)。逻辑音量±8，
+PlayerRuntime统一用VolumePolicy映射到raw0～63，启动逻辑128 / raw32；先真实调整
+再触发显示。日志另记raw/cap；不存档音量。不是绝对安全声压保证。
+旧字母V不恢复，其余盲操 / DSP仍在P4。
 
 Session v1 固定区 byte21：0=Lyrics、1=Cover，旧零值或非法值为 Lyrics。用户切换
 只标记原有 cooperative A/B checkpoint；无歌词 Cover-only 不回写偏好。
@@ -107,9 +112,9 @@ READY_FOR_REVIEW。后台自然观察至少60秒连续44100播放，不强制用
 第一失败不被后续健康状态冲掉；字体 / 歌词 / 封面分组件、路径、操作、errno记录。
 旧Gate脚本Seek / 重启偏好验证不自动执行，记录not_exercised，任务保持待验。
 
-显示常量：Header28、Content188、Footer24；内框123×174、上6下8、CJK14、列距2，
-双语间距6、最多七列。前奏复用完整双语多列布局（仅dim）；不使用单列截断分支。
-只清理中文译文冗余破折号和标点，不静默改日文或时间戳。小标点右上，括号 / 引号旋转。
+显示常量：Header28、Content188、Footer24；内框123×174、上6下8、CJK16、列距2，
+双语间距6、最多六列。仅当前双语组，无前后句预览；英文整词换列，过长才拆字。
+保留0.7.3已清理的中文标点，本轮歌词内容不改。小标点右上，括号 / 引号旋转。
 
 ## 5. 历史 Combined Gate and limits（0.7.0～0.7.2，不是当前操作步骤）
 

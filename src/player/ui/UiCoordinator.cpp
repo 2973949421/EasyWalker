@@ -593,6 +593,9 @@ bool UiCoordinator::returnFromPlaylist() {
 }
 
 bool UiCoordinator::restorePlaylistForCurrentTrack() {
+    // Repeated Esc while the directory is loading must not cancel/reopen the
+    // same SD scan. Let the existing asynchronous navigation finish.
+    if (pendingNavigation_ == PendingNavigation::RestorePlaylist) return true;
     char current[kTrackPathCapacity] = {};
     if (!player_->currentPath(current, sizeof(current))) {
         setExternalError("No current track");

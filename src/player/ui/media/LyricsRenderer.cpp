@@ -1,4 +1,5 @@
 #include "LyricsRenderer.h"
+#include "VerticalWords.h"
 #include <algorithm>
 #include <cstring>
 namespace adv_walkman { namespace player {
@@ -8,14 +9,26 @@ int LyricsRenderer::step(uint32_t cp,FontCache& fonts,bool& ready){
     if(!fonts.requestMetric(cp,3)){ready=false;return 8;}
     return std::max<int>(4,fonts.latinAdvance(cp));
 }
+int LyricsRenderer::advanceColumn(const char* start,uint32_t cp,bool& inWord,int& y,
+                                  unsigned& column,FontCache& fonts,bool& ready){
+    const bool word=englishWordChar(cp);
+    const int whole=word&&!inWord?englishWordHeight(start,kHeight,
+        [&](uint32_t c){return step(c,fonts,ready);}):0;
+    const int advance=step(cp,fonts,ready);
+    if(nextVerticalColumn(y,advance,whole,kHeight)){++column;y=0;}
+    inWord=word;
+    return advance;
+}
 unsigned LyricsRenderer::columns(const char* text,FontCache& fonts,bool& ready){
-    if(!*text)return 0;unsigned cols=1;int y=0;bool invalid=false;
-    while(*text){const uint32_t cp=mediaCodepoint(text,invalid);const int advance=step(cp,fonts,ready);if(y+advance>kHeight){++cols;y=0;}y+=advance;}
+    if(!*text)return 0;unsigned cols=1;int y=0;bool invalid=false,inWord=false;
+    while(*text){const char* start=text;const uint32_t cp=mediaCodepoint(text,invalid);
+        const int advance=advanceColumn(start,cp,inWord,y,cols,fonts,ready);y+=advance;}
     stats_.invalidUtf8|=invalid;return cols;
 }
 void LyricsRenderer::place(const char* text,unsigned first,unsigned capacity,int right,uint16_t color,FontCache& fonts){
-    unsigned col=0;int y=0;bool ready=true,invalid=false;
-    while(*text){const uint32_t cp=mediaCodepoint(text,invalid);const int advance=step(cp,fonts,ready);if(y+advance>kHeight){++col;y=0;}
+    unsigned col=0;int y=0;bool ready=true,invalid=false,inWord=false;
+    while(*text){const char* start=text;const uint32_t cp=mediaCodepoint(text,invalid);
+        const int advance=advanceColumn(start,cp,inWord,y,col,fonts,ready);
         if(col>=first && col<first+capacity){
             if(stats_.glyphs>=kMaxGlyphs){stats_.layoutError=true;return;}
             const int x=right-int(col-first)*kPitch-kCell;
@@ -29,20 +42,22 @@ bool LyricsRenderer::prepare(const LyricsTimeline& timeline,FontCache& fonts,uin
     if(target==-999)target=timeline.current();
     stats_=LyricsLayoutStats{};stats_.intro=target<0;
     if(!timeline.windowReady())return false;
+    // No current cue before the first timestamp: clean Content Stage, not a
+    // preview of the next lyric. Preparation of future cues remains invisible.
+    if(stats_.intro)return true;
     bool ready=true;
     const int relative=target-timeline.current();
-    const int current=stats_.intro?1:relative;
+    const int current=relative;
     const char* original=timeline.text(current,0);const char* chinese=timeline.text(current,1);
-    if(!*original && !*chinese){original="间奏";}
+    if(!*original && !*chinese)return true;
     const unsigned left=columns(original,fonts,ready),right=columns(chinese,fonts,ready);
     if(!ready)return false;
-    // Intro uses exactly the same complete bilingual layout, only dimmer.
-    // Seven 14px columns with 2px gaps + a 6px bilingual gap fit 123px.
+    // Current bilingual cue only; continuation columns are all equally bright.
     unsigned rightSlots=right,leftSlots=left;
-    if(left+right>7){
-        if(!right){leftSlots=7;rightSlots=0;}else if(!left){rightSlots=7;leftSlots=0;}
-        else if(right<=3){rightSlots=right;leftSlots=7-right;}else if(left<=3){leftSlots=left;rightSlots=7-left;}
-        else {leftSlots=3;rightSlots=4;}
+    if(left+right>MediaLayout::columns){
+        if(!right){leftSlots=MediaLayout::columns;rightSlots=0;}else if(!left){rightSlots=MediaLayout::columns;leftSlots=0;}
+        else if(right<=3){rightSlots=right;leftSlots=MediaLayout::columns-right;}else if(left<=3){leftSlots=left;rightSlots=MediaLayout::columns-left;}
+        else {leftSlots=3;rightSlots=3;}
     }
     const unsigned leftPages=leftSlots?(left+leftSlots-1)/leftSlots:1;
     const unsigned rightPages=rightSlots?(right+rightSlots-1)/rightSlots:1;
@@ -54,28 +69,10 @@ bool LyricsRenderer::prepare(const LyricsTimeline& timeline,FontCache& fonts,uin
     stats_.columns=leftSlots+rightSlots;
     const int width=(leftSlots+rightSlots)*kPitch+(leftSlots&&rightSlots?6:0)-2;
     const int rightEdge=67+std::max(0,width)/2;
-    const uint16_t color=stats_.intro?0x8410:0xFFFF;
+    const uint16_t color=0xFFFF;
     place(chinese,rightPages>1?std::min(page,rightPages-1)*rightSlots:0,rightSlots,rightEdge,color,fonts);
     place(original,leftPages>1?std::min(page,leftPages-1)*leftSlots:0,leftSlots,
           rightEdge-int(rightSlots)*kPitch-(rightSlots?6:0),color,fonts);
-    // Preview is all-or-nothing and never allocates a partial glyph column.
-    const int extra=(123-width)/2;
-    if(!stats_.intro && extra>=kPitch){
-        auto preview=[&](int relative,int edge){
-            bool prepared=true;
-            const char* orig=timeline.text(relative,0);const char* zh=timeline.text(relative,1);
-            const unsigned l=columns(orig,fonts,prepared),r=columns(zh,fonts,prepared);
-            const int widthPx=int(l+r)*kPitch+(l&&r?6:0)-2;
-            if(!prepared){ready=false;return;}
-            // A neighboring bilingual group is shown only as a whole. Never
-            // silently drop its translation merely to squeeze in a preview.
-            if(l+r && widthPx<=extra){
-                place(zh,0,r,edge,0x4208,fonts);
-                place(orig,0,l,edge-int(r)*kPitch-(r?6:0),0x4208,fonts);
-            }
-        };
-        preview(relative-1,rightEdge-width-2);preview(relative+1,129);
-    }
     return ready;
 }
 bool LyricsRenderer::prepareFrame(FontCache& fonts){

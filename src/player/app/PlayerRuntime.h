@@ -4,6 +4,7 @@
 #include "player/core/PlayerController.h"
 #include "player/storage/PersistedQueueSource.h"
 #include "player/storage/PlayerStateStore.h"
+#include "VolumePolicy.h"
 
 namespace adv_walkman {
 namespace player {
@@ -19,8 +20,9 @@ class PlayerRuntime final {
     bool play();
     bool pause();
     bool resume();
-    void setVolume(uint8_t volume) {engine_.setVolume(volume);}
-    uint8_t volume() const {return engine_.volume();}
+    void setVolume(uint8_t volume) {volumeLevel_=volume;engine_.setVolume(VolumePolicy::toRaw(volume));}
+    uint8_t volume() const {return volumeLevel_;}
+    uint8_t rawSpeakerVolume() const {return engine_.volume();}
     void stop();
     bool next();
     bool previous();
@@ -64,6 +66,7 @@ class PlayerRuntime final {
     void startPendingSave();
 
     Mp3PlaybackEngine engine_;
+    uint8_t volumeLevel_ = VolumePolicy::initialLevel;
     PlayerController controller_{engine_};
     PlayerStateStore stateStore_;
     PersistedQueueSource restoredQueue_;
