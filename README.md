@@ -82,7 +82,7 @@ P3D 黑胶曲库 / Settings / 息屏不在本轮。
 检查通过；Dev / 联合 Gate / P3A / P1 A/B / P2 共六环境构建通过。大小与完整 SHA-256
 集中记录在 `docs/P3C_VALIDATION.md`，不将这些结果当成真机 PASS。
 
-本地入口（没有写 SD、没有烧录）：
+本地构建 / 检查入口（不烧录）：
 
 ```powershell
 .\tools\build_player.ps1 -Target Dev
@@ -98,6 +98,9 @@ P3D 黑胶曲库 / Settings / 息屏不在本轮。
 - 批处理：`prepare_p3_media.py --audio-root <Music> --image-root <CoverSource> --output <covers>`。
 - 用户确认 SD 在 PC 后，才执行 `tools/sync_p3_media.py --sd-root D:\`。它只复制本次
   package 和联合固件，核对原曲及拷贝结果，不重写 MP3，不清理旧固件或状态。
+- 2026-08-27 用户确认后已同步到 SD，资源及固件 Hash 全部核对通过。另按用户要求
+  将 SD 上旧 Dev / P2 Gate / P3A Gate 三个 BIN 备存 PC 后移除；当前 Walkman 安装项
+  只保留 `/firmware/ADV-Walkman-P3ABC-Gate.bin`。Bruce、UIFlow2、原曲和状态未改。
 
 真机屏幕逐步引导：A 原导航 → 前奏 / Header 确认 → 双语长句确认 → View（顶部
 第二排第二颗）→ Cover 确认 → 自动连续播放 / 浮层 → 听感确认 → Pause/Seek、无歌词

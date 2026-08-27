@@ -15,7 +15,7 @@ Baseline: `61692f0`; target version: `0.7.0-p3c.media`.
 
 ## Build artifacts — 2026-08-27
 
-以下六环境均构建成功，脚本已核对 `.pio` → `artifacts` 大小与 Hash；没有复制 SD。
+以下六环境均构建成功，脚本已核对 `.pio` → `artifacts` 大小与 Hash；构建阶段未复制 SD。
 Dev / P3A / 联合 Gate 的版本为 `0.7.0-p3c.media`，历史 P1/P2 保留原 Gate 版本，
 只验证共享 Session 兼容，不表示重新进行了 P1/P2 真机测试。
 
@@ -41,9 +41,22 @@ M5GFX 0.2.27 / ESP8266Audio 1.9.7 / Arduino 2.0.16。
 - 本地日文原稿与绑定 LRC 字节一致；图片、LRC、Windows 字体及预览均未加入 Git。
 - 微软字体来源仅供本地私用，不能将本项目工具输出视为公开再分发授权。
 
+## SD delivery — 2026-08-27
+
+用户确认 SD 已插入 PC，并要求清理旧 BIN。已完成：
+
+- `sync_p3_media.py --sd-root D:\` 同步 14 项资源及联合固件，全部复制 Hash 核对通过。
+- `/firmware/ADV-Walkman-P3ABC-Gate.bin`：750224 bytes，SHA-256 与上述构建表一致。
+- 只读确认原曲大小和 SHA-256 一致，没有重写 `benchmark.mp3`。
+- 旧 `ADV-Walkman-Dev.bin`、`ADV-Walkman-P2-Gate.bin`、`ADV-Walkman-P3A-Gate.bin`
+  已复制到 PC 并核对 Hash 后，从 SD 删除；可从下列目录恢复：
+  `B:\sharewithlight\ESP\firmware\adv-walkman\sd-retired\2026-08-27-p3abc`。
+- SD `/firmware` 顶层只保留联合 Walkman BIN；Bruce / UIFlow2 子目录及其他用户文件不动。
+- 未操作 COM3 或设备内部 Flash；SD 上删 BIN 不等于删除 Launcher 已安装的 App。
+
 ## Device validation — pending
 
-本轮没有接触 SD / COM3 / Flash。不能将以上结果当作真实显示或连续播放通过。
+SD 已交付，但尚未安装或读取本轮真机日志。不能将以上结果当作真实显示或连续播放通过。
 
 - A：方向 / 导航 / 跨页音频与 `ADVWalkmanBenchmark` 两行。
 - B：真实 Header/Footer、长标题、浮层 / 局部刷新。

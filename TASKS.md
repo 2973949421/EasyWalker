@@ -323,7 +323,7 @@ AC：
 |---|---|---|---|
 | P3A UI Foundation | DEVICE TEST | P3-01、P3-08、P3-09；P3-07 功能骨架 | `0.5.1` 功能 Gate PASS；`0.5.2` 文本修复及本地构建完成，待 Gate A-fix+B+C 回归 |
 | P3B Now Playing Chrome | DEVICE TEST | P3-02 | `0.6.0` 代码、自动检查及三环境构建完成；待联合 Gate 验收 |
-| P3C Media Resources | DEVICE TEST | P3-03～06、P3-12 | `0.7.0` 代码、25 项 PC 检查、Session 自测及六环境构建完成；仅本地交付，待联合真机 |
+| P3C Media Resources | DEVICE TEST | P3-03～06、P3-12 | `0.7.0` 代码、25 项 PC 检查、Session 自测及六环境构建完成；联合包已同步 SD，待联合真机 |
 | P3D Product UI Completion | TODO | P3-07、P3-10、P3-11 | 黑胶曲库、设置、息屏与最终校准 |
 
 P3A 编译成功后进入 `DEVICE TEST`，不能提前把 P3-01 / 08 / 09 标为 `DONE`。
@@ -413,6 +413,7 @@ P3C Automatic Validation — 2026-08-27：
 - [x] Session 自测通过，旧零值 / 非法 View 值回退 Lyrics；没有改变原歌曲和 Queue 语义
 - [x] Dev、P3ABC、P3A、P1 A/B、P2 六环境构建通过，均在 `0x140000` 内
 - [x] 资源包与预览仅在 Git 忽略的本地目录；未写 SD、未烧录；详细记录见 `docs/P3C_VALIDATION.md`
+- [x] 后续用户确认 SD 在 PC，已同步联合固件与 14 项资源并核对 Hash；旧 Dev / P2 / P3A BIN 备存 PC 后从 SD 移除，未烧录，仍待真机验收
 
 以下行为与音频条件仍需联合 Gate / 人工显示确认，不以以上自动检查勾选真机 AC。
 

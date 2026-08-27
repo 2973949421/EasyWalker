@@ -75,12 +75,14 @@ P3A/B/C 均为 DEVICE TEST；P3C 本地实现与六环境构建完成，不得�
 
 P3C 实现说明见 `P3C_IMPLEMENTATION.md`，构建记录见 `P3C_VALIDATION.md`。
 本地 15 项媒体检查 + 10 项 P3B 检查、Session 自测与 29 组真实歌词字模检查通过；
-下一步仅是用户确认 SD 在 PC 后同步联合包并真机验收，不重新规划或提前实施 P3D。
+2026-08-27 用户确认 SD 在 PC 后，联合包已同步并核对 Hash；下一步是真机验收，
+不重新规划或提前实施 P3D。
 字体采用独立 B 盘工具环境、SD VLW + 索引；媒体读取分步执行，绘制不访问 SD。
 联合 Gate 同时包含冷资源加载和实际动画负载，不放宽 44.1 kHz / Error=0 /
 Backpressure=0 / PCM gap≤70ms。脚本 Pause/Seek/重启前提示，重启后验证 Paused 和
-View；PASS 后 Enter 进入普通曲库，同版本不再自动跑 Gate。未接到 SD 在 PC 的确认，
-本轮不复制任何资源，也不删除旧音乐、固件或状态。
+View；PASS 后 Enter 进入普通曲库，同版本不再自动跑 Gate。按用户追加的清理要求，
+SD 上旧 Dev / P2 Gate / P3A Gate 三个 BIN 已备存 PC 后移除，只保留联合 Walkman
+安装项；其他固件、原曲和状态不动。备存位置及交付记录见 `P3C_VALIDATION.md`。
 
 ## 5. P3D — Product UI Completion
 

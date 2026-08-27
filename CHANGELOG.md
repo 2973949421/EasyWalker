@@ -1,5 +1,13 @@
 # Changelog
 
+## P3ABC SD delivery / old BIN cleanup
+
+Date: 2026-08-27
+
+- 用户确认后将联合固件及字体、歌词、封面和辅助音频同步到 SD，核对复制 Hash。
+- 按要求将旧 Dev / P2 Gate / P3A Gate 三个 BIN 备存 PC 后从 SD 移除；其他固件、
+  原曲和状态不动。没有操作设备 Flash，P3A/B/C 仍为 DEVICE TEST。
+
 ## V0.7 — P3C Media / Combined Gate (device validation pending)
 
 Date: 2026-08-27
