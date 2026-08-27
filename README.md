@@ -81,6 +81,11 @@ Settings。
 P3A 将先建立按像素宽度、字体度量和 UTF-8 边界工作的统一换行 / 省略机制；P3B
 复用到 Now Playing，P3C 完成正式中日文字体适配，P3D 只做最终视觉校准。
 
+当前实施与真机节奏为：代码和提交继续按 `P3A text fix → P3B → P3C` 分开推进；
+由于原 Gate A 的功能与音频路径已经通过，不再要求单独安装只修换行的 P3A 固件。
+用户下一次实机操作将安装一份 Gate A-fix+B+C 固件，一次确认曲库名换行并验收
+Now Playing、字体、歌词、ASCII Cover 与 View Selector。其后只剩 P3D Gate。
+
 P3A 构建与 SD 复制：
 
 ```powershell

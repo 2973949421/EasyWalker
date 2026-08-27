@@ -23,6 +23,10 @@ Date: 2026-08-26
 - 文本排版职责现已固定：P3A 建立像素宽度 / 字体度量 / UTF-8 安全换行、末行省略
   和区域裁剪；P3B 复用到 Now Playing 并实现长标题滚动；P3C 完成正式中日文字体
   与 CJK glyph 适配；P3D 只进行最终字号、间距和曲库圆弧视觉校准。
+- 为减少用户远程期间的等待和回家后的重复安装，后续工程仍按
+  `P3A text fix → P3B → P3C` 分开实现与提交，但取消只修换行的独立 P3A 重装；
+  下一次 Gate A-fix+B+C 将先回归 `ADVWalkmanBenchmark` 换行，再统一验收 P3B/C。
+  这不放宽 P3A AC，也不允许在文本回归失败时提前将 P3A 标为完成。
 
 ## V0.4 — P2 Music Library Development
 

@@ -321,15 +321,18 @@ AC：
 
 | Gate | Status | Tasks | Result |
 |---|---|---|---|
-| P3A UI Foundation | DEVICE TEST | P3-01、P3-08、P3-09；P3-07 功能骨架 | `0.5.1` 功能 Gate PASS；`ADVWalkmanBenchmark` 曲库名越界，待基础文本布局修复后收口 |
-| P3B Now Playing Chrome | TODO | P3-02 | Header / Footer 与播放状态反馈 |
-| P3C Media Resources | TODO | P3-03～06、P3-12 | 歌词、字体、ASCII Cover、View Selector |
+| P3A UI Foundation | DEVICE TEST | P3-01、P3-08、P3-09；P3-07 功能骨架 | `0.5.1` 功能 Gate PASS；基础文本修复后在 Gate A-fix+B+C 回归 |
+| P3B Now Playing Chrome | TODO | P3-02 | 独立实施；与 P3C 及 P3A 文本修复合并真机验收 |
+| P3C Media Resources | TODO | P3-03～06、P3-12 | 独立实施；Gate A-fix+B+C 验收歌词、字体、ASCII Cover、View Selector |
 | P3D Product UI Completion | TODO | P3-07、P3-10、P3-11 | 黑胶曲库、设置、息屏与最终校准 |
 
 P3A 编译成功后进入 `DEVICE TEST`，不能提前把 P3-01 / 08 / 09 标为 `DONE`。
 P3-07 在 P3A 只完成可用骨架，最终视觉仍由 P3D 验收。
 基础文字不越界属于 P3A 完成条件，不得延后到 P3D；P3B 复用到 Now Playing，P3C
 补齐正式中日文字体 / CJK 度量，P3D 仅做最终视觉校准。
+为减少用户实操，P3A 文本修复不单独安装：工程按 `P3A fix → P3B → P3C` 分开构建
+和提交，下一次真机用 Gate A-fix+B+C 一次验收。该 Gate 必须先报告 P3A 文本回归
+结果，再分别报告 B/C；P3A 回归未通过时不得标记 P3-01 / 08 / 09 为 `DONE`。
 
 ---
 

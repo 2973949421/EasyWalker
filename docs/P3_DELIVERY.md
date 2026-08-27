@@ -8,14 +8,18 @@
 
 | 阶段 | 对应任务 | 交付内容 | 真机 Gate |
 |---|---|---|---|
-| P3A | P3-01、P3-08、P3-09；P3-07 功能骨架 | 竖屏 Shell、四页路由、可用曲库 / 播放列表、跨页播放 | 独立 Gate A |
-| P3B | P3-02 | Now Playing Header / Footer、歌曲信息、进度与状态反馈 | 与 P3C 合并 |
-| P3C | P3-03～06、P3-12 | 字体、歌词、ASCII Cover 工具与 Renderer、View Selector | Gate B+C |
+| P3A | P3-01、P3-08、P3-09；P3-07 功能骨架 | 竖屏 Shell、四页路由、可用曲库 / 播放列表、跨页播放 | `0.5.1` 功能 Gate 已 PASS；文本修复并入 Gate A-fix+B+C 回归 |
+| P3B | P3-02 | Now Playing Header / Footer、歌曲信息、进度与状态反馈 | Gate A-fix+B+C |
+| P3C | P3-03～06、P3-12 | 字体、歌词、ASCII Cover 工具与 Renderer、View Selector | Gate A-fix+B+C |
 | P3D | P3-07 视觉完成、P3-10、P3-11 | 黑胶曲库、独立曲库封面、设置、息屏 Soft Lock、最终 UI 校准 | Gate D |
 
 执行顺序固定为 `P3A → P3B → P3C → P3D`。更改顺序、合并产品范围或提前实现
-后续阶段必须先获得用户确认。为减少用户安装次数，工程提交仍按 A/B/C/D 分开，
-真机安装采用 A、B+C、D 三个 Gate。
+后续阶段必须先获得用户确认。`0.5.1` 已完成原 Gate A 的功能与音频验收，唯一待收口
+问题是曲库长名称换行。用户当前无法实机操作，因此工程继续按
+`P3A text fix → P3B → P3C` 分开实施和提交，但不要求单独重装 P3A 修正版；下一次
+真机安装使用一份 Gate A-fix+B+C 固件，同时回归 P3A 文本修复并验收 P3B/C。之后
+仅剩 Gate D。这个合并只减少实操次数，不合并代码职责，也不允许用 B/C 的完成掩盖
+P3A 文本回归失败。
 
 ## 2. P3A — UI Foundation
 
@@ -34,8 +38,8 @@ P3A 建立真实可操作的 UI 主路径，不追求最终视觉：
   两行内换行，末行仍放不下时才显示省略号；
 - 不使用全屏 RGB565 Sprite，只使用 Dirty Region 与小缓冲。
 
-P3A 真机通过后，P3-01 / P3-08 / P3-09 完成；P3-07 只完成可用骨架，保持
-`DOING`，最终黑胶视觉在 P3D 验收。
+Gate A-fix+B+C 真机确认文本不越界后，P3-01 / P3-08 / P3-09 才完成；P3-07 只完成
+可用骨架，保持 `DOING`，最终黑胶视觉在 P3D 验收。
 
 ## 3. P3B — Now Playing Chrome
 
@@ -65,7 +69,7 @@ P3A 真机通过后，P3-01 / P3-08 / P3-09 完成；P3-07 只完成可用骨架
 - 完成 Screen-off Soft Lock：首次按键只唤醒并吞掉事件；
 - 做最终 UI / Audio 联合回归，不扩大到 P4 DSP 或完整 Player 3×4 控制。
 
-## 6. P3A Gate
+## 6. P3A Historical Gate and Combined Closure
 
 Gate 使用真实 Library / Playlist / Player，不依赖串口命令。屏幕逐步提示：
 
@@ -84,6 +88,12 @@ Gate 使用真实 Library / Playlist / Player，不依赖串口命令。屏幕�
 最终日志为 `/ADVWalkman/logs/p3a-last.txt`。Build Success 只进入 `DEVICE TEST`；
 必须确认显示方向、真实按键、跨页播放、日志以及真实长曲库名不越出画布后才能完成
 P3A。功能 Gate 即使为 `PASS`，若仍存在可见文字越界，P3A 仍保持 `DEVICE TEST`。
+
+`0.5.1-p3a.gate` 已完成上述功能步骤并产生 `PASS` 日志；后续不再要求用户单独安装
+一个只修换行的 P3A 固件。Gate A-fix+B+C 必须先执行 P3A 回归项：显示真实
+`ADVWalkmanBenchmark` 曲库名、确认两行布局 / 末行省略和画布裁剪正常，再继续验收
+P3B Header / Footer 以及 P3C 字体、歌词、Cover 和 View Selector。任一 P3A 回归项
+失败时，P3A 继续保持 `DEVICE TEST`，但日志必须将其与 B/C 失败分开归因。
 
 ## 7. Stop Conditions
 
