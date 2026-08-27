@@ -1,6 +1,67 @@
 # P3C validation record
 
-Current timer-fix baseline: `d3b3182`; target: `0.7.2-p3c.timer`.
+Current baseline: `d8cdd55`; target: `0.7.3-p3c.free`.
+
+## 0.7.3 自由试用修复 — 2026-08-27
+
+### 本次证据与修复范围
+
+- 0.7.2 原始三份日志已保存 `test-data/local/p3-media/failure-0.7.2/`，SD 原日志不动。
+- C 首因 `media_not_exercised / continuous_60s`，测量60010ms，44100Hz、Error0、
+  Backpressure0、PCM gap42404µs、1723buffers。字体没有I/O错误，但歌词一直Loading。
+- 381454资源字节 = Cover头及CRC34588 + 十帧像素10×34560 + 日文LRC1266；
+  中文1357字节未进入读取。旧cover-frame优先分支饿死timeline，是代码调度根因。
+- 初始单列截断、40×106不透明音量底、NORM Original占整行也是代码问题，非用户操作。
+  旧Gate在失败时主动pause；现有日志不能将其解释为芯片重启。
+- 改为公平resource worker、Loading不等于Missing、有界16ms / 64步UI burst；
+  完整双语首句、CJK14七列、28/188/24分区、透明3px条、局部恢复。
+- 只前置固定Play/Pause及Vol+/−真实功能，View不变；无额外DSP或音频架构修改。
+  新FreeSession观察而不控制用户播放，后台日志不自动切视图 / Seek / 暂停 / 重启。
+
+### 自动验证
+
+- check_p3b：10项；check_p3c：15项；check_p3abc_fix：8项；check_p3_free：8项，
+  共41项PC检查通过，包括真实资源格式、字模容量、源码契约、日志CRC和不伪报PASS。
+- 现有ESP32 C++编译器执行15项free_contracts constexpr断言；注入旧封面优先算法
+  必须失败。直接检查生产chooseMediaWork / PlayerKeys / MediaLayout，不是只重写Python。
+- 旧计时器13项同一C++函数断言及旧算法反例继续通过；Session自测通过。
+- 29组真实双语的全部分页用实际SD字模检查像素边界；完整首句44字在5列内。
+  已人工查看PC放大预览，仍不是ADV实屏或音频验收。媒体预算静态断言保持≤49152bytes。
+- P3B模型 / 像素 / 无面板 / 背景恢复检查已接入UI启动（RAM行缓冲内），
+  实际设备运行结果将写入新日志，不能把编译成功说成已运行。
+- 70ms PCM / 零错误 / 零Backpressure、100ms歌词呈现 / 200ms自然换句延迟均未放宽。
+
+### 验收方式与未验范围
+
+- 同名BIN启动普通UI，自由播放、浏览、View和音量；不再强制11步提示或60秒封面阶段。
+- 每15秒/T追加`p3-free-last.txt`，CRC保护完整checkpoint、保留首因；T完成后显示
+  LOG SAVED。自动记录自然连续播放时长与实际媒体负载，没有测到的写INCOMPLETE。
+- READY_FOR_REVIEW只表示主路径覆盖，不是整阶段PASS；可读性、方向、封面观感与
+  听感仍待用户确认。脚本Seek / 重启偏好恢复明确not_exercised，未提前勾选。
+- 字体/歌词/封面缺失、错误、加载停滞分别记录；不通过暂停播放隐藏显示错误。
+- 只同步变化的中文LRC（标点清理）与同名固件，更新资源清单；日文、音乐、原图、
+  字体、Cover和历史状态保留。详细最终构建/SD数据见下一节。
+
+### 最终构建与SD交付
+
+三个环境均构建成功，版本0.7.3-p3c.free；保留原工具链和0x140000上限。
+
+| App | Bytes | Static RAM bytes | SHA-256 |
+|---|---:|---:|---|
+| Dev | 745856 | 120384 | `48a6ed0f2a5513ac753ddbfd795b891232a2be73802195dbe9eaec36d88a3ea7` |
+| P3A历史回归 | 746752 | 115680 | `0f415f6591a9437b3baa68efb7f52a1fe915381365d4dc3f3bca085e1f628489` |
+| P3ABC自由试用 | 745920 | 120384 | `b2947076a22ae974ebf0c25738f02337b7731f855e2ca0ff6b95adad0a009e4a` |
+
+- .pio输出与artifacts逐项一致。静态RAM不是剩余Heap；媒体≤48KiB编译断言通过，
+  真实Heap / 音频仍需运行记录。P1/P2 source filter排除UI；本轮不重建无关历史Gate。
+- 已确认D盘原曲大小11972484及SHA-256仍为4003b057…db51d63，未改写。
+- 已覆盖`D:\firmware\ADV-Walkman-P3ABC-Gate.bin`，复制Hash与表中一致。
+- 仅变化资源为`Lyrics/ADVWalkmanBenchmark/benchmark.zh-Hans.lrc`，SHA-256：
+  `71b165537b3fefe119fca4740007b66cd765bac7822dc0169f34699aed3769c3`；已按旧清单核对
+  归属后同步并更新清单。字体、日文、原图、ASCII Cover、原MP3不重复复制。
+- 未删除其他SD文件，未操作COM或设备Flash；Launcher由用户安装同一个BIN。
+- git diff --check通过，Git无MP3 / LRC / VLW / BIN / Fixture / 构建缓存或本地日志。
+- **A/B/C仍DEVICE TEST**，本次没有ADV运行证据，不宣称实际音量、刷新速度或稳定性通过。
 
 ## 0.7.2 阶段计时修复
 

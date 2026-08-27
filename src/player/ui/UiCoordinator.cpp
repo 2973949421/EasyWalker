@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include "PlayerKeys.h"
+#include "P3BChecks.h"
 
 namespace adv_walkman {
 namespace player {
@@ -16,6 +18,12 @@ bool UiCoordinator::begin(M5GFX& display, PlayerRuntime& player,
     player_ = &player;
     libraryRuntime_ = &libraryRuntime;
     nowPlaying_.begin();
+    // Scratch-only checks before media binding / playback; no extra framebuffer.
+    for (const auto result : {checkP3BModel(), checkP3BPresenterDrawing(nowPlaying_),
+                               checkP3BOverlayRestoration(nowPlaying_)}) {
+        stats_.displaySelfChecks += result.checks;
+        if (!stats_.displaySelfFailure) stats_.displaySelfFailure = result.failure;
+    }
     if(!fonts_.begin()) return false;
     nowPlaying_.bindMedia(fonts_);
     nowPlaying_.setPreferredView(player.preferredNowPlayingView());
@@ -168,9 +176,18 @@ bool UiCoordinator::handleAction(UiAction action) {
         }
 
         case UiPage::Player:
-            if(action==UiAction::ToggleView) {
-                if(nowPlaying_.toggleView()) player_->setPreferredNowPlayingView(static_cast<uint8_t>(nowPlaying_.mediaStatus().preferred));
+            if(action==UiAction::TogglePlayback){
+                return player_->snapshot().state==PlayerState::Playing?player_->pause():player_->play();
+            }
+            if(action==UiAction::VolumeUp || action==UiAction::VolumeDown){
+                player_->setVolume(adjustedVolume(player_->volume(),action==UiAction::VolumeUp?8:-8));
+                notifyVolumeAdjusted(player_->volume(),millis());
                 return true;
+            }
+            if(action==UiAction::ToggleView) {
+                const bool changed=nowPlaying_.toggleView();
+                if(changed)player_->setPreferredNowPlayingView(static_cast<uint8_t>(nowPlaying_.mediaStatus().preferred));
+                return changed;
             }
             if (action == UiAction::Back) {
                 return restorePlaylistForCurrentTrack();
@@ -250,7 +267,7 @@ bool UiCoordinator::currentTrackPath(char* output, size_t capacity) const {
 }
 
 void UiCoordinator::notifyVolumeAdjusted(uint8_t volume, uint32_t nowMs) {
-    // Presentation only; actual volume adjustment is owned by P4.
+    // Receives the value AFTER the runtime applied it. Never simulates sound.
     nowPlaying_.notifyVolumeAdjusted(volume, nowMs);
 }
 

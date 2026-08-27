@@ -1,7 +1,7 @@
 # ADV Walkman
 
 > 工作名：ADV Walkman  
-> 当前阶段：P3ABC `0.7.2` Gate 计时修复与联合验收；A/B/C 仍为 `DEVICE TEST`
+> 当前阶段：P3ABC `0.7.3-p3c.free` 资源调度 / 排版修复与自由试用；A/B/C 仍为 `DEVICE TEST`
 > 平台：M5Stack Cardputer ADV
 
 ## 1. 项目是什么
@@ -71,7 +71,55 @@ V1 不以以下内容为目标：
 
 ## 5. 当前最重要的技术任务
 
-### P3C 当前交付入口
+### P3C 当前交付入口 — 0.7.3 自由试用
+
+仍安装同一个 `/firmware/ADV-Walkman-P3ABC-Gate.bin`，名称保留以免增加 SD 安装项。
+启动直接进入普通界面；恢复歌曲保持 Paused。没有必须按顺序完成的提示卡、自动
+Seek / 切 View / 暂停 / 重启，也不再盯着封面等 60 秒后被测试程序打断。
+
+单键操作（不按 Fn；仅 Player 启用音量、播放和 View）：
+
+| 物理键帽 | 当前作用 |
+|---|---|
+| Backspace / del | 音量 +8（内部 0～255 刻度） |
+| `= +` | 音量 −8 |
+| `\` 或 Enter | 播放 / 暂停，两个冻结盲操位置均可用 |
+| `] }` | Lyrics / Cover |
+| Esc | 返回播放列表；列表内继续返回曲库 |
+| 方向位置、Enter | 曲库 / 播放列表导航、选歌 |
+| T | 保存本次诊断；Player 底栏短暂显示 LOG SAVED |
+
+可以按自己的顺序听歌、看歌词、切封面、调音量和浏览。日志每 15 秒自动分块保存；
+结束前按 T，等 LOG SAVED 后再关机取 SD。日志保留第一项错误，不会为了测试主动停播。
+自然连续播放满 60 秒只是后台覆盖项；没测到的操作写 INCOMPLETE，不是假 PASS。
+真实 Seek / 重启偏好恢复仍是未验项，本次不会偷跑这些动作。
+
+本版把冷歌词 / 字模 / 封面改为公平服务；Loading 不再被当作缺歌词。画面为
+28 / 188 / 24 px 三段，CJK 14 px，完整双语前奏预览和长句续列；删除译文冗余破折号。
+音量浮层只有细条和数字，无黑色面板；默认模式不再常驻 NORM Original。原 MP3 与
+日文原稿不改。只提前接通已冻结的播放暂停和音量，其他 P4 按键 / DSP 仍未实施。
+
+检查与构建：
+
+```powershell
+.\tools\build_player.ps1 -Target Dev
+.\tools\build_player.ps1 -Target P3ABCGate
+& '.\.venv-media\Scripts\python.exe' tools/check_p3_free.py
+& '.\.venv-media\Scripts\python.exe' tools/preview_p3_lyrics.py
+& 'B:\PlatformIO\penv\Scripts\python.exe' tools/validate_p3_free.py D:\ADVWalkman\logs\p3-free-last.txt
+```
+
+媒体 package / 预览仍在 `test-data/local/p3-media/`，Git 忽略；只用现有独立媒体环境。
+SD 在 PC 时使用 `tools/sync_p3_media.py --sd-root D:\`，按旧清单校验归属后仅复制变化
+资源与同名 BIN，不改其他音乐、状态或日志。资源格式见 `docs/P3C_IMPLEMENTATION.md`，
+本次自动验证、构建和 SD 交付结果见 `docs/P3C_VALIDATION.md`。
+音频 70 ms PCM / 零 Error / 零 Backpressure、歌词 100 ms 呈现 / 200 ms 到期延迟
+阈值不变；本地检查不代表实际听感、刷新或按键已通过。
+
+2026-08-27：已覆盖D盘同名BIN（745920 bytes）和中文标点修订，Hash核对一致；
+原曲与其他资源不动。三个UI环境构建及41项PC检查通过，待本版实际显示 / 听感确认。
+
+### P3C 0.7.0～0.7.2 历史交付与旧 Gate（以下不再是操作步骤）
 
 联合 Gate 版本 `0.7.2-p3c.timer`：保留 `0.7.1` 的字体、中文右 / 原文左的竖排双语歌词、长句多列 / 极长句
 分页、彩色 ASCII 封面、实体 View 和 Session 偏好保存。仍不是 P4 完整盲操播放器。

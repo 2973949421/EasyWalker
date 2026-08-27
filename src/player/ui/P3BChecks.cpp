@@ -150,12 +150,11 @@ P3BCheckResult checkP3BDrawing(lgfx::LovyanGFX& row) {
     const auto invalid = UiTextLayout::measure(row, "bad\xFF" "name",
                                                 {6, 0, 123, 18, 1, 0, true});
     check(r, invalid.invalidUtf8 && !invalid.layoutError, "invalid_utf8_substitution");
-    const auto original = UiTextLayout::measure(row, "Original",
-                                                 {57, 2, 72, 16, 1, 0, true});
-    check(r, !original.truncated && !original.layoutError, "footer_original_fits");
     row.setTextSize(1.25f);
-    const auto mode = UiTextLayout::measure(row, "MODE?", {17, 2, 39, 16, 1, 0, true});
-    check(r, !mode.truncated && !mode.layoutError, "footer_legacy_mode_fits");
+    const auto time = UiTextLayout::measure(row, "99:59/99:59",{33,2,96,16,1,0,true});
+    check(r,!time.truncated&&!time.layoutError,"compact_footer_time_fits");
+    const auto mode = UiTextLayout::measure(row, "?", {20, 2, 12, 16, 1, 0, true});
+    check(r, !mode.truncated && !mode.layoutError, "footer_legacy_marker_fits");
     return r;
 }
 
@@ -184,6 +183,10 @@ P3BCheckResult checkP3BOverlayRestoration(NowPlayingPresenter& presenter) {
             presenter.model_.volume = volume;
             presenter.drawContentSlice(G::overlayY + offset, height);
             changed |= original != rowHash(height);
+            // Inside the old panel but outside the bar and percentage: the
+            // underlying pixel must remain visible, not merely restore later.
+            if (offset == 0) check(r, presenter.row_.readPixel(16, 4) == 0x0861,
+                                    "overlay_no_opaque_panel");
             presenter.model_.volumeVisible = false;
             presenter.drawContentSlice(G::overlayY + offset, height);
             restored &= original == rowHash(height);

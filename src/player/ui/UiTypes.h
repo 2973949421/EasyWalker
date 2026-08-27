@@ -25,6 +25,10 @@ enum class UiAction : uint8_t {
     Back,
     OpenSettings,
     ToggleView,
+    TogglePlayback,
+    VolumeUp,
+    VolumeDown,
+    SaveDiagnostics,
 };
 
 struct RawKeyEvent {
@@ -42,6 +46,8 @@ struct UiStats {
     uint32_t minimumHeap = UINT32_MAX;
     UiTextLayoutResult libraryText{};
     bool libraryTextIsBenchmark = false;
+    uint16_t displaySelfChecks = 0;
+    const char* displaySelfFailure = nullptr;
 };
 
 const char* uiPageName(UiPage page);

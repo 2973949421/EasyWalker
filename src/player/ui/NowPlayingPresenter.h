@@ -19,6 +19,7 @@ struct NowPlayingRenderStats {
     uint32_t contentSlices = 0;
     uint32_t overlaySlices = 0;
     uint32_t pageClears = 0;
+    uint32_t overlayPatches = 0;
     uint32_t renderMaxUs = 0;
     uint32_t minimumHeap = UINT32_MAX;
 };
@@ -33,6 +34,7 @@ class NowPlayingPresenter final {
     NowPlayingMediaStatus mediaStatus() const { return media_.status(); }
     const LyricsTimeline& lyrics() const { return media_.timeline(); }
     const CoverRenderer& cover() const { return media_.cover(); }
+    bool presentingLyrics() const {return media_.presentingLyrics();}
     void preloadTrack(const char* path) {media_.selectTrack(path);}
     void releasePreload() {media_.release();}
     void resetMediaDiagnostics() {media_.resetDiagnostics();}
@@ -42,6 +44,7 @@ class NowPlayingPresenter final {
                 LibraryRuntime& library, uint32_t nowMs);
     void setContent(const char* hint, const char* error);
     void notifyVolumeAdjusted(uint8_t volume, uint32_t nowMs);
+    void notifyLogSaved(bool success,uint32_t nowMs){logNote_=success?1:2;logNoteAt_=nowMs;model_.dirty|=DirtyStatus;}
     // One row/stripe per call; no file access or full-screen Sprite.
     bool renderOne(M5GFX& display);
     const NowPlayingModel& model() const { return model_; }
@@ -61,7 +64,11 @@ class NowPlayingPresenter final {
     bool preferContent_=false;
     uint32_t frameOverlayRevision_=0,frameContentRevision_=0;
     bool frameVolumeVisible_=false;
+    bool overlayPending_=false,framePartial_=false;
+    int contentEnd_=NowPlayingGeometry::contentHeight;
     uint8_t frameVolume_=128;
+    uint8_t logNote_=0;
+    uint32_t logNoteAt_=0;
     NowPlayingModel model_;
     NowPlayingRenderStats stats_;
     // Owned buffer must outlive the Sprite which borrows it.

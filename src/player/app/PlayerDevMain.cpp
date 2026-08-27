@@ -5,8 +5,8 @@
 #include "player/app/LibraryRuntime.h"
 #include "player/app/PlayerRuntime.h"
 #include "player/p3a/P3AGate.h"
-#if defined(P3ABC_DEVICE_GATE)
-#include "player/p3abc/P3ABCGate.h"
+#if !defined(P3A_DEVICE_GATE)
+#include "player/p3abc/FreeSession.h"
 #endif
 #include "player/support/AdvStorage.h"
 #include "player/ui/InputRouter.h"
@@ -24,11 +24,12 @@ PlayerRuntime player;
 LibraryRuntime libraryRuntime;
 UiCoordinator ui;
 InputRouter input;
+bool ready=false;
 
 #if defined(P3A_DEVICE_GATE)
 P3AGate gate;
-#elif defined(P3ABC_DEVICE_GATE)
-P3ABCGate gate;
+#else
+FreeSession session;
 #endif
 
 void renderBootFailure(const char* reason) {
@@ -87,20 +88,18 @@ void setup() {
     gate.begin(M5Cardputer.Display.width(), M5Cardputer.Display.height(),
                M5Cardputer.Display.getRotation());
     ui.setHint(gate.hint());
-#elif defined(P3ABC_DEVICE_GATE)
-    gate.begin(ui,player,M5Cardputer.Display);
+#else
+    session.begin();
 #endif
+    ready=true;
 }
 
 void loop() {
-    // Audio remains first. Library, keyboard and one bounded dirty render
+    if(!ready){delay(10);return;}
+    // Audio remains first. Library, keyboard and a bounded UI burst
     // follow; title animation is capped at 20 fps, without a full framebuffer.
     player.service();
-#if defined(P3ABC_DEVICE_GATE)
-    if(!gate.suspendBackground()) libraryRuntime.service();
-#else
     libraryRuntime.service();
-#endif
     M5Cardputer.update();
 
     UiAction action = UiAction::None;
@@ -111,10 +110,10 @@ void loop() {
         if (!consumed) {
             ui.handleAction(action);
         }
-#elif defined(P3ABC_DEVICE_GATE)
-        if(!gate.beforeAction(action,raw,ui,player)) ui.handleAction(action);
 #else
-        ui.handleAction(action);
+        const auto page=ui.page();
+        const bool accepted=action==UiAction::SaveDiagnostics || ui.handleAction(action);
+        session.action(action,raw,page,accepted);
 #endif
         Serial.printf("input page=%s action=%s x=%d y=%d fn=%d count=%u\n",
                       uiPageName(ui.page()), uiActionName(action), raw.x, raw.y,
@@ -129,11 +128,21 @@ void loop() {
         return;
     }
     ui.setHint(gate.hint());
-#elif defined(P3ABC_DEVICE_GATE)
-    gate.service(ui,player);
-    if(gate.renderResult(M5Cardputer.Display)){delay(1);return;}
-    if(gate.suspendBackground()){delay(1);return;}
 #endif
-    ui.service();
+    // The audio service can wait for one 1536-sample output slot (~35ms).
+    // Do not insert that wait between EVERY 2px/18px stripe. A bounded UI
+    // burst advances small I/O jobs or paints a prepared frame, then yields
+    // back to audio. The real 70ms PCM / 100ms presentation limits are logged.
+    const uint32_t burstAt=micros();
+    for(unsigned work=0;work<64;++work){
+        ui.service();
+#if !defined(P3A_DEVICE_GATE)
+        session.observe(ui,player);
+#endif
+        if(micros()-burstAt>=16000)break;
+    }
+#if !defined(P3A_DEVICE_GATE)
+    session.service(ui,player,micros()-burstAt);
+#endif
     delay(1);
 }

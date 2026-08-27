@@ -89,10 +89,11 @@ void NowPlayingPresenter::update(const PlayerSnapshot& snapshot,
         }
     }
     model_.tick(nowMs);
+    if(logNote_ && nowMs-logNoteAt_>=1500){logNote_=0;model_.dirty|=DirtyStatus;}
     if (fonts_) {
         media_.updatePosition(snapshot.positionMs,snapshot.durationMs,snapshot.state!=PlayerState::Playing);
         if(media_.wantsFrame(nowMs)) model_.dirty |= DirtyContent;
-        if(model_.dirty & DirtyOverlay) {media_.requestRedraw();model_.dirty |= DirtyContent;model_.clearDirty(DirtyOverlay);++stats_.overlaySlices;}
+        if(model_.dirty & DirtyOverlay) {overlayPending_=true;media_.requestRedraw();model_.dirty |= DirtyContent;model_.clearDirty(DirtyOverlay);++stats_.overlaySlices;}
     }
 }
 
@@ -150,16 +151,17 @@ void NowPlayingPresenter::drawContentSlice(int screenY, int height) {
     const bool visible=fonts_ && media_.frameInProgress()?frameVolumeVisible_:model_.volumeVisible;
     const uint8_t volume=fonts_ && media_.frameInProgress()?frameVolume_:model_.volume;
     if (visible) {
-        row_.fillRect(G::overlayX, G::overlayY - screenY,
-                       G::overlayWidth, G::overlayHeight, kPanel);
-        row_.drawRect(9, 70 - screenY, 7, 70, kMuted);
-        const int fill = (static_cast<unsigned>(volume) * 68 + 127) / 255;
-        row_.fillRect(10, 139 - screenY - fill, 5, fill, kAccent);
+        // Composite foreground only over the freshly reconstructed media.
+        // No panel, opaque text background, or saved stale screenshot.
+        row_.drawFastVLine(8, 70 - screenY, 62, kMuted);
+        const int fill = (static_cast<unsigned>(volume) * 62 + 127) / 255;
+        row_.fillRect(7, 132 - screenY - fill, 3, fill, kAccent);
         char percent[8] = {};
         std::snprintf(percent, sizeof(percent), "%u%%",
                       NowPlayingModel::volumePercent(volume));
-        row_.setTextColor(kText, kPanel);
-        row_.drawString(percent, G::overlayX, 147 - screenY);
+        row_.setTextSize(1.0f);
+        row_.setTextColor(kText);
+        row_.drawString(percent, G::overlayX, 138 - screenY);
     }
 }
 
@@ -201,55 +203,51 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
         ++stats_.pageClears;
     } else if (model_.dirty & DirtyTitle) {
         if(fonts_ && !fonts_->requestUiWindow(model_.title,1,model_.titleOffsetPx,123,kTitleSize))return false;
-        prepareRow(18, kBackground, kTitleSize);
+        prepareRow(16, kBackground, kTitleSize);
         CachedUiFont font(fonts_,1); if(fonts_)row_.setFont(&font);
         row_.setTextColor(kAccent, kBackground);
         UiTextLayout::drawScrolledLine(row_, model_.title[0] ? model_.title : "No track",
-                                       {6, 1, 123, 17, 1, 0, false}, model_.titleOffsetPx);
+                                       {6, 1, 123, 15, 1, 0, false}, model_.titleOffsetPx);
         pushRow(display, 0);
         model_.clearDirty(DirtyTitle);
         ++stats_.titleDraws;
         row_.setFont(&fonts::Font0);
     } else if (model_.dirty & DirtyArtist) {
         if(fonts_ && !fonts_->requestUiWindow(model_.artist,0,0,123,kSmallSize))return false;
-        prepareRow(16, kBackground, kSmallSize);
+        prepareRow(12, kBackground, kSmallSize);
         CachedUiFont font(fonts_); if(fonts_)row_.setFont(&font);
-        UiTextLayout::draw(row_, model_.artist, {6, 0, 123, 16, 1, 0, true});
-        pushRow(display, 18);
+        UiTextLayout::draw(row_, model_.artist, {6, 0, 123, 12, 1, 0, true});
+        pushRow(display, 16);
         model_.clearDirty(DirtyArtist);
         ++stats_.artistDraws;
         row_.setFont(&fonts::Font0);
-    } else if (model_.dirty & DirtyTime) {
-        prepareRow(18, kPanel, kSmallSize);
+    } else if (model_.dirty & (DirtyTime|DirtyStatus)) {
+        prepareRow(18, kBackground, 1.25f);
+        drawStateIcon(model_.state);
+        // Only exceptional modes occupy an extra tiny marker. Normal/Original
+        // are defaults, not two permanent words stealing a complete row.
+        const char* mode=model_.modeLabel();
+        if(std::strcmp(mode,"NORM")!=0){
+            const char* label=std::strcmp(mode,"ONE")==0?"1":std::strcmp(mode,"ALL")==0?"A":std::strcmp(mode,"SHUF")==0?"S":"?";
+            row_.drawString(label,20,2);
+        }
         char position[16], duration[16], text[40];
         formatTime(position, sizeof(position), model_.positionMs);
         if (model_.durationMs) formatTime(duration, sizeof(duration), model_.durationMs);
         else std::strcpy(duration, "--:--");
-        std::snprintf(text, sizeof(text), "%s / %s", position, duration);
-        UiTextLayout::draw(row_, text, {6, 2, 123, 16, 1, 0, true});
+        std::snprintf(text, sizeof(text), "%s/%s", position, duration);
+        UiTextLayout::draw(row_, logNote_?(logNote_==1?"LOG SAVED":"LOG ERROR"):text, {33, 2, 96, 16, 1, 0, true});
         pushRow(display, G::footerY);
-        model_.clearDirty(DirtyTime);
-        ++stats_.timeDraws;
+        model_.clearDirty(DirtyTime|DirtyStatus);
+        ++stats_.timeDraws;++stats_.statusDraws;
     } else if (model_.dirty & DirtyProgress) {
-        prepareRow(3, kPanel, kSmallSize);
+        prepareRow(3, kBackground, kSmallSize);
         row_.drawFastHLine(6, 1, 123, kMuted);
         const int progress = model_.progressPixels();
         if (progress > 0) row_.drawFastHLine(6, 1, progress, kAccent);
-        pushRow(display, 220);
+        pushRow(display, 236);
         model_.clearDirty(DirtyProgress);
         ++stats_.progressDraws;
-    } else if (model_.dirty & DirtyStatus) {
-        prepareRow(17, kPanel, kSmallSize);
-        drawStateIcon(model_.state);
-        // MODE? is a diagnostic for legacy combinations, not a new mode.
-        // Slightly smaller type keeps that full label plus Original readable.
-        if (std::strcmp(model_.modeLabel(), "MODE?") == 0) row_.setTextSize(1.25f);
-        UiTextLayout::draw(row_, model_.modeLabel(), {17, 2, 39, 15, 1, 0, true});
-        row_.setTextSize(kSmallSize);
-        UiTextLayout::draw(row_, "Original", {57, 2, 72, 15, 1, 0, true});
-        pushRow(display, 223);
-        model_.clearDirty(DirtyStatus);
-        ++stats_.statusDraws;
     } else if (model_.dirty & DirtyContent) {
         if(fonts_) {if(!renderContentOne(display))return false;}
         else {
@@ -300,16 +298,23 @@ bool NowPlayingPresenter::renderContentOne(M5GFX& display) {
         return true;
     }
     if(!media_.frameInProgress()) {
+        const bool patch=overlayPending_ && media_.canPatchOverlay();
         if(!media_.beginFrame(millis()))return false;
-        contentRow_=0;
+        framePartial_=patch;overlayPending_=false;
+        contentRow_=patch?G::overlayY-G::contentY:0;
+        contentEnd_=patch?contentRow_+G::overlayHeight:G::contentHeight;
+        if(patch)++stats_.overlayPatches;
         frameOverlayRevision_=model_.overlayRevision;frameContentRevision_=model_.contentRevision;
         frameVolumeVisible_=model_.volumeVisible;frameVolume_=model_.volume;
     }
-    const int height=std::min(media_.stripeHeight(),G::contentHeight-contentRow_);
+    const int height=std::min(media_.stripeHeight(),contentEnd_-contentRow_);
     if(!media_.prepareStripe(contentRow_,height))return false;
-    drawContentSlice(G::contentY+contentRow_,height);pushRow(display,G::contentY+contentRow_);
+    drawContentSlice(G::contentY+contentRow_,height);
+    if(framePartial_)display.setClipRect(G::overlayX,G::overlayY,G::overlayWidth,G::overlayHeight);
+    pushRow(display,G::contentY+contentRow_);
+    if(framePartial_)display.clearClipRect();
     contentRow_+=height;++stats_.contentSlices;
-    if(contentRow_==G::contentHeight){
+    if(contentRow_==contentEnd_){
         contentRow_=0;media_.endFrame();
         if(frameOverlayRevision_==model_.overlayRevision && frameContentRevision_==model_.contentRevision)model_.clearDirty(DirtyContent);
     }

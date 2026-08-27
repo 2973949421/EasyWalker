@@ -7,6 +7,7 @@ struct NowPlayingMediaStatus {
     MediaView preferred=MediaView::Lyrics,view=MediaView::Cover;
     int current=-1;
     uint32_t frames=0,viewChanges=0,cancellations=0,reads=0,serviceMaxUs=0;
+    uint32_t lyricsFrames=0,coverFrames=0;
     uint32_t generation=0,prepareMaxUs=0,presentMaxUs=0,lyricLateMaxMs=0,presentIoViolations=0;
     uint32_t frameId=0,deadlineUpdates=0,missedDeadlines=0;
     uint8_t page=0,pages=1;bool layoutError=false,invalidUtf8=false;
@@ -26,12 +27,16 @@ class NowPlayingMedia final {
     const LyricsTimeline& timeline()const{return timeline_;}
     const CoverRenderer& cover()const{return cover_;}
     bool frameInProgress()const{return frameInProgress_;}
+    bool canPatchOverlay()const;
+    bool presenting()const{return frameInProgress_;}
     bool presentingLyrics()const{return frameInProgress_&&frameView_==MediaView::Lyrics;}
   private:
     FontCache* fonts_=nullptr;LyricsTimeline timeline_;CoverRenderer cover_;LyricsRenderer renderer_;
     MediaView preferred_=MediaView::Lyrics,frameView_=MediaView::Cover;
-    uint32_t positionMs_=0,durationMs_=0,shownCoverRevision_=UINT32_MAX,generation_=0;
+    uint32_t positionMs_=0,durationMs_=0,shownCoverRevision_=UINT32_MAX,generation_=0,shownGeneration_=UINT32_MAX;
+    unsigned workerTurn_=0;
     uint32_t frames_=0,viewChanges_=0,cancellations_=0,serviceMaxUs_=0;
+    uint32_t lyricsFrames_=0,coverFrames_=0;
     uint32_t prepareAt_=0,presentAt_=0,prepareMaxUs_=0,presentMaxUs_=0,lyricLateMaxMs_=0,ioAt_=0,presentIoViolations_=0;
     uint32_t preparedPosition_=0,preparedDue_=0,preparedUntil_=0;
     uint32_t frameId_=0,deadlineUpdates_=0,missedDeadlines_=0;
@@ -40,7 +45,8 @@ class NowPlayingMedia final {
     bool active_=false,dirty_=true,paused_=true,frameInProgress_=false,seek_=false;
     bool preparing_=false,layoutReady_=false,glyphsReady_=false,deadline_=false,redrawAfterFrame_=false;
     void cancelPreparation();void prepareUpcoming();
-    MediaView effectiveView()const{return timeline_.hasLyrics()?preferred_:MediaView::Cover;}
+    // Loading is not missing. Keep Lyrics selected until presence is known.
+    MediaView effectiveView()const{return timeline_.hasLyrics()||timeline_.state()==MediaState::Loading||timeline_.state()==MediaState::Idle?preferred_:MediaView::Cover;}
 };
 // Media-owned stdio buffers, File wrappers and transient path/I/O overhead.
 // The SDK's fixed global FatFs mount table is reported separately by the Gate.

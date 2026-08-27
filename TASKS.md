@@ -323,7 +323,7 @@ AC：
 |---|---|---|---|
 | P3A UI Foundation | DEVICE TEST | P3-01、P3-08、P3-09；P3-07 功能骨架 | `0.5.1` 功能 Gate PASS；`0.5.2` 文本修复及本地构建完成，待 Gate A-fix+B+C 回归 |
 | P3B Now Playing Chrome | DEVICE TEST | P3-02 | `0.6.0` 代码、自动检查及三环境构建完成；待联合 Gate 验收 |
-| P3C Media Resources | DEVICE TEST | P3-03～06、P3-12 | `0.7.1` 启动误报阶段超时；`0.7.2` 修复 Gate 计时，等待新版联合验收 |
+| P3C Media Resources | DEVICE TEST | P3-03～06、P3-12 | `0.7.3` 冷资源调度 / 排版 / 自由试用修复，实际显示和日志待验 |
 | P3D Product UI Completion | TODO | P3-07、P3-10、P3-11 | 黑胶曲库、设置、息屏与最终校准 |
 
 P3A 编译成功后进入 `DEVICE TEST`，不能提前把 P3-01 / 08 / 09 标为 `DONE`。
@@ -331,8 +331,23 @@ P3-07 在 P3A 只完成可用骨架，最终视觉仍由 P3D 验收。
 基础文字不越界属于 P3A 完成条件，不得延后到 P3D；P3B 复用到 Now Playing，P3C
 补齐正式中日文字体 / CJK 度量，P3D 仅做最终视觉校准。
 为减少用户实操，P3A 文本修复不单独安装：工程按 `P3A fix → P3B → P3C` 分开构建
-和提交，下一次真机用 Gate A-fix+B+C 一次验收。该 Gate 必须先报告 P3A 文本回归
-结果，再分别报告 B/C；P3A 回归未通过时不得标记 P3-01 / 08 / 09 为 `DONE`。
+和提交，真机仍只安装同一个 P3ABC BIN。0.7.3 改为自由试用后台分项记录，不强制用户
+按 A/B/C 顺序操作；P3A 文本回归未通过时仍不得标记 P3-01 / 08 / 09 为 `DONE`。
+
+### P3ABC 自由试用修复 — 0.7.3
+
+- 0.7.2：连续窗口 60010 ms，Audio44100 / Error0 / Backpressure0 / PCM42404µs，
+  1723 buffers；歌词 Loading、Cover Ready、10 帧封面、0 个自然歌词 deadline。
+  资源 381454 bytes 恰为 Cover校验34588 + 10×34560 + 日文1266，中文尚未读取。
+  根因是封面优先调度使冷歌词无法完成；旧 fail() 主动暂停，不是已证实设备重启。
+- [x] 公平轮转资源 worker；Loading 不再等同 Missing；实际 C++ 调度回归拒绝旧实现
+- [x] 完整双语首句 / 七列续行，28/188/24、CJK14、标点；实际 29 组字模参考检查
+- [x] 透明细音量条、当前区域恢复、移除 NORM Original；真实固定播放 / 音量键前置
+- [x] 只观察的 FreeSession，15 秒 / T 分块 CRC 日志，第一错误保留，未覆盖写 INCOMPLETE
+- [ ] 新版实际显示、真实按键、歌词更新 / 音频连续性与人工听感通过
+- [ ] Seek、跨歌曲无歌词回退、重启视图偏好恢复补验；自由试用不自动执行或假报通过
+- 构建 / SD / Hash 记录统一在 `docs/P3C_VALIDATION.md`；仅构建通过不改变 DEVICE TEST。
+- 以下 0.7.0～0.7.2 顺序 Gate 记录保留为历史，不是新版操作要求。
 
 ### P3ABC Fix — 2026-08-27
 
@@ -408,16 +423,17 @@ Automatic Validation — 2026-08-27：
 
 Device AC — 等待 Gate A-fix+B+C，不用构建结果代替：
 
-- [ ] 34 / 168 / 38 px 三段布局、6 px 左右边距；Title 约 14 px，Artist / Footer 约 12 px
+- [ ] 28 / 188 / 24 px 三段布局、6 px 边距；Title14 / Artist12 / 时间10 px
 - [ ] 按歌曲路径核对异步 Title / Artist；缺失时分别回退文件名 / 留空，不串歌
 - [ ] 复用 P3A 文本布局；Header / Footer 在长文本和不同字号下均不越界
 - [ ] 长 Title 静止约 5 秒后滚动一遍
 - [ ] 滚动完成后再次静止约 5 秒
 - [ ] 24 px/s、最多 20 fps；Pause 继续滚动，换歌 / 更新标题 / 重入页面重置
-- [ ] Footer 显示真实时间 / 总时长、进度、状态、NORM / ONE / ALL / SHUF 和 Original
-- [ ] 恢复后未知总时长显示 --:-- / 未知进度，不额外 Probe；非标准组合显示 MODE? 并保留原值
+- [ ] Footer 显示真实时间 / 总时长、进度、状态；非默认模式用 1 / A / S，不常驻 NORM Original
+- [ ] 恢复后未知总时长显示 --:-- / 未知进度，不额外 Probe；异常模式显示 ? 并保留原值
 - [ ] 左侧音量浮层仅收到事件才显示，0 / 128 / 255 对应 0 / 50 / 100%，3 秒隐藏并局部恢复
-- [ ] 不接入实际音量按键；标题 / 时间 / 状态局部刷新，非 Player 不因秒数整页重绘
+- [ ] 实体 Vol+/− 每次 ±8 后反映实际音量；细条 / 数字无不透明背景，3秒局部恢复
+- [ ] 标题 / 时间 / 状态局部刷新，非 Player 不因秒数整页重绘
 - [ ] Header 动画不持续抢占歌词视觉
 - [ ] Gate A-fix+B+C 真机显示通过，连续音频窗口 Error / Backpressure=0、PCM gap≤70 ms
 
@@ -447,9 +463,9 @@ AC：
 - [ ] 英文字形逐 glyph 旋转 90°后纵向排列
 - [ ] 上一句在左、当前句居中、下一句在右
 - [ ] 当前句高亮，前后句弱化
-- [ ] 换句时整体向左移动
+- [ ] 整组就绪再切换，不做横移动画，不出现长期新旧句混杂
 - [ ] 不做逐字 Karaoke
-- [ ] 中文默认楷体约 16 px，英文 Times New Roman 约 12 px
+- [ ] 中文默认楷体约 14 px，英文 Times New Roman 约 12 px
 - [ ] 字体大小允许真机约 ±2 px 微调
 - [ ] UI 不自动旋转
 - [ ] 中文右 / 原文左、同语言右起续列；长句先完整多列，仅极长句自动阅读分页
@@ -640,6 +656,9 @@ Keymap：
 5  Volume -       6  View        7  Play Mode   8  Next
 9  Original      10  Tape       11  Radio      12  Vocal Clear
 ```
+
+0.7.3授权例外：1/5音量与2/3播放暂停已接通代码，6 View沿用P3C；真机仍待验。
+这不是P4整体完成，4/8上一首下一首、7播放模式与9–12音效仍TODO。
 
 AC：
 

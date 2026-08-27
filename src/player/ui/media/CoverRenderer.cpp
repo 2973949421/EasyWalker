@@ -33,9 +33,9 @@ void CoverRenderer::service(){
         bytesRead_+=length;readyRow_=requestedRow_;
     }
 }
-void CoverRenderer::requestRow(int y){if(y>=12 && y<156)requestedRow_=y-12;else requestedRow_=-1;}
+void CoverRenderer::requestRow(int y){if(y>=MediaLayout::coverTop && y<MediaLayout::coverTop+144)requestedRow_=y-MediaLayout::coverTop;else requestedRow_=-1;}
 void CoverRenderer::drawRow(lgfx::LGFXBase& canvas,int y,uint16_t background) const {
-    if(state_==MediaState::Ready && y>=12 && y<156 && readyRow_==y-12){
+    if(state_==MediaState::Ready && y>=MediaLayout::coverTop && y<MediaLayout::coverTop+144 && readyRow_==y-MediaLayout::coverTop){
         for(int row=0;row<std::min(2,int(canvas.height()));++row)
             for(unsigned x=0;x<120;++x)canvas.drawPixel(7+x,row,mediaU16(bytes_+row*240+2*x));
     }else if(state_!=MediaState::Ready){

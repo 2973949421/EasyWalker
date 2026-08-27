@@ -714,13 +714,13 @@ Portrait 基线冻结为 `rotation 2`。V1 不使用 IMU 自动旋转 UI。
 初始布局：
 
 ```text
-Header          34 px  (y=0)
-Content Stage  168 px  (y=34)
-Footer          38 px  (y=202)
+Header          28 px  (y=0)
+Content Stage  188 px  (y=28)
+Footer          24 px  (y=216)
 ```
 
-135×240、rotation 2、水平边距 6 px。Title 约 14 px，Artist / Footer 约 12 px。
-P3B Content 只显示开发占位与 Gate 引导，不能覆盖 Header / Footer。
+135×240、rotation 2、水平边距 6 px。Title 约 14 px，Artist 12 px，Footer 时间 10 px。
+P3C Content 显示真实媒体；自由试用没有覆盖歌词的 Gate 指引。
 
 ### 9.2.1 Text Layout Contract
 
@@ -790,30 +790,35 @@ hold 5s → scroll left once → hold 5s → repeat
 Player 自己的完整 512-byte 有界名称，以免长文件名在滚动前就被截断。
 
 时间 / 进度只来自 Snapshot；恢复 Pause 且 duration=0 时总时长为 `--:--`、进度未知，
-不额外 Probe。播放模式只显示 NORM / ONE / ALL / SHUF；异常组合显示 MODE? 并记录
-原始值。P3B 音效只显示实际 Original，不实现 DSP。
+不额外 Probe。模型保留原播放模式语义；显示只在非默认模式绘制 1 / A / S 标识，
+异常组合绘制 ? 并记录原值。移除常驻 NORM Original；不实现或伪装 DSP。
 
 标题、Artist、时间 / 进度、状态行与 Content 独立更新。非 Player 页面不因秒数变化
 重绘；页面切换允许一次完整初始化。固定 `135×18×2=4860 bytes` RGB565 行缓冲复用，
 不分配全屏 Sprite；UiTextLayout 面向 `lgfx::LovyanGFX`，绘制不读 SD。
-主循环继续 Player → Library → 输入 → 一次有界 UI 工作。
+主循环保持 Player → Library → 输入 → UI burst → 日志。UI burst 最多 64 个小工作或
+16 ms 软预算，然后回到音频；避免每条 2 / 18 px 显示带之间都等待约 35 ms 的音频
+buffer。不可拆分 SD 操作可超软预算，真实 burst / PCM 耗时仍记录，不排除慢操作。
 
 `notifyVolumeAdjusted(volume, nowMs)` 只接收已调节音量的显示事件，不改变音频音量。
-左侧浮层覆盖 Content，不改变其布局；3 秒后局部恢复。未收到事件不显示，离页隐藏。
-真实按键仍留 P4；联合 Gate 使用明确显示测试事件，不调实际音量。
+左侧浮层只有 3 px 条和透明背景数字，覆盖 Content，不改变布局；3 秒后局部恢复。
+未收到事件不显示，离页隐藏。局部恢复只更新 x6 / width25 / y68 / height82 区域；
+如果歌词代次或页面已变化则显示当前整帧，不能贴回过时截图。
+本次授权提前接通固定 PlayerKeys：Vol+ (13,0)、Vol− (12,0)、Play/Pause (13,1)/(13,2)、
+View (12,1)，来自官方键盘坐标。UiCoordinator 先调用真实音量 setter / play / pause，
+再派发显示事件；音量步长 8，默认 128，未增加音量存档或改 Queue / Session。
 
-P3B 本地验证与设备验证区分：可注入时间检查、布局检查编入测试支持；联合 Gate
-才验证实际显示。连续播放窗口 Audio Error / Backpressure=0、PCM gap≤70 ms，日志
-`/ADVWalkman/logs/p3b-last.txt` 独立记录显示与音频失败，不覆盖 P3A 文本结论。
+P3B 本地验证与设备验证区分：可注入时间检查、布局检查编入测试支持；真机才验证
+实际显示。连续播放 Audio Error / Backpressure=0、PCM gap≤70 ms。0.7.3 使用
+`/ADVWalkman/logs/p3-free-last.txt`，按 A/B/C 主路径覆盖与实际错误分别记录。
 
 测试交接：`P3BChecks` 包含编译期 geometry / timing / volume 断言，及待设备执行的
 `checkP3BModel()`、`checkP3BDrawing(135×18 scratch)`、
 `checkP3BOverlayRestoration(presenter)`。后者复用同一行缓冲，逐条带核对浮层隐藏后的
 背景像素与原背景一致，不分配另一个屏幕缓冲。
-联合 Gate 先停止音频运行这些显示检查；再预热真实 44.1 kHz 长曲，清零音频诊断，
-等首个新 PCM 提交后 `P3BValidation::begin()`，持续 `sample()` 至少 10 秒；
-保存测量快照后停止音频，再 `writeLog()`。显示确认和浮层确认必须真实取得；
-未执行的窗口标 SKIPPED，不由原 P3A Gate 推导 B 的 PASS。
+0.7.3 在 UI begin、媒体绑定前使用原行缓冲执行这些检查（包含浮层背景未被面板覆盖
+的像素断言），只操作 RAM，不启动 / 停止音乐；结果进入后台日志。旧 P3BValidation
+脚本保留用于历史回归，自由试用不调用其主动停止或清零流程。不由 A 的 PASS 推导 B。
 `tools/check_p3b.py --artifacts` 是 PC 几何 / 参考 / 源码契约与生成物检查，不能代替
 上述设备函数或用户可见显示验收。本阶段不增加独立 P3B Gate 安装。
 
@@ -828,12 +833,12 @@ enum class PreferredNowPlayingView : uint8_t {
 };
 
 effectiveView =
-    hasUsableLyrics && preferredView == PreferredNowPlayingView::Lyrics
-        ? Lyrics
-        : Cover;
+    lyricsKnownUnavailable ? Cover : preferredView;
 ```
 
 `hasUsableLyrics` 表示本地 LRC 存在且可成功解析；缺失、空文件或损坏歌词均按 unavailable 处理，禁止进入空白 Lyrics 页面。
+Loading / Idle 是尚未知，不是 Missing；准备时保留完整旧画面或等待首帧，不能因为
+封面先 Ready 就无限刷封面而延误歌词。字体、歌词、封面 worker 轮转，跳过无工作者。
 
 行为规则：
 
@@ -879,12 +884,14 @@ dim              highlight       dim
 准备时不擦旧画面；自然播放最多提前 2 秒预取下一句 / 分页。中文块右、原文块左，每列向下、
 同语言向左续列；长句先多列，极长句才阅读分页，短语言不重复消失。分页按相邻
 时间戳区间分配；Pause 以 Player position 冻结，Seek 直接定位。前奏仅暗色首句预览，
-没有“前奏”标签，保持 Lyrics。内框 123×160 px，CJK 16 px、列距 2 px、双语间距 6 px。
+没有“前奏”标签，首组双语按同一完整布局仅降低亮度。内框 123×174 px，CJK 14 px、
+列距 2 px、双语间距 6 px、最多七列。MediaLayout 定义这些公共常量。
 自然换句到期后显示延迟 ≤200 ms、单次完整呈现 ≤100 ms；Seek / View 取消旧代次。
-呈现期固定 glyph，不读媒体 SD 文件、不允许 Header 淘汰它们，每条带间仍先服务音频。
+呈现期固定 glyph，不读媒体 SD 文件、不允许 Header 淘汰它们，在有界 UI burst 内
+连续推进已准备条带，然后返回音频；100 / 200 ms 限值不变。
 Gate 提示卡和真实媒体互斥，不把 STEP / 确认文字压在歌词上。
 
-CJK：楷体约 `16 px`，正常竖排。
+CJK：楷体约 `14 px`，正常竖排；小标点右上定位，括号 / 书名号 / 引号旋转。
 
 Latin：Times New Roman 约 `12 px`，每个 glyph 单独顺时针旋转 90°后沿纵轴布局；不是整句整体旋转。V1 UI 不跟随设备物理旋转。
 

@@ -19,6 +19,8 @@ class PlayerRuntime final {
     bool play();
     bool pause();
     bool resume();
+    void setVolume(uint8_t volume) {engine_.setVolume(volume);}
+    uint8_t volume() const {return engine_.volume();}
     void stop();
     bool next();
     bool previous();

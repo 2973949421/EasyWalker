@@ -73,14 +73,14 @@ class P3CChecks(unittest.TestCase):
         self.assertGreater(first_chinese[0][1],next(g[1] for g in glyphs if g[0]=='界'))
         # Same-language continuation is to the left, reading downward first.
         original=[g for g in glyphs if g[0]=='界']
-        self.assertGreater(original[0][1],original[10][1])
+        self.assertGreater(original[0][1],original[12][1])
         for page in range(pages):render('界'*120,'中文',fonts,page)
 
     def test_dense_latin_page_uses_bounded_full_capacity(self):
         fonts=Fonts()
         glyphs,pages=layout('i'*1024,'中文',fonts)
         self.assertGreater(len(glyphs),100)
-        self.assertLessEqual(len(glyphs),240)
+        self.assertLessEqual(len(glyphs),301)
         for page in range(pages):render('i'*1024,'中文',fonts,page)
 
     def test_pause_seek_pagination_reference(self):

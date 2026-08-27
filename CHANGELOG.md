@@ -1,5 +1,22 @@
 # Changelog
 
+## V0.7.3 — Fair media loading and free-session usability
+
+Date: 2026-08-27
+
+- 按 0.7.2 真实日志定位封面帧优先导致冷歌词饿死；音频仍44100 / 零错误 / PCM42.404ms。
+  修复 worker 公平调度和 Loading ≠ Missing，实际 C++ 回归包含旧算法失败反例。
+- 完整双语首句复用正式布局；28/188/24 三段，CJK14、七列、下留白8px，标点竖排。
+  仅清理本地中文译文冗余破折号 / 标点，不改日文原文、时间戳或 MP3。
+- 透明3px音量条与数字，重建覆盖的当前媒体小区域；去常驻 NORM Original。
+  按用户确认只前置冻结的 Play/Pause 与 Vol+/−，不扩大到其余 P4 / DSP。
+- 资源读取每步 ≤512B，UI burst 16ms软预算 / 最多64个小工作；保留135×18行缓冲。
+  音频70ms、歌词100ms呈现 / 200ms更新条件不变，超时仍记录失败。
+- 同名联合 BIN 改为普通界面自由试用，后台15秒 / T追加CRC日志；不自动暂停、切视图、
+  Seek或重启。INCOMPLETE不是失败或通过；READY_FOR_REVIEW不是人工验收完成。
+  脚本Seek / 重启偏好检查显式未执行，保留待验；不凭构建将 A/B/C 标DONE。
+- 自动验证、构建和SD交付事实见 `docs/P3C_VALIDATION.md`；不操作设备Flash或推送Git。
+
 ## V0.7.2 — Fix P3ABC phase-transition timeout
 
 Date: 2026-08-27

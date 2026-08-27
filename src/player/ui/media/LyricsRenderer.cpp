@@ -2,9 +2,9 @@
 #include <algorithm>
 #include <cstring>
 namespace adv_walkman { namespace player {
-namespace {constexpr int kTop=4,kHeight=160,kPitch=18;constexpr uint16_t kBg=0x0861;}
+namespace {constexpr int kTop=MediaLayout::top,kHeight=MediaLayout::lyricHeight,kPitch=MediaLayout::pitch,kCell=MediaLayout::cell;constexpr uint16_t kBg=0x0861;}
 int LyricsRenderer::step(uint32_t cp,FontCache& fonts,bool& ready){
-    if(cp>=0x100)return 16;
+    if(cp>=0x100)return kCell;
     if(!fonts.requestMetric(cp,3)){ready=false;return 8;}
     return std::max<int>(4,fonts.latinAdvance(cp));
 }
@@ -18,8 +18,8 @@ void LyricsRenderer::place(const char* text,unsigned first,unsigned capacity,int
     while(*text){const uint32_t cp=mediaCodepoint(text,invalid);const int advance=step(cp,fonts,ready);if(y+advance>kHeight){++col;y=0;}
         if(col>=first && col<first+capacity){
             if(stats_.glyphs>=kMaxGlyphs){stats_.layoutError=true;return;}
-            const int x=right-int(col-first)*kPitch-16;
-            if(x<6 || x+16>129 || y+advance>160){stats_.layoutError=true;return;}
+            const int x=right-int(col-first)*kPitch-kCell;
+            if(x<6 || x+kCell>129 || y+advance>kHeight){stats_.layoutError=true;return;}
             glyphs_[stats_.glyphs++]={cp,color,uint8_t(x),uint8_t(kTop+y)};
         }y+=advance;
     }
@@ -36,26 +36,20 @@ bool LyricsRenderer::prepare(const LyricsTimeline& timeline,FontCache& fonts,uin
     if(!*original && !*chinese){original="间奏";}
     const unsigned left=columns(original,fonts,ready),right=columns(chinese,fonts,ready);
     if(!ready)return false;
-    if(stats_.intro) {
-        // Dim first-line preview only; no intro label.
-        stats_.columns=0;
-        const char* p=*chinese?chinese:original;bool invalid=false;int y=4;
-        while(*p && y+16<=164) {const uint32_t cp=mediaCodepoint(p,invalid);glyphs_[stats_.glyphs++]={cp,0x8410,59,uint8_t(y)};y+=step(cp,fonts,ready);}
-        stats_.invalidUtf8=invalid;return true;
-    }
-    // 6 columns (108px including gaps) plus bilingual gap 6px fit 123px.
+    // Intro uses exactly the same complete bilingual layout, only dimmer.
+    // Seven 14px columns with 2px gaps + a 6px bilingual gap fit 123px.
     unsigned rightSlots=right,leftSlots=left;
-    if(left+right>6){
-        if(!right){leftSlots=6;rightSlots=0;}else if(!left){rightSlots=6;leftSlots=0;}
-        else if(right<=3){rightSlots=right;leftSlots=6-right;}else if(left<=3){leftSlots=left;rightSlots=6-left;}
-        else {leftSlots=rightSlots=3;}
+    if(left+right>7){
+        if(!right){leftSlots=7;rightSlots=0;}else if(!left){rightSlots=7;leftSlots=0;}
+        else if(right<=3){rightSlots=right;leftSlots=7-right;}else if(left<=3){leftSlots=left;rightSlots=7-left;}
+        else {leftSlots=3;rightSlots=4;}
     }
     const unsigned leftPages=leftSlots?(left+leftSlots-1)/leftSlots:1;
     const unsigned rightPages=rightSlots?(right+rightSlots-1)/rightSlots:1;
     const unsigned pages=std::max(leftPages,rightPages);
     const uint32_t duration=std::max<uint32_t>(1,timeline.cueEnd(target)-timeline.cueStart(target));
     const uint32_t elapsed=positionMs>timeline.cueStart(target)?positionMs-timeline.cueStart(target):0;
-    const unsigned page=stats_.intro?0:std::min<unsigned>(pages-1,uint64_t(elapsed)*pages/duration);
+    const unsigned page=std::min<unsigned>(pages-1,uint64_t(elapsed)*pages/duration);
     stats_.pages=std::min<unsigned>(255,pages);stats_.page=page;
     stats_.columns=leftSlots+rightSlots;
     const int width=(leftSlots+rightSlots)*kPitch+(leftSlots&&rightSlots?6:0)-2;
@@ -66,7 +60,7 @@ bool LyricsRenderer::prepare(const LyricsTimeline& timeline,FontCache& fonts,uin
           rightEdge-int(rightSlots)*kPitch-(rightSlots?6:0),color,fonts);
     // Preview is all-or-nothing and never allocates a partial glyph column.
     const int extra=(123-width)/2;
-    if(!stats_.intro && extra>=18){
+    if(!stats_.intro && extra>=kPitch){
         auto preview=[&](int relative,int edge){
             bool prepared=true;
             const char* orig=timeline.text(relative,0);const char* zh=timeline.text(relative,1);
@@ -87,21 +81,26 @@ bool LyricsRenderer::prepare(const LyricsTimeline& timeline,FontCache& fonts,uin
 bool LyricsRenderer::prepareFrame(FontCache& fonts){
     // One font group at a time. Pins accumulate while preparing and are held
     // until the whole frame has reached the display.
-    for(uint8_t face=2;face<=3;++face)for(unsigned i=0;i<stats_.glyphs;++i){
-        const auto cp=glyphs_[i].cp;if((cp<0x100?3:2)==face && !fonts.request(cp,face,true))return false;
+    for(uint8_t face=MediaLayout::cjkFace;face<=3;++face)for(unsigned i=0;i<stats_.glyphs;++i){
+        const auto cp=glyphs_[i].cp;if((cp<0x100?3:MediaLayout::cjkFace)==face && !fonts.request(cp,face,true))return false;
     }
     return !fonts.busy() && !fonts.stats().missing && !fonts.stats().ioErrors && !fonts.stats().capacityErrors;
 }
 bool LyricsRenderer::prepareStripe(FontCache& fonts,int y,int height,int shift){
-    for(unsigned i=0;i<stats_.glyphs;++i){const auto& g=glyphs_[i];if(g.y+20<=y || g.y>=y+height || g.x+shift+18<6 || g.x+shift>=129)continue;if(!fonts.request(g.cp,g.cp<0x100?3:2))return false;}
+    for(unsigned i=0;i<stats_.glyphs;++i){const auto& g=glyphs_[i];if(g.y+20<=y || g.y>=y+height || g.x+shift+18<6 || g.x+shift>=129)continue;if(!fonts.request(g.cp,g.cp<0x100?3:MediaLayout::cjkFace))return false;}
     return true;
 }
 void LyricsRenderer::drawStripe(lgfx::LGFXBase& canvas,const FontCache& fonts,int y,int height,int shift) const {
     canvas.setClipRect(6,0,123,height);
     for(unsigned i=0;i<stats_.glyphs;++i){const auto& g=glyphs_[i];if(g.y+20<=y || g.y>=y+height || g.x+shift+18<6 || g.x+shift>=129)continue;
-        // During the slide, clip the stage, not the underlying screen. Static
-        // layouts are checked before drawing and contain complete cells.
-        fonts.draw(canvas,g.cp,g.cp<0x100?3:2,g.x+shift,g.y-y,g.color,kBg,g.cp<0x100);
+        const uint8_t face=g.cp<0x100?3:MediaLayout::cjkFace;
+        int x=g.x+shift,py=g.y-y;
+        // Commas/stops sit at the upper right; brackets/quotes turn with the
+        // vertical writing direction. Source text is never rewritten here.
+        if(smallVerticalPunctuation(g.cp))if(const auto* m=fonts.find(g.cp,face)){
+            x+=kCell-m->width-m->dx;py-=m->dy;
+        }
+        fonts.draw(canvas,g.cp,face,x,py,g.color,kBg,g.cp<0x100||rotateVerticalPunctuation(g.cp));
     }
     canvas.clearClipRect();
 }

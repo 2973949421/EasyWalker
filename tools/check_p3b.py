@@ -44,13 +44,11 @@ class P3BLocalChecks(unittest.TestCase):
     def test_row_memory_and_actual_text_boxes(self):
         c = constants()
         self.assertEqual(c["width"] * c["rowHeight"] * 2, 4860)
-        # Renderer boxes, including footer's exact 8*9px Original label.
-        for x, y, w, h in [(6, 1, 123, 17), (6, 0, 123, 16),
-                           (6, 2, 123, 16), (17, 2, 39, 15), (57, 2, 72, 15)]:
+        for x, y, w, h in [(6, 1, 123, 15), (6, 0, 123, 12), (33, 2, 96, 16)]:
             self.assertGreaterEqual(min(x, y), 0)
             self.assertLessEqual(x + w, 135)
             self.assertLessEqual(y + h, 18)
-        self.assertEqual(len("Original") * 9, 72)
+        self.assertNotIn('UiTextLayout::draw(row_, "Original"',read(UI/'NowPlayingPresenter.cpp'))
 
     def test_long_title_utf8_reference(self):
         title = "曲名-日本語-" * 15
@@ -121,7 +119,7 @@ class P3BLocalChecks(unittest.TestCase):
         ini.read(ROOT / "platformio.ini", encoding="utf-8-sig")
         for env in ["player-dev", "player-p3a-gate"]:
             section = ini[f"env:{env}"]
-            self.assertIn("0.7.1-p3c.fix", section["build_flags"])
+            self.assertIn("0.7.3-p3c.free", section["build_flags"])
             self.assertEqual(int(section["custom_launcher_app_limit"], 0), 0x140000)
         for env in ["player-p1-gate-a", "player-p1-gate-b", "player-p2-gate"]:
             self.assertIn("-<player/ui/**>", ini[f"env:{env}"]["build_src_filter"])

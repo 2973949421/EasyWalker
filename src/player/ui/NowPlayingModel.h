@@ -9,18 +9,18 @@ namespace player {
 struct NowPlayingGeometry {
     static constexpr int width = 135;
     static constexpr int height = 240;
-    static constexpr int headerHeight = 34;
-    static constexpr int contentY = 34;
-    static constexpr int contentHeight = 168;
-    static constexpr int footerY = 202;
-    static constexpr int footerHeight = 38;
+    static constexpr int headerHeight = 28;
+    static constexpr int contentY = 28;
+    static constexpr int contentHeight = 188;
+    static constexpr int footerY = 216;
+    static constexpr int footerHeight = 24;
     static constexpr int margin = 6;
     static constexpr int textWidth = 123;
     static constexpr int rowHeight = 18;
     static constexpr int overlayX = 6;
-    static constexpr int overlayY = 65;
-    static constexpr int overlayWidth = 40;
-    static constexpr int overlayHeight = 106;
+    static constexpr int overlayY = 68;
+    static constexpr int overlayWidth = 25;
+    static constexpr int overlayHeight = 82;
 };
 
 enum class MarqueePhase : uint8_t { Static, StartHold, Scrolling, EndHold };

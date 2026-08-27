@@ -1,4 +1,4 @@
-# P3C media contract — 0.7.1-p3c.fix
+# P3C media contract — 0.7.3-p3c.free
 
 这是 `TECH_DESIGN.md` 的媒体格式 / 实现细节附件，不改变 P3 分阶段路线。
 
@@ -46,13 +46,13 @@ payloadLength34560 / CRC32。设备先分步校验，再按行预读并绘制；
 本机 Arduino 2.0.16 VFS 默认 stdio buffer 为 4096 bytes，资源文件显式设置为
 index=128、VLW=256、LRC/Cover=512 bytes，不改全局库。Latin 排版只读 metric，
 advance 独立保留；显示前要求当前完整布局的全部 glyph bitmap 就绪并 pin，按字体分组
-预取，显示结束再解除 pin。密集 Latin 每页最多 240 glyph，
+预取，显示结束再解除 pin。密集 Latin 每页最多 301 glyph，
 使用 8-byte 紧凑位置记录。离开 Player 释放
 歌词工作集和资源句柄，字体缓存供其他页面使用；不可见动画不推进。
 
 横排 UI 保留 Font0 ASCII 度量以保持 Benchmark 两行回归；非 ASCII 使用原生
 CJK em cell。只预取可见文本窗口，避免长 Title 超过缓存容量时反复逐出、永远无法绘制。
-歌词采用真实 Latin advance / bitmap extent 与 CJK 原生 16 px cell；先整帧准备字模，
+歌词采用真实 Latin advance / bitmap extent 与 CJK 原生 14 px cell；先整帧准备字模，
 不能边等字模边擦除旧句。缓存容量不足明确报错，不静默扩容。
 
 SD 挂载显式 `max_files=12`。当前 SDK `sizeof(FIL)=4136`，含 4096-byte FatFs cache；
@@ -72,24 +72,46 @@ line 上限，错误明确。基础文件优先；缺基础时扫描唯一非中
 没有歌词横移动画，也没有“前奏”标签；前奏只显示暗色首句预览。正常播放最多提前
 2 秒准备下一句 / 下一分页。同一逻辑帧冻结布局与字模，使用 generation / frame id
 取消 Seek、换歌、View 后的旧任务；准备时保留上一完整画面。
-准备期与其他 UI 公平调度；完整呈现期优先完成 18px 条带，每条带之间仍服务音频，
+准备期字体 / 歌词 / 封面按轮次公平服务，不让封面帧反复抢占冷歌词；Loading 不等于
+Missing。完整呈现期优先完成 18px 条带，UI burst 最多64步 / 16ms软预算后回到音频，
 媒体不读 SD，Header 不能淘汰 pin 的字模。每次完整呈现 ≤100 ms，正常预取后的
 歌词到期后 ≤200 ms 更新；记录耗时、missed deadline、取消和呈现中 I/O 违规。
-Volume overlay 隐藏时重绘
-当前媒体，不恢复过期截图；帧内发生的浮层更新会在下一完整帧兑现。135×18 行缓冲仍唯一。
+Volume overlay 只有3px细条和透明背景数字；若同歌曲代次 / 同歌词页则只重建25×82
+覆盖区域，否则显示当前整帧，不恢复过期截图。帧内浮层更新下一帧兑现。135×18行缓冲仍唯一。
 歌词每条带至多 18 行，Cover 每次预读 / 绘制 2 行（480 bytes）。前后组必须连同译文
 完整容纳才显示，不只显示半组；无可用空间就隐藏预览。
 
 ## 3. View / persistence / keys
 
-只在 Player 接通 portrait 顶部 3×4 第二排第二颗，官方键盘矩阵 (12,1)，按下边沿
-且无 Fn / Shift / Ctrl / Alt。旧字母 V 不恢复；其余盲操仍在 P4。
+Player 使用官方物理坐标、按下边沿，不按 Fn / Shift / Ctrl / Alt。View (12,1)，
+本次确认前置 Vol+ (13,0)、Vol− (12,0)、两个 Play/Pause (13,1)/(13,2)。音量±8，
+先真实调整再触发显示；不存档音量。旧字母 V 不恢复，其余盲操 / DSP 仍在 P4。
 
 Session v1 固定区 byte21：0=Lyrics、1=Cover，旧零值或非法值为 Lyrics。用户切换
 只标记原有 cooperative A/B checkpoint；无歌词 Cover-only 不回写偏好。
-不改变 Queue、位置、音量、恢复暂停或 Header/Footer。
+View 不改变 Queue、位置、音量或恢复暂停；音量键只走已存在的 Speaker volume 路径。
 
-## 4. Combined Gate and limits
+## 4. 当前自由试用日志（0.7.3）
+
+正常 UI 启动恢复 Paused；没有顺序 Gate 卡片，不自动控制播放、Seek、View 或重启。
+FreeSession 只观察同一主循环中的 Player / UI / 媒体状态与实际动作，不能调用 transport。
+记录采用4KiB固定缓冲，512B分步append；避开完整歌词呈现和Player checkpoint写入。
+每15秒 / T生成带sequence、CRC32及END行的checkpoint；半截尾部不会覆盖之前完整证据。
+日志 `/ADVWalkman/logs/p3-free-last.txt`；旧p3a/b/c日志不覆盖。实际SD写入负载也在
+PCM统计中，不暂停音频来制造好看的测量值；写入耗时、UI burst、最低heap另记。
+
+启动使用同一个RAM行缓冲执行P3B模型 / 像素 / 透明浮层检查，不等同人工实际显示确认。
+分别报告A/B/C主路径覆盖；未操作是INCOMPLETE，真实异常是FAIL，全部覆盖也只能为
+READY_FOR_REVIEW。后台自然观察至少60秒连续44100播放，不强制用户停留哪个视图。
+保留70ms PCM、零Backpressure / Error、100ms歌词整帧与200ms到期延迟门槛。
+第一失败不被后续健康状态冲掉；字体 / 歌词 / 封面分组件、路径、操作、errno记录。
+旧Gate脚本Seek / 重启偏好验证不自动执行，记录not_exercised，任务保持待验。
+
+显示常量：Header28、Content188、Footer24；内框123×174、上6下8、CJK14、列距2，
+双语间距6、最多七列。前奏复用完整双语多列布局（仅dim）；不使用单列截断分支。
+只清理中文译文冗余破折号和标点，不静默改日文或时间戳。小标点右上，括号 / 引号旋转。
+
+## 5. 历史 Combined Gate and limits（0.7.0～0.7.2，不是当前操作步骤）
 
 先停播进行资源前置检查：实际 LRC、Cover Header/CRC、代表中日文字模及只读文件名额
 耗尽 / 关闭后重开检查；文件名额检查期间暂停 Library/UI 后台 I/O，避免故意耗尽

@@ -26,6 +26,8 @@ class UiCoordinator final {
     void showLibrary();
     void showPlayer() { setPage(UiPage::Player); }
     FontCache& fonts() { return fonts_; }
+    const FontCache& fonts() const {return fonts_;}
+    void notifyLogSaved(bool success){nowPlaying_.notifyLogSaved(success,millis());}
     NowPlayingPresenter& presenterForValidation() { return nowPlaying_; }
     void setHint(const char* hint);
     // Gate-only card: never text over a partially visible media frame.

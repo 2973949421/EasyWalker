@@ -40,6 +40,7 @@ class Mp3PlaybackEngine final {
     void stop();
     bool seekToMs(uint32_t targetMs);
     void setVolume(uint8_t volume);
+    uint8_t volume() const {return volume_;}
     bool pollEvent(AudioEvent& event);
     AudioStatus status() const;
     void resetDiagnostics();

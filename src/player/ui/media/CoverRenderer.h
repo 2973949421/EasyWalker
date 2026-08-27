@@ -3,6 +3,7 @@
 #include <M5GFX.h>
 #include "MediaTypes.h"
 #include "ResourceIo.h"
+#include "MediaLayout.h"
 namespace adv_walkman { namespace player {
 class CoverRenderer final {
   public:
@@ -10,6 +11,7 @@ class CoverRenderer final {
     void release();
     void finishFrame(){file_.close();requestedRow_=-1;}
     void service();
+    bool busy()const{return phase_!=0 || (state_==MediaState::Ready && requestedRow_>=0 && readyRow_!=requestedRow_);}
     void requestRow(int y);
     bool rowReady(int y) const { return state_!=MediaState::Ready || readyRow_==y; }
     void drawRow(lgfx::LGFXBase& canvas,int contentY,uint16_t background) const;

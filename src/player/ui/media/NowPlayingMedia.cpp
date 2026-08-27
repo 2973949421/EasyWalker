@@ -51,10 +51,14 @@ void NowPlayingMedia::prepareUpcoming(){
 }
 void NowPlayingMedia::service(){
     if(!active_||!fonts_||presentingLyrics())return;const uint32_t start=micros();
-    if(fonts_->busy())fonts_->service();
-    else if(frameInProgress_&&frameView_==MediaView::Cover)cover_.service();
-    else if(timeline_.state()==MediaState::Loading||(timeline_.hasLyrics()&&!timeline_.windowReady()))timeline_.service();
-    else{prepareUpcoming();if(!fonts_->busy())cover_.service();}
+    const bool lyricsPending=timeline_.state()==MediaState::Loading||(timeline_.hasLyrics()&&!timeline_.windowReady());
+    if(!lyricsPending && !frameInProgress_)prepareUpcoming();
+    switch(chooseMediaWork(workerTurn_++,fonts_->busy(),lyricsPending,cover_.busy())){
+        case MediaWork::Font:fonts_->service();break;
+        case MediaWork::Lyrics:timeline_.service();break;
+        case MediaWork::Cover:cover_.service();break;
+        case MediaWork::None:break;
+    }
     serviceMaxUs_=std::max<uint32_t>(serviceMaxUs_,micros()-start);
 }
 bool NowPlayingMedia::wantsFrame(uint32_t)const{
@@ -70,32 +74,39 @@ bool NowPlayingMedia::beginFrame(uint32_t){
     }
     dirty_=false;redrawAfterFrame_=false;frameInProgress_=true;++frameId_;shownCoverRevision_=cover_.revision();return true;
 }
+bool NowPlayingMedia::canPatchOverlay()const{
+    if(shownGeneration_!=generation_)return false;
+    if(effectiveView()==MediaView::Cover)return shownCoverRevision_==cover_.revision();
+    return glyphsReady_ && preparedCue_==shownCurrent_ && renderer_.stats().page==shownPage_;
+}
 bool NowPlayingMedia::prepareStripe(int y,int){
     if(frameView_==MediaView::Lyrics)return glyphsReady_;
     if(cover_.state()!=MediaState::Ready)return true;
-    cover_.requestRow(y);return y<12||y>=156||cover_.rowReady(y-12);
+    cover_.requestRow(y);return y<MediaLayout::coverTop||y>=MediaLayout::coverTop+144||cover_.rowReady(y-MediaLayout::coverTop);
 }
 void NowPlayingMedia::drawStripe(lgfx::LGFXBase& canvas,int y,int height){
     if(frameView_==MediaView::Lyrics)renderer_.drawStripe(canvas,*fonts_,y,height,0);else cover_.drawRow(canvas,y,0x0861);
 }
 void NowPlayingMedia::endFrame(){
     if(frameView_==MediaView::Lyrics){
+        ++lyricsFrames_;
         presentMaxUs_=std::max<uint32_t>(presentMaxUs_,micros()-presentAt_);
         if(ioAt_!=fonts_->stats().reads+timeline_.bytesRead()+cover_.bytesRead())++presentIoViolations_;
         if(deadline_){++deadlineUpdates_;if(positionMs_>preparedDue_)lyricLateMaxMs_=std::max<uint32_t>(lyricLateMaxMs_,positionMs_-preparedDue_);}
         shownCurrent_=preparedCue_;shownPage_=renderer_.stats().page;shownPages_=renderer_.stats().pages;
         preparing_=layoutReady_=glyphsReady_=false;fonts_->clearPins();seek_=false;
     }
-    if(frameView_==MediaView::Cover)cover_.finishFrame();
+    if(frameView_==MediaView::Cover){++coverFrames_;cover_.finishFrame();}
+    shownGeneration_=generation_;seek_=false;
     frameInProgress_=false;++frames_;if(redrawAfterFrame_)requestRedraw();
 }
 NowPlayingMediaStatus NowPlayingMedia::status()const{
     NowPlayingMediaStatus s;s.lyrics=timeline_.state();s.cover=cover_.state();s.preferred=preferred_;s.view=effectiveView();s.current=timeline_.current();
-    s.frames=frames_;s.viewChanges=viewChanges_;s.cancellations=cancellations_;s.reads=timeline_.bytesRead()+cover_.bytesRead();s.serviceMaxUs=serviceMaxUs_;
+    s.frames=frames_;s.lyricsFrames=lyricsFrames_;s.coverFrames=coverFrames_;s.viewChanges=viewChanges_;s.cancellations=cancellations_;s.reads=timeline_.bytesRead()+cover_.bytesRead();s.serviceMaxUs=serviceMaxUs_;
     s.page=shownPage_==255?0:shownPage_;s.pages=shownPages_;s.layoutError=renderer_.stats().layoutError;s.invalidUtf8=renderer_.stats().invalidUtf8;
     s.generation=generation_;s.prepareMaxUs=prepareMaxUs_;s.presentMaxUs=presentMaxUs_;s.lyricLateMaxMs=lyricLateMaxMs_;s.presentIoViolations=presentIoViolations_;
     s.frameId=frameId_;s.deadlineUpdates=deadlineUpdates_;s.missedDeadlines=missedDeadlines_;
     s.error=timeline_.state()==MediaState::Error?timeline_.error():cover_.error();return s;
 }
-void NowPlayingMedia::resetDiagnostics(){frames_=viewChanges_=cancellations_=serviceMaxUs_=0;prepareMaxUs_=presentMaxUs_=lyricLateMaxMs_=presentIoViolations_=0;deadlineUpdates_=missedDeadlines_=0;}
+void NowPlayingMedia::resetDiagnostics(){frames_=lyricsFrames_=coverFrames_=viewChanges_=cancellations_=serviceMaxUs_=0;prepareMaxUs_=presentMaxUs_=lyricLateMaxMs_=presentIoViolations_=0;deadlineUpdates_=missedDeadlines_=0;}
 } }

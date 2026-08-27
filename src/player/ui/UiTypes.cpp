@@ -37,6 +37,10 @@ const char* uiActionName(UiAction action) {
             return "SETTINGS";
         case UiAction::ToggleView:
             return "VIEW";
+        case UiAction::TogglePlayback:return "PLAY_PAUSE";
+        case UiAction::VolumeUp:return "VOLUME_UP";
+        case UiAction::VolumeDown:return "VOLUME_DOWN";
+        case UiAction::SaveDiagnostics:return "SAVE_LOG";
     }
     return "UNKNOWN";
 }

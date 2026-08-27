@@ -4,6 +4,25 @@
 > `TECH_DESIGN.md`、任务状态以 `TASKS.md` 为准。P3 不重新选择 Audio Backend，
 > 不改变 P1 Queue / Session 或 P2 Library Engine 语义。
 
+## 当前验收方式 — 0.7.3（覆盖下方历史 Gate 操作顺序）
+
+工程仍按 A → B → C → D，不跳阶段；用户只安装一份同名 P3ABC BIN，但改为普通
+界面自由试用 + 后台日志，不再要求先过 A 提示卡才能看到 B/C。可以自由浏览、播放、
+看歌词、切 View、调音量；不自动 Seek / 切封面 / 暂停 / 重启。
+
+按用户本轮授权只前置冻结的两个 Play/Pause 及 Vol+/−，其他 P4 控制 / DSP 不做。
+当前显示校准为 28 / 188 / 24 px、CJK14、完整双语前奏预览、透明细音量条。
+
+日志 `/ADVWalkman/logs/p3-free-last.txt` 每 15 秒分块追加并带 CRC，T 主动保存。
+分别记录 A/B/C 主路径覆盖；连续播放 60 秒是被动覆盖项，不是固定测试阶段。
+结果为 INCOMPLETE / FAIL / READY_FOR_REVIEW，最后一项仍需人工可读性和听感确认，
+不得自动改为 DONE。旧 Gate 额外的脚本 Seek / 重启偏好恢复不在本次后台自动执行，
+显式记为 not_exercised；后续用小范围验证补足，不要求重跑全套。
+
+保留严格 70 ms PCM、100 ms 完整歌词呈现、200 ms 到期更新，错误不被后续日志
+覆盖。0.7.2 的 media_not_exercised 已定位到冷歌词被封面优先级饿死，不是音频失败。
+实施 / 构建 / SD 记录以 P3C_VALIDATION 为准；A/B/C 继续 DEVICE TEST。
+
 ## 1. Frozen Delivery Order
 
 | 阶段 | 对应任务 | 交付内容 | 真机 Gate |
@@ -44,8 +63,8 @@ Gate A-fix+B+C 真机确认文本不越界后，P3-01 / P3-08 / P3-09 才完成�
 ## 3. P3B — Now Playing Chrome
 
 - 实现 Title / Artist Header、克制的长标题滚动；
-- 固定 Header / Content / Footer 为 34 / 168 / 38 px，边距 6 px；Title 约 14 px、其余约 12 px；
-- 实现真实时间、总时长、进度、状态、Play Mode 和 Original Footer；音量为左侧 3 秒临时浮层，真实按键留 P4；
+- 当前 Header / Content / Footer 为 28 / 188 / 24 px，边距 6 px；Title14 / Artist12 / 时间10 px；
+- 真实时间、进度、状态与紧凑模式标识，不常驻 NORM Original；透明细音量浮层 3 秒；
 - 复用 P3A 文本布局能力：Header / Footer 先保证不越界，Title / Artist 再按本阶段
   规则决定单行静态或 24 px/s 滚动、首尾各停 5 秒；Artist 单行省略，暂停不冻结标题；
 - 建立 Player 页面 Dirty Region，Content Stage 仍允许使用明确 fallback；
@@ -57,7 +76,7 @@ Dev / P3A Gate / P2 Gate 三环境构建均通过。只生成本地固件，没�
 检查仅编译，实际显示和音频条件仍待 Gate A-fix+B+C。
 P3A/B/C 均为 DEVICE TEST；P3C 本地实现与六环境构建完成，不得提前标记 DONE。
 
-## 4. P3C — Media Resources
+## 4. P3C — Media Resources（含 0.7.0～0.7.2 历史实施）
 
 2026-08-27 初版实施基线为 `61692f0`；修复基线为 `991d54c`。当前选择：长句先展开多列；暗色
 首句预览；同语言从右向左续列；仅极长句自动阅读分页；使用 Crucifix X 官方单曲
