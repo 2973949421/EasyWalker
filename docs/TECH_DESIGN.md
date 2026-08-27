@@ -719,7 +719,7 @@ Footer         ~30 px
 
 ### 9.2.1 Text Layout Contract
 
-P3A 起建立统一的 `UiTextLayout`（名称可在实现时小范围调整）。任何 Renderer 都不得
+P3A 使用统一的 `UiTextLayout`。任何 Renderer 都不得
 再用固定 ASCII 字符数（例如 `%.17s`）推断是否能放进屏幕。布局输入至少包含：
 
 ```text
@@ -731,11 +731,30 @@ drawable rect + active font + text size + UTF-8 text + max lines + overflow poli
 - 使用当前字体的实际像素度量计算每行可用宽度，并扣除页面 margin / padding；
 - 只在合法 UTF-8 字符边界断行或截断，不拆开中文、日文等多字节字符；
 - 不能假设文本含空格；无空格长名称也要在能容纳的字符边界断行；
-- 曲库名、目录名、歌曲名等主要内容默认最多两行，最后一行仍超限时显示省略号；
-- 标题、状态、按钮和固定数值区默认单行，超限时省略；Now Playing 的长 Title
+- P3A Library 曲库名和 Player 文件名最多两行，最后一行仍超限时显示省略号；
+- Playlist 顶部曲库名及各歌曲 / 目录行使用单行省略，播放 / 目录标记先测量并预留宽度；
+- 状态、Footer 每条显式提示、版本和固定数值区默认单行，超限时省略；Now Playing 的长 Title
   在 P3B 可进一步使用规定的 Marquee；
 - 根据字体 line height 和区域高度共同限制行数，绘制时设置 clip rect 作为最后保护；
 - 完整调试路径不进入正式产品 UI；需要提示时显示 basename 或明确缩略形式。
+
+`UiTextLayout::draw(display, text, UiTextBox, byteLength)` 使用当前字体、字号和颜色；
+`measure()` 复用同一逻辑但不绘制。`byteLength` 仅用于 Footer 显式行的有界文本视图，
+不是显示宽度。每行使用固定 128-byte Buffer，无 Heap 分配；M5GFX `textLength()`
+采用 `width + 1` 以接纳恰好等宽的文本，再通过 `textWidth()` 核对。换行优先使用
+显式换行、空格 / 分隔符 / CamelCase 边界；语义断点不足行宽 75% 时退回最远完整
+UTF-8 字符边界。末行省略使用 ASCII `...`；无效 UTF-8 字节仅在显示副本中替换为
+`?` 并报告 `invalidUtf8`，源文本不变。
+
+P3A Library 名称框为 `(19, 76, 97, 38)`、字号 `1.5`、最多两行；Font0 的静态尺寸
+核对预期为 `ADVWalkman`（90 px）和 `Benchmark`（81 px），仍须联合 Gate 真机确认。
+Renderer 返回 `UiTextLayoutResult`（行数、最大行宽、可用宽度、截断 / UTF-8 / 布局
+错误），`UiStats` 保留实际名称的最近结果及是否为 Benchmark 名称。Gate 等待返回
+Library 后的新一次绘制，才执行 `P3AGate::libraryTextPasses()`，避免读取旧页面证据。
+
+UI 渲染上下文拥有曲库名和六个可见列表行的有界完整文本，不持有局部
+`LibraryDescriptor` 的指针，也不提前按 64 bytes 截断列表名称。该固定上下文驻留
+`UiCoordinator`，不扩大 Arduino loop 的临时栈；它不是音乐库全量路径缓存。
 
 阶段职责：P3A 先保证内置字体下所有基础页面不越界；P3B 将同一布局用于 Header /
 Footer 并增加长标题滚动；P3C 以正式 SD 中日文字体 glyph metrics 完成 CJK 适配，

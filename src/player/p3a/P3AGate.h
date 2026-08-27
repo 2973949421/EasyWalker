@@ -23,6 +23,9 @@ class P3AGate final {
     const char* hint() const;
     bool finished() const;
     bool passed() const;
+    // Reused by the later A-fix+B+C Gate; validates the actual rendered name,
+    // not a separate synthetic measurement that could mask a renderer bug.
+    static bool libraryTextPasses(const UiStats& stats);
 
   private:
     enum class Step : uint8_t {
@@ -69,6 +72,8 @@ class P3AGate final {
     bool diagnosticsReset_ = false;
     bool logWritten_ = false;
     bool resultRendered_ = false;
+    bool awaitingFinalRender_ = false;
+    uint32_t finalRenderBaseline_ = 0;
     char reason_[64] = "running";
     char events_[768] = {};
     size_t eventLength_ = 0;

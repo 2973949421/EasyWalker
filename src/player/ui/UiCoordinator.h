@@ -99,6 +99,9 @@ class UiCoordinator final {
     uint32_t lastPlayerSecond_ = UINT32_MAX;
     char lastCurrentTrack_[kTrackPathCapacity] = {};
     UiStats stats_{};
+    // Fixed six-row scratch, not an all-library cache. Keep complete UTF-8
+    // names off the small Arduino loop stack and alive through render().
+    UiRenderContext renderContext_{};
 };
 
 }  // namespace player

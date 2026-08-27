@@ -28,6 +28,24 @@ Date: 2026-08-26
   下一次 Gate A-fix+B+C 将先回归 `ADVWalkmanBenchmark` 换行，再统一验收 P3B/C。
   这不放宽 P3A AC，也不允许在文本回归失败时提前将 P3A 标为完成。
 
+### P3A Text Layout Fix — 2026-08-27
+
+- `0.5.2-p3a.textfix` 新增无动态分配的 `UiTextLayout`：使用 M5GFX 实际字体度量、
+  固定 128-byte 行缓冲、显式 / 语义 / UTF-8 边界换行、末行 ASCII `...` 与区域裁剪。
+  无效 UTF-8 字节只在显示副本中替换为 `?`，保留源数据并标记诊断。
+- Library 97×38 px 名称区改为两行；Playlist、Player、Footer、版本和错误等动态
+  文本统一接入像素布局，保留原左对齐、配色、字号与页面结构，不提前实现 P3B/C/D。
+- 修复渲染上下文引用局部 `LibraryDescriptor.name` 的悬空指针；上下文拥有曲库名与
+  六个可见列表行的完整有界文本，避免旧 64-byte 截断切开 UTF-8。上下文为固定成员，
+  不增加 loop 临时栈压力，也不缓存整个音乐库。
+- Gate 等待返回 Library 后实际绘制再检查两行、宽度、截断和 UTF-8 / layout error；
+  新日志与 `library_text_layout` 失败归因可由后续联合 Gate 复用，未放宽音频或导航条件。
+- Dev / P3A Gate 均构建成功：708,176 / 714,608 bytes，静态 RAM 分别为
+  102,536 / 103,400 bytes，固件均低于 1,310,720-byte Launcher 上限。SHA-256 记录于 README。
+- 静态 Font0 几何核对、动态文本固定字符截断检查和布局对象无分配器符号检查通过；
+  未声称已执行设备显示或音频回归。本轮未复制 SD、未安装、未改 Flash / Launcher，
+  P3A 继续为 `DEVICE TEST`，待 Gate A-fix+B+C 统一真机确认。
+
 ## V0.4 — P2 Music Library Development
 
 Date: 2026-08-26

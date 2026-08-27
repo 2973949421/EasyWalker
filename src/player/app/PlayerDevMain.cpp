@@ -34,8 +34,8 @@ void renderBootFailure(const char* reason) {
     display.setCursor(7, 8);
     display.println("ADV Walkman P3A ERROR");
     display.setTextColor(TFT_WHITE, TFT_BLACK);
-    display.setCursor(7, 35);
-    display.printf("%.30s", reason == nullptr ? "unknown" : reason);
+    UiTextLayout::draw(display, reason == nullptr ? "unknown" : reason,
+                       {7, 35, 121, 70, 4, 3, true});
 }
 
 }  // namespace

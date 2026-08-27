@@ -1,7 +1,7 @@
 # ADV Walkman
 
 > 工作名：ADV Walkman  
-> 当前阶段：P3A UI Foundation 已进入 `DEVICE TEST`，P1/P2 已完成并冻结
+> 当前阶段：P3A 文本修复已完成代码与本地构建，仍为 `DEVICE TEST`，等待 Gate A-fix+B+C；P1/P2 已完成并冻结
 > 平台：M5Stack Cardputer ADV
 
 ## 1. 项目是什么
@@ -78,25 +78,35 @@ Settings。
 
 `0.5.1-p3a.gate` 已通过按键、页面路由、跨页播放和音频连续性的真机 Gate；当前仍
 保持 `DEVICE TEST`，因为真实曲库名 `ADVWalkmanBenchmark` 暴露了卡片文字越界。
-P3A 将先建立按像素宽度、字体度量和 UTF-8 边界工作的统一换行 / 省略机制；P3B
-复用到 Now Playing，P3C 完成正式中日文字体适配，P3D 只做最终视觉校准。
+`0.5.2-p3a.textfix` 已完成按像素宽度、字体度量和 UTF-8 边界工作的统一换行 /
+省略机制，覆盖当前四页动态文本。Library 名称框为 97×38 px、最多两行，保留原有
+左对齐与字号；P3B 复用到 Now Playing，P3C 完成正式中日文字体适配，P3D 只做最终
+视觉校准。代码和静态尺寸检查通过不代表真机显示已通过。
 
 当前实施与真机节奏为：代码和提交继续按 `P3A text fix → P3B → P3C` 分开推进；
 由于原 Gate A 的功能与音频路径已经通过，不再要求单独安装只修换行的 P3A 固件。
 用户下一次实机操作将安装一份 Gate A-fix+B+C 固件，一次确认曲库名换行并验收
 Now Playing、字体、歌词、ASCII Cover 与 View Selector。其后只剩 P3D Gate。
 
-P3A 构建与 SD 复制：
+本轮只做本地构建，不复制 SD、不要求单独安装：
 
 ```powershell
-.\tools\build_player.ps1 -Target P3AGate -SdRoot D:\
+.\tools\build_player.ps1 -Target Dev
+.\tools\build_player.ps1 -Target P3AGate
 ```
 
-当前 Gate 固件：`/firmware/ADV-Walkman-P3A-Gate.bin`，版本
-`0.5.1-p3a.gate`，大小 706,064 bytes，SHA-256
-`d6b093d432f033e6e93d1e599555489d56d1dfbc9860eaeffcc9596239b21c9e`。
-通过 M5Launcher 安装后按屏幕逐步操作；无需记忆整套按键流程。Build Success
-只代表进入 `DEVICE TEST`，不代表 P3A 已完成。
+2026-08-27 两个环境均构建成功，版本均为 `0.5.2-p3a.textfix`，低于
+`0x140000`（1,310,720 bytes）Launcher 上限：
+
+| 本地生成物 | 大小 / bytes | SHA-256 |
+|---|---:|---|
+| `artifacts/ADV-Walkman-Dev.bin` | 708,176 | `fc892763fa720f44369518081b5e5f569baad2953dd32fd71443cd156328355f` |
+| `artifacts/ADV-Walkman-P3A-Gate.bin` | 714,608 | `63082df77db51175720472127e9899448f97aa3f705e5f3f663fc760c7e22ae3` |
+
+Gate 新增实际曲库名的行数、像素宽度、截断、UTF-8 和布局错误日志；
+`ADVWalkmanBenchmark` 必须完整显示为两行，失败独立归因为 `library_text_layout`。
+原有方向、按键、页面和音频条件保持不变。下次 A-fix+B+C 复用这组断言；联合固件
+尚未实现。本轮没有改写 SD，最后已验收的历史版本仍为 `0.5.1-p3a.gate`。
 
 P0 Audio Backend Benchmark 已完成，V1 正式冻结 Candidate A：
 
@@ -111,7 +121,9 @@ P2 真机验证确认原 768-sample 配置的约 52 ms 缓冲余量会被正常 
 
 P2 Music Library 已于 2026-08-26 通过 `0.4.4-p2.final-gate` 真机与 Host Validator 验收：多层目录、1,000 项 Lazy Scan / Cache、Metadata、Recent Tracks 和播放中连续性全部收口。P2 交付 Library Engine 与开发验收入口；实体按键可直接操作的正式 Library UI 仍属于 P3。选型证据见 [`docs/AUDIO_BENCHMARK.md`](docs/AUDIO_BENCHMARK.md)。
 
-### P2 开发构建与一次性 Gate
+### P2 历史开发构建与 Gate 复现
+
+以下保留复现入口，不是本轮操作要求；P2 已完成，不需要重新制作夹具或安装。
 
 默认 PlatformIO 环境为 `player-dev`：
 
@@ -131,7 +143,7 @@ microSD 已挂载为例如 `D:\` 时，可一并复制并复核 SHA-256：
 .\tools\build_player.ps1 -SdRoot D:\
 ```
 
-目标位置为 `/firmware/ADV-Walkman-Dev.bin`，由 M5Launcher 正常安装；不使用普通 PlatformIO upload 覆盖 Launcher。`player-dev` 提供 P2 Library 串口开发入口，但不提前实现 P3 正式按键 UI。
+目标位置为 `/firmware/ADV-Walkman-Dev.bin`，由 M5Launcher 正常安装；不使用普通 PlatformIO upload 覆盖 Launcher。当前 `player-dev` 已是 P3A UI 开发入口，P2 自动验收仍使用独立的 `P2Gate`。
 
 P2 本地 Fixture 由已有无版权 P1 音频派生，包含多层 UTF-8 路径、1,000 个 scan-only 文件、长 common-prefix 排序样本和 Metadata 边界样本。测试数据位于 Git 忽略目录，不提交仓库。千文件目录使用只读目录项枚举与 4 KiB 批量缓存写入；设备端抽查 32 个分页 / LRU / 首尾代表点，PC 端仍全量核对 Fixture。Gate 还会只读使用已经验收的 `/Music/ADVWalkmanBenchmark/benchmark.mp3` 作为持续播放音频；准备脚本只核对其大小和 SHA-256，不复制、删除或改写该歌曲。microSD 例如挂载为 `D:\` 时：
 

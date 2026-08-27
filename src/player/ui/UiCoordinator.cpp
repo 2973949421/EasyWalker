@@ -301,12 +301,14 @@ void UiCoordinator::serviceSelectedMetadata() {
 }
 
 void UiCoordinator::render() {
-    UiRenderContext context;
+    UiRenderContext& context = renderContext_;
     buildRenderContext(context);
     const uint32_t started = micros();
     switch (page_) {
         case UiPage::Library:
-            LibraryPageRenderer::render(*display_, context);
+            stats_.libraryText = LibraryPageRenderer::render(*display_, context);
+            stats_.libraryTextIsBenchmark =
+                std::strcmp(context.libraryName, "ADVWalkmanBenchmark") == 0;
             break;
         case UiPage::Playlist:
             PlaylistPageRenderer::render(*display_, context);
@@ -327,7 +329,7 @@ void UiCoordinator::buildRenderContext(UiRenderContext& context) {
     context.page = page_;
     context.hint = hint_[0] == '\0' ? nullptr : hint_;
     context.error = externalError_[0] == '\0' ? nullptr : externalError_;
-    context.libraryName = libraryName_;
+    setPath(context.libraryName, sizeof(context.libraryName), libraryName_);
     context.catalogIndex = catalog_.selectedIndex();
     context.catalogCount = catalog_.count();
 
@@ -339,7 +341,10 @@ void UiCoordinator::buildRenderContext(UiRenderContext& context) {
         std::strcmp(library.currentPath(), MusicLibrary::kMusicRoot) == 0) {
         LibraryDescriptor descriptor;
         if (catalog_.selected(library, descriptor) == LibraryResult::Ok) {
-            context.libraryName = descriptor.name;
+            // descriptor is local: never leave a dangling pointer in the
+            // context handed to the renderer after this function returns.
+            setPath(context.libraryName, sizeof(context.libraryName),
+                    descriptor.name);
         } else {
             renderRetryRequested_ = true;
         }
@@ -358,6 +363,10 @@ void UiCoordinator::buildRenderContext(UiRenderContext& context) {
 }
 
 void UiCoordinator::buildPlaylistRows(UiRenderContext& context) {
+    for (auto& row : context.rows) {
+        row.valid = false;
+        row.playing = false;
+    }
     MusicLibrary& library = libraryRuntime_->library();
     if (library.state() != LibraryState::Ready) {
         return;
@@ -393,8 +402,7 @@ void UiCoordinator::buildPlaylistRows(UiRenderContext& context) {
                           std::strcmp(path, lastCurrentTrack_) == 0;
             if (row.selected && std::strcmp(path, selectedMetadataPath_) == 0 &&
                 selectedMetadataTitle_[0] != '\0') {
-                std::strncpy(row.label, selectedMetadataTitle_,
-                             sizeof(row.label) - 1);
+                setPath(row.label, sizeof(row.label), selectedMetadataTitle_);
             }
         }
     }
@@ -651,8 +659,12 @@ void UiCoordinator::trackLabel(const char* name, char* output,
         output[0] = '\0';
         return;
     }
-    std::strncpy(output, name, capacity - 1);
-    output[capacity - 1] = '\0';
+    const size_t length = std::strlen(name);
+    if (length >= capacity) {
+        output[0] = '\0';
+        return;
+    }
+    std::memcpy(output, name, length + 1);
     char* dot = std::strrchr(output, '.');
     if (dot != nullptr &&
         (std::strcmp(dot, ".mp3") == 0 || std::strcmp(dot, ".MP3") == 0)) {

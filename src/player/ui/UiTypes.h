@@ -3,6 +3,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "UiTextLayout.h"
+
 namespace adv_walkman {
 namespace player {
 
@@ -37,6 +39,8 @@ struct UiStats {
     uint32_t inputEvents = 0;
     uint32_t pageTransitions = 0;
     uint32_t minimumHeap = UINT32_MAX;
+    UiTextLayoutResult libraryText{};
+    bool libraryTextIsBenchmark = false;
 };
 
 const char* uiPageName(UiPage page);

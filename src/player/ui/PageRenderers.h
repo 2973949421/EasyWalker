@@ -4,6 +4,7 @@
 
 #include <cstddef>
 
+#include "UiTextLayout.h"
 #include "UiTypes.h"
 #include "player/core/CoreTypes.h"
 #include "player/library/MusicLibrary.h"
@@ -18,14 +19,16 @@ struct PlaylistRenderRow {
     bool selected = false;
     bool playing = false;
     LibraryEntryType type = LibraryEntryType::Track;
-    char label[64] = {};
+    // Keep the full bounded source; pixel layout, not a byte cap, decides
+    // where to truncate it. Only six visible rows are resident.
+    char label[kTrackPathCapacity] = {};
 };
 
 struct UiRenderContext {
     UiPage page = UiPage::Library;
     const char* hint = nullptr;
     const char* error = nullptr;
-    const char* libraryName = nullptr;
+    char libraryName[kTrackPathCapacity] = {};
     const char* directoryPath = nullptr;
     const char* currentTrack = nullptr;
     const char* playerState = nullptr;
@@ -39,7 +42,8 @@ struct UiRenderContext {
 
 class LibraryPageRenderer final {
   public:
-    static void render(M5GFX& display, const UiRenderContext& context);
+    static UiTextLayoutResult render(M5GFX& display,
+                                     const UiRenderContext& context);
 };
 
 class PlaylistPageRenderer final {

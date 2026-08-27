@@ -154,6 +154,17 @@ void P3AGate::service(UiCoordinator& ui, PlayerRuntime& player) {
             break;
         case Step::WaitFinal:
             if (ui.page() == UiPage::Library) {
+                const UiStats uiStats = ui.stats();
+                // Gate service runs before UI service. Give the returned
+                // Library page a render before using its layout evidence.
+                if (!awaitingFinalRender_) {
+                    finalRenderBaseline_ = uiStats.renderCount;
+                    awaitingFinalRender_ = true;
+                    break;
+                }
+                if (uiStats.renderCount == finalRenderBaseline_) {
+                    break;
+                }
                 char path[kTrackPathCapacity] = {};
                 const bool pathOk = player.currentPath(path, sizeof(path)) &&
                     std::strcmp(path,
@@ -165,9 +176,12 @@ void P3AGate::service(UiCoordinator& ui, PlayerRuntime& player) {
                     snapshot.backpressureEvents == 0 &&
                     snapshot.pcmSubmitGapOver100Ms == 0 &&
                     snapshot.pcmBuffersSinceReset != 0;
-                finish(pathOk && audioOk && diagnosticsReset_,
+                const bool textOk = libraryTextPasses(uiStats);
+                finish(pathOk && textOk && audioOk && diagnosticsReset_,
                        !pathOk ? "unexpected_track"
-                               : (!audioOk ? "audio_continuity" : "pass"),
+                               : (!textOk ? "library_text_layout"
+                                          : (!audioOk ? "audio_continuity"
+                                                      : "pass")),
                        ui, player);
             }
             break;
@@ -238,8 +252,7 @@ void P3AGate::renderResult(M5GFX& display) {
     display.setTextColor(TFT_WHITE, TFT_BLACK);
     display.setTextSize(1.25f);
     if (!passed()) {
-        display.setCursor(7, 126);
-        display.printf("%.17s", reason_);
+        UiTextLayout::draw(display, reason_, {7, 126, 121, 36, 2, 3, true});
     }
     display.setCursor(19, 166);
     display.print("POWER OFF");
@@ -280,6 +293,14 @@ bool P3AGate::finished() const {
 
 bool P3AGate::passed() const {
     return step_ == Step::Passed;
+}
+
+bool P3AGate::libraryTextPasses(const UiStats& stats) {
+    const UiTextLayoutResult& text = stats.libraryText;
+    return stats.libraryTextIsBenchmark && text.lineCount == 2 &&
+           text.availableWidthPx > 0 && text.maxLineWidthPx > 0 &&
+           text.maxLineWidthPx <= text.availableWidthPx && !text.truncated &&
+           !text.invalidUtf8 && !text.layoutError;
 }
 
 void P3AGate::setStep(Step step) {
@@ -352,6 +373,19 @@ void P3AGate::writeLog(const char* reason, const UiCoordinator& ui,
     file.printf("render_count=%lu render_max_us=%lu\n",
                 static_cast<unsigned long>(uiStats.renderCount),
                 static_cast<unsigned long>(uiStats.renderMaxUs));
+    file.printf("library_text_lines=%u\n",
+                static_cast<unsigned>(uiStats.libraryText.lineCount));
+    file.printf("library_text_width_px=%d\n", uiStats.libraryText.maxLineWidthPx);
+    file.printf("library_text_available_px=%d\n",
+                uiStats.libraryText.availableWidthPx);
+    file.printf("library_text_truncated=%u\n",
+                uiStats.libraryText.truncated ? 1 : 0);
+    file.printf("library_text_invalid_utf8=%u\n",
+                uiStats.libraryText.invalidUtf8 ? 1 : 0);
+    file.printf("library_text_layout_error=%u\n",
+                uiStats.libraryText.layoutError ? 1 : 0);
+    file.printf("library_text_is_benchmark=%u\n",
+                uiStats.libraryTextIsBenchmark ? 1 : 0);
     file.printf("minimum_heap=%lu ui_minimum_heap=%lu\n",
                 static_cast<unsigned long>(minimumHeap_),
                 static_cast<unsigned long>(uiStats.minimumHeap));

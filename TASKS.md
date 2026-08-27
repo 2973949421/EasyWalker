@@ -321,7 +321,7 @@ AC：
 
 | Gate | Status | Tasks | Result |
 |---|---|---|---|
-| P3A UI Foundation | DEVICE TEST | P3-01、P3-08、P3-09；P3-07 功能骨架 | `0.5.1` 功能 Gate PASS；基础文本修复后在 Gate A-fix+B+C 回归 |
+| P3A UI Foundation | DEVICE TEST | P3-01、P3-08、P3-09；P3-07 功能骨架 | `0.5.1` 功能 Gate PASS；`0.5.2` 文本修复及本地构建完成，待 Gate A-fix+B+C 回归 |
 | P3B Now Playing Chrome | TODO | P3-02 | 独立实施；与 P3C 及 P3A 文本修复合并真机验收 |
 | P3C Media Resources | TODO | P3-03～06、P3-12 | 独立实施；Gate A-fix+B+C 验收歌词、字体、ASCII Cover、View Selector |
 | P3D Product UI Completion | TODO | P3-07、P3-10、P3-11 | 黑胶曲库、设置、息屏与最终校准 |
@@ -333,6 +333,26 @@ P3-07 在 P3A 只完成可用骨架，最终视觉仍由 P3D 验收。
 为减少用户实操，P3A 文本修复不单独安装：工程按 `P3A fix → P3B → P3C` 分开构建
 和提交，下一次真机用 Gate A-fix+B+C 一次验收。该 Gate 必须先报告 P3A 文本回归
 结果，再分别报告 B/C；P3A 回归未通过时不得标记 P3-01 / 08 / 09 为 `DONE`。
+
+### P3A Text Fix — 2026-08-27
+
+Automatic Validation：
+
+- [x] `UiTextLayout` 使用当前字体像素度量、128-byte 行缓冲、UTF-8 安全换行 / 省略及区域裁剪，无动态分配
+- [x] 四页动态文本不再使用固定字符数截断；Playlist 标记先预留实测宽度
+- [x] `player-dev` 与 `player-p3a-gate` 均构建为 `0.5.2-p3a.textfix`，分别为 708,176 / 714,608 bytes，低于 `0x140000`
+- [x] 静态 Font0 尺寸核对预期为 `ADVWalkman` 90 px + `Benchmark` 81 px，两行均不超过 97 px；这不是设备运行结果
+- [x] Gate 已编入 `library_text_lines / width_px / available_px / truncated / invalid_utf8 / layout_error` 六项完整 `library_text_` 前缀日志与独立失败原因
+- [x] 本轮仅生成本地 artifact；没有复制 SD、安装或重建历史 P1/P2 Gate
+
+Device Validation — 等待 Gate A-fix+B+C：
+
+- [ ] 真实 `ADVWalkmanBenchmark` 恰好两行、完整可读、不省略、不越界；UTF-8 / layout error 均为 false
+- [ ] 原有方向、按键、页面导航与音频连续性无回归
+- [ ] 联合 Gate 先报告 P3A 文本回归，再进入 B/C 验收；结果通过后才更新 P3A 完成状态
+
+构建大小与 SHA-256 见 README 当前交付记录。P3B/C 本轮未开始；内置字体的中日文
+字形能力不在本次修复范围，正式字体仍由 P3C 完成。
 
 ---
 
@@ -441,7 +461,7 @@ AC：
 
 ## P3-07 Library UI
 
-Status: DOING — FUNCTIONAL FOUNDATION BUILT, P3A DEVICE TEST PENDING
+Status: DOING — FOUNDATION / TEXT FIX BUILT, COMBINED DEVICE TEST PENDING
 
 AC：
 
