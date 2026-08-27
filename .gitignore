@@ -1,4 +1,5 @@
 .pio/
+.venv-media/
 artifacts/
 .vscode/
 .idea/

@@ -113,6 +113,7 @@ def parse_session_payload(payload: bytes) -> dict[str, object]:
         "source_offset": source_offset,
         "repeat_mode": ["off", "all", "one"][repeat_mode],
         "shuffle_enabled": shuffle_enabled,
+        "preferred_now_playing_view": "cover" if payload[21] == 1 else "lyrics",
         "order_cursor": order_cursor,
         "order": order,
         "history": history,
