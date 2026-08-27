@@ -76,6 +76,11 @@ P3 已按 `P3A → P3B → P3C → P3D` 分步冻结，完整路线见
 UI、曲库 / 播放列表和跨页播放，不提前制作歌词、ASCII Cover、黑胶动画或完整
 Settings。
 
+`0.5.1-p3a.gate` 已通过按键、页面路由、跨页播放和音频连续性的真机 Gate；当前仍
+保持 `DEVICE TEST`，因为真实曲库名 `ADVWalkmanBenchmark` 暴露了卡片文字越界。
+P3A 将先建立按像素宽度、字体度量和 UTF-8 边界工作的统一换行 / 省略机制；P3B
+复用到 Now Playing，P3C 完成正式中日文字体适配，P3D 只做最终视觉校准。
+
 P3A 构建与 SD 复制：
 
 ```powershell

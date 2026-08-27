@@ -717,6 +717,31 @@ Footer         ~30 px
 
 允许真机原型小范围调整。
 
+### 9.2.1 Text Layout Contract
+
+P3A 起建立统一的 `UiTextLayout`（名称可在实现时小范围调整）。任何 Renderer 都不得
+再用固定 ASCII 字符数（例如 `%.17s`）推断是否能放进屏幕。布局输入至少包含：
+
+```text
+drawable rect + active font + text size + UTF-8 text + max lines + overflow policy
+```
+
+基础规则：
+
+- 使用当前字体的实际像素度量计算每行可用宽度，并扣除页面 margin / padding；
+- 只在合法 UTF-8 字符边界断行或截断，不拆开中文、日文等多字节字符；
+- 不能假设文本含空格；无空格长名称也要在能容纳的字符边界断行；
+- 曲库名、目录名、歌曲名等主要内容默认最多两行，最后一行仍超限时显示省略号；
+- 标题、状态、按钮和固定数值区默认单行，超限时省略；Now Playing 的长 Title
+  在 P3B 可进一步使用规定的 Marquee；
+- 根据字体 line height 和区域高度共同限制行数，绘制时设置 clip rect 作为最后保护；
+- 完整调试路径不进入正式产品 UI；需要提示时显示 basename 或明确缩略形式。
+
+阶段职责：P3A 先保证内置字体下所有基础页面不越界；P3B 将同一布局用于 Header /
+Footer 并增加长标题滚动；P3C 以正式 SD 中日文字体 glyph metrics 完成 CJK 适配，
+Lyrics Renderer 保持独立竖排规则；P3D 只做字号、行距、圆弧、留白和截断阈值的
+真机视觉校准，不得把基础防越界推迟到最终阶段。
+
 ### 9.3 Header Marquee
 
 Title / Artist 能完整显示时保持静态。超长 Title：

@@ -17,6 +17,12 @@ Date: 2026-08-26
 - `0.5.1-p3a.gate` 将 Portrait 基线改为 `rotation 2`，精简页面文字、放大标题和列表，并把 Gate 提示改为清楚的 `STEP nn / 11` 双行大字。
 - Gate 通过或失败后现在锁定整屏大号 `PASS / FAIL`；超时原因包含卡住的具体步骤。44.1 kHz、跨页连续播放、Audio Error、Backpressure 与 PCM gap 验收条件均未放宽。
 - 修正版 SD 固件为 706,064 bytes，SHA-256 `d6b093d432f033e6e93d1e599555489d56d1dfbc9860eaeffcc9596239b21c9e`。
+- `0.5.1-p3a.gate` 真机日志确认功能 Gate 为 `PASS`：方向键、Enter、Esc、Settings、
+  页面路由、44.1 kHz 播放和跨页连续性均通过；但真实曲库名
+  `ADVWalkmanBenchmark` 在卡片中央越出屏幕，因此 P3A 暂不标记完成。
+- 文本排版职责现已固定：P3A 建立像素宽度 / 字体度量 / UTF-8 安全换行、末行省略
+  和区域裁剪；P3B 复用到 Now Playing 并实现长标题滚动；P3C 完成正式中日文字体
+  与 CJK glyph 适配；P3D 只进行最终字号、间距和曲库圆弧视觉校准。
 
 ## V0.4 — P2 Music Library Development
 

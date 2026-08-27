@@ -321,13 +321,15 @@ AC：
 
 | Gate | Status | Tasks | Result |
 |---|---|---|---|
-| P3A UI Foundation | DEVICE TEST | P3-01、P3-08、P3-09；P3-07 功能骨架 | 自动构建通过，Gate 固件已写入 SD，等待一次真机引导验收 |
+| P3A UI Foundation | DEVICE TEST | P3-01、P3-08、P3-09；P3-07 功能骨架 | `0.5.1` 功能 Gate PASS；`ADVWalkmanBenchmark` 曲库名越界，待基础文本布局修复后收口 |
 | P3B Now Playing Chrome | TODO | P3-02 | Header / Footer 与播放状态反馈 |
 | P3C Media Resources | TODO | P3-03～06、P3-12 | 歌词、字体、ASCII Cover、View Selector |
 | P3D Product UI Completion | TODO | P3-07、P3-10、P3-11 | 黑胶曲库、设置、息屏与最终校准 |
 
 P3A 编译成功后进入 `DEVICE TEST`，不能提前把 P3-01 / 08 / 09 标为 `DONE`。
 P3-07 在 P3A 只完成可用骨架，最终视觉仍由 P3D 验收。
+基础文字不越界属于 P3A 完成条件，不得延后到 P3D；P3B 复用到 Now Playing，P3C
+补齐正式中日文字体 / CJK 度量，P3D 仅做最终视觉校准。
 
 ---
 
@@ -341,6 +343,8 @@ AC：
 - [ ] 耳机孔朝上为主要播放器姿态
 - [ ] 不启用 IMU 自动旋转
 - [ ] Header / Content Stage / Footer 三段结构可正常渲染
+- [ ] 所有文本按区域可用像素宽度和实际字体度量布局，不以固定字符数猜测宽度
+- [ ] UTF-8 文本只在合法字符边界换行 / 截断，绘制区域带裁剪保护
 - [ ] UI 更新不造成可感知音频卡顿
 
 ---
@@ -352,6 +356,7 @@ Status: TODO
 AC：
 
 - [ ] Title / Artist 可显示
+- [ ] 复用 P3A 文本布局；Header / Footer 在长文本和不同字号下均不越界
 - [ ] 长 Title 静止约 5 秒后滚动一遍
 - [ ] 滚动完成后再次静止约 5 秒
 - [ ] Footer 显示当前时间 / 总时长、进度条、Sound Preset、Volume
@@ -440,6 +445,7 @@ AC：
 - [ ] 上半区显示当前曲库的独立大封面
 - [ ] 下半区显示横向叠放的黑胶唱片选择带
 - [ ] Left / Right 切换曲库，Enter 进入对应播放列表
+- [ ] 曲库名按像素宽度最多显示两行；无空格长名称也可换行，末行超限才省略
 - [ ] 当前唱片以上浮为主要高亮，并可辅以更亮 / 露出更多标签
 - [ ] 曲库短名支持沿圆弧排版；字号、角度和重叠比例允许真机校准
 - [ ] `S` 进入设置，Esc 在曲库页不继续退出
