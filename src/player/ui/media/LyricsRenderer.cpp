@@ -25,20 +25,21 @@ void LyricsRenderer::place(const char* text,unsigned first,unsigned capacity,int
     }
     stats_.invalidUtf8|=invalid;
 }
-bool LyricsRenderer::prepare(const LyricsTimeline& timeline,FontCache& fonts,uint32_t positionMs){
-    stats_=LyricsLayoutStats{};stats_.intro=timeline.current()<0;
+bool LyricsRenderer::prepare(const LyricsTimeline& timeline,FontCache& fonts,uint32_t positionMs,int target){
+    if(target==-999)target=timeline.current();
+    stats_=LyricsLayoutStats{};stats_.intro=target<0;
     if(!timeline.windowReady())return false;
     bool ready=true;
-    const int current=stats_.intro?1:0;
+    const int relative=target-timeline.current();
+    const int current=stats_.intro?1:relative;
     const char* original=timeline.text(current,0);const char* chinese=timeline.text(current,1);
     if(!*original && !*chinese){original="间奏";}
     const unsigned left=columns(original,fonts,ready),right=columns(chinese,fonts,ready);
     if(!ready)return false;
     if(stats_.intro) {
-        // Intro preview is deliberately dim and below the two-character
-        // label. Full long first lines are shown once their timestamp starts.
+        // Dim first-line preview only; no intro label.
         stats_.columns=0;
-        const char* p=*chinese?chinese:original;bool invalid=false;int y=30;
+        const char* p=*chinese?chinese:original;bool invalid=false;int y=4;
         while(*p && y+16<=164) {const uint32_t cp=mediaCodepoint(p,invalid);glyphs_[stats_.glyphs++]={cp,0x8410,59,uint8_t(y)};y+=step(cp,fonts,ready);}
         stats_.invalidUtf8=invalid;return true;
     }
@@ -52,8 +53,8 @@ bool LyricsRenderer::prepare(const LyricsTimeline& timeline,FontCache& fonts,uin
     const unsigned leftPages=leftSlots?(left+leftSlots-1)/leftSlots:1;
     const unsigned rightPages=rightSlots?(right+rightSlots-1)/rightSlots:1;
     const unsigned pages=std::max(leftPages,rightPages);
-    const uint32_t duration=std::max<uint32_t>(1,timeline.endMs()-timeline.startMs());
-    const uint32_t elapsed=positionMs>timeline.startMs()?positionMs-timeline.startMs():0;
+    const uint32_t duration=std::max<uint32_t>(1,timeline.cueEnd(target)-timeline.cueStart(target));
+    const uint32_t elapsed=positionMs>timeline.cueStart(target)?positionMs-timeline.cueStart(target):0;
     const unsigned page=stats_.intro?0:std::min<unsigned>(pages-1,uint64_t(elapsed)*pages/duration);
     stats_.pages=std::min<unsigned>(255,pages);stats_.page=page;
     stats_.columns=leftSlots+rightSlots;
@@ -79,13 +80,20 @@ bool LyricsRenderer::prepare(const LyricsTimeline& timeline,FontCache& fonts,uin
                 place(orig,0,l,edge-int(r)*kPitch-(r?6:0),0x4208,fonts);
             }
         };
-        preview(-1,rightEdge-width-2);preview(1,129);
+        preview(relative-1,rightEdge-width-2);preview(relative+1,129);
     }
     return ready;
 }
+bool LyricsRenderer::prepareFrame(FontCache& fonts){
+    // One font group at a time. Pins accumulate while preparing and are held
+    // until the whole frame has reached the display.
+    for(uint8_t face=2;face<=3;++face)for(unsigned i=0;i<stats_.glyphs;++i){
+        const auto cp=glyphs_[i].cp;if((cp<0x100?3:2)==face && !fonts.request(cp,face,true))return false;
+    }
+    return !fonts.busy() && !fonts.stats().missing && !fonts.stats().ioErrors && !fonts.stats().capacityErrors;
+}
 bool LyricsRenderer::prepareStripe(FontCache& fonts,int y,int height,int shift){
     for(unsigned i=0;i<stats_.glyphs;++i){const auto& g=glyphs_[i];if(g.y+20<=y || g.y>=y+height || g.x+shift+18<6 || g.x+shift>=129)continue;if(!fonts.request(g.cp,g.cp<0x100?3:2))return false;}
-    if(stats_.intro && y<24 && !fonts.requestText("前奏",2))return false;
     return true;
 }
 void LyricsRenderer::drawStripe(lgfx::LGFXBase& canvas,const FontCache& fonts,int y,int height,int shift) const {
@@ -95,7 +103,6 @@ void LyricsRenderer::drawStripe(lgfx::LGFXBase& canvas,const FontCache& fonts,in
         // layouts are checked before drawing and contain complete cells.
         fonts.draw(canvas,g.cp,g.cp<0x100?3:2,g.x+shift,g.y-y,g.color,kBg,g.cp<0x100);
     }
-    if(stats_.intro && y<24){fonts.draw(canvas,0x524D,2,51,4-y,0xFBE0,kBg);fonts.draw(canvas,0x594F,2,69,4-y,0xFBE0,kBg);}
     canvas.clearClipRect();
 }
 } }

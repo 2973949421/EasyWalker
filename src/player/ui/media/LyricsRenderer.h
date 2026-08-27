@@ -9,7 +9,8 @@ struct LyricsLayoutStats {
 class LyricsRenderer final {
   public:
     // Returns false when a metric needed for Latin layout is being fetched.
-    bool prepare(const LyricsTimeline& timeline,FontCache& fonts,uint32_t positionMs);
+    bool prepare(const LyricsTimeline& timeline,FontCache& fonts,uint32_t positionMs,int target=-999);
+    bool prepareFrame(FontCache& fonts);
     bool prepareStripe(FontCache& fonts,int y,int height,int shift);
     void drawStripe(lgfx::LGFXBase& canvas,const FontCache& fonts,int y,int height,int shift) const;
     const LyricsLayoutStats& stats() const {return stats_;}

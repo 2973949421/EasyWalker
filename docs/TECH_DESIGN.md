@@ -678,8 +678,10 @@ enum class UiAction : uint8_t {
 
 `UiCoordinator` 只持有页面、光标、目录路径和 Dirty 状态；Transport / Queue 继续
 通过 `PlayerRuntime`，目录 / Metadata 继续通过 `LibraryRuntime`。Input Router 以
-Cardputer ADV 官方键盘的物理坐标和 Fn 状态生成 edge-triggered Action，不把
-方向键猜成标准 PC Arrow 字符。
+Cardputer ADV 官方键盘的完整物理位图生成 edge-triggered Action，不把方向键猜成
+标准 PC Arrow 字符，也不依赖只比较按键数量的 `Keyboard.isChange()`。每键 25 ms
+稳定去抖，按住不重复；相同数量的不同键切换仍可识别。导航不需要 Fn，组合按下
+不派发动作；非 Player 页面使用键帽箭头位置，Player 仅保留 Esc 与已有实体 View。
 
 P3A 主循环顺序固定为：
 
@@ -873,10 +875,14 @@ previous group | current group | next group
 dim              highlight       dim
 ```
 
-换句时整组向左移动，初始 200 ms / 最多 12 fps。中文块右、原文块左，每列向下、
+换句取消横移动画；目标组布局与全部字模就绪后，固定帧数据，再分条带快速呈现。
+准备时不擦旧画面；自然播放最多提前 2 秒预取下一句 / 分页。中文块右、原文块左，每列向下、
 同语言向左续列；长句先多列，极长句才阅读分页，短语言不重复消失。分页按相邻
-时间戳区间分配；Pause 以 Player position 冻结，Seek 直接定位。前奏提示与首句预览
-保持 Lyrics。内框 123×160 px，CJK 16 px、列距 2 px、双语间距 6 px。
+时间戳区间分配；Pause 以 Player position 冻结，Seek 直接定位。前奏仅暗色首句预览，
+没有“前奏”标签，保持 Lyrics。内框 123×160 px，CJK 16 px、列距 2 px、双语间距 6 px。
+自然换句到期后显示延迟 ≤200 ms、单次完整呈现 ≤100 ms；Seek / View 取消旧代次。
+呈现期固定 glyph，不读媒体 SD 文件、不允许 Header 淘汰它们，每条带间仍先服务音频。
+Gate 提示卡和真实媒体互斥，不把 STEP / 确认文字压在歌词上。
 
 CJK：楷体约 `16 px`，正常竖排。
 

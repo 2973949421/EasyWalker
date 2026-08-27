@@ -92,12 +92,14 @@ void NowPlayingPresenter::update(const PlayerSnapshot& snapshot,
     if (fonts_) {
         media_.updatePosition(snapshot.positionMs,snapshot.durationMs,snapshot.state!=PlayerState::Playing);
         if(media_.wantsFrame(nowMs)) model_.dirty |= DirtyContent;
-        if(model_.dirty & DirtyOverlay) {model_.dirty |= DirtyContent;model_.clearDirty(DirtyOverlay);++stats_.overlaySlices;}
+        if(model_.dirty & DirtyOverlay) {media_.requestRedraw();model_.dirty |= DirtyContent;model_.clearDirty(DirtyOverlay);++stats_.overlaySlices;}
     }
 }
 
 void NowPlayingPresenter::setContent(const char* hint, const char* error) {
+    const auto revision=model_.contentRevision;
     model_.setContent(hint, error);
+    if(fonts_ && revision!=model_.contentRevision)media_.requestRedraw();
 }
 
 void NowPlayingPresenter::notifyVolumeAdjusted(uint8_t volume, uint32_t nowMs) {
@@ -120,13 +122,14 @@ void NowPlayingPresenter::pushRow(M5GFX& display, int y) {
 
 void NowPlayingPresenter::drawContentSlice(int screenY, int height) {
     prepareRow(height, kBackground, kSmallSize);
-    if(fonts_) media_.drawStripe(row_,screenY-G::contentY,height);
+    const bool card=fonts_ && !media_.frameInProgress() && (model_.hint[0]||model_.error[0]);
+    if(fonts_ && !card) media_.drawStripe(row_,screenY-G::contentY,height);
     // All coordinates refer to the Content Stage; row clipping handles its
     // small stripe. P3C can replace this background painter without reflowing
     // either chrome or the volume overlay.
     row_.setTextColor(kMuted, kBackground);
     if(!fonts_) {row_.drawString("P3B", 6, 85 - screenY);row_.drawString("MEDIA IN P3C", 6, 105 - screenY);}
-    const char* hint = model_.hint[0] ? model_.hint : (fonts_?"":"FN+ESC\nBACK TO LIST");
+    const char* hint = card ? (model_.error[0]?model_.error:model_.hint) : (fonts_?"":"ESC\nBACK TO LIST");
     const char* newline = std::strchr(hint, '\n');
     // A glyph can span two stripes. The common layout helper accepts a
     // negative baseline and clips to this row without splitting UTF-8.
@@ -138,7 +141,12 @@ void NowPlayingPresenter::drawContentSlice(int screenY, int height) {
     line(hint, newline ? static_cast<size_t>(newline - hint) : std::strlen(hint),
           135, kAccent);
     if (newline) line(newline + 1, std::strlen(newline + 1), 153, kText);
-    if (model_.error[0]) line(model_.error, std::strlen(model_.error), 181, TFT_ORANGE);
+    if(card){
+        // A separate instruction card, never a text overlay on the media.
+        prepareRow(height,kBackground,1.5f);
+        UiTextLayout::draw(row_,hint,{6,static_cast<int16_t>(58-screenY),123,140,7,5,true});
+        return;
+    }
     const bool visible=fonts_ && media_.frameInProgress()?frameVolumeVisible_:model_.volumeVisible;
     const uint8_t volume=fonts_ && media_.frameInProgress()?frameVolume_:model_.volume;
     if (visible) {
@@ -173,6 +181,11 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
     if (!model_.active) return false;
     const uint32_t started = micros();
     stats_.minimumHeap = std::min(stats_.minimumHeap, ESP.getFreeHeap());
+    if(fonts_ && media_.presentingLyrics()) {
+        const bool rendered=renderContentOne(display);
+        stats_.renderMaxUs=std::max<uint32_t>(stats_.renderMaxUs,micros()-started);
+        return rendered;
+    }
     if(fonts_ && !clearPage_) {
         // Alternate a content stripe with a chrome job. A logical media frame
         // is frozen until its last stripe, rather than restarting at y=0.
@@ -278,8 +291,17 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
 }
 
 bool NowPlayingPresenter::renderContentOne(M5GFX& display) {
+    if(!media_.frameInProgress() && (model_.hint[0]||model_.error[0])) {
+        if(contentRevision_!=model_.contentRevision){contentRevision_=model_.contentRevision;contentRow_=0;}
+        const int height=std::min(G::rowHeight,G::contentHeight-contentRow_);
+        drawContentSlice(G::contentY+contentRow_,height);pushRow(display,G::contentY+contentRow_);
+        contentRow_+=height;++stats_.contentSlices;
+        if(contentRow_==G::contentHeight){contentRow_=0;model_.clearDirty(DirtyContent);}
+        return true;
+    }
     if(!media_.frameInProgress()) {
         if(!media_.beginFrame(millis()))return false;
+        contentRow_=0;
         frameOverlayRevision_=model_.overlayRevision;frameContentRevision_=model_.contentRevision;
         frameVolumeVisible_=model_.volumeVisible;frameVolume_=model_.volume;
     }

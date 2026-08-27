@@ -32,6 +32,11 @@ class NowPlayingPresenter final {
     bool toggleView() { return media_.toggleView(); }
     NowPlayingMediaStatus mediaStatus() const { return media_.status(); }
     const LyricsTimeline& lyrics() const { return media_.timeline(); }
+    const CoverRenderer& cover() const { return media_.cover(); }
+    void preloadTrack(const char* path) {media_.selectTrack(path);}
+    void releasePreload() {media_.release();}
+    void resetMediaDiagnostics() {media_.resetDiagnostics();}
+    void invalidateDisplay() {clearPage_=true;model_.dirty=DirtyAll;media_.requestRedraw();}
     void setActive(bool active, uint32_t nowMs);
     void update(const PlayerSnapshot& snapshot, const char* path,
                 LibraryRuntime& library, uint32_t nowMs);

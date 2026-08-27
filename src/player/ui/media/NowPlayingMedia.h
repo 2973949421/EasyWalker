@@ -7,46 +7,44 @@ struct NowPlayingMediaStatus {
     MediaView preferred=MediaView::Lyrics,view=MediaView::Cover;
     int current=-1;
     uint32_t frames=0,viewChanges=0,cancellations=0,reads=0,serviceMaxUs=0;
-    uint8_t page=0,pages=1;
-    bool layoutError=false,invalidUtf8=false;
+    uint32_t generation=0,prepareMaxUs=0,presentMaxUs=0,lyricLateMaxMs=0,presentIoViolations=0;
+    uint32_t frameId=0,deadlineUpdates=0,missedDeadlines=0;
+    uint8_t page=0,pages=1;bool layoutError=false,invalidUtf8=false;
     const char* error="none";
 };
 class NowPlayingMedia final {
   public:
-    void begin(FontCache& fonts) { fonts_=&fonts; }
-    void selectTrack(const char* path);
-    void release();
-    void service();
+    void begin(FontCache& fonts){fonts_=&fonts;}
+    void selectTrack(const char* path);void release();void service();
     void updatePosition(uint32_t positionMs,uint32_t durationMs,bool paused);
-    void setPreferred(uint8_t value);
-    bool toggleView();
-    bool wantsFrame(uint32_t nowMs) const;
-    bool beginFrame(uint32_t nowMs);
-    bool prepareStripe(int y,int height);
-    void drawStripe(lgfx::LGFXBase& canvas,int y,int height);
-    void endFrame();
-    int stripeHeight() const { return frameView_==MediaView::Cover?2:18; }
-    NowPlayingMediaStatus status() const;
-    const LyricsTimeline& timeline() const {return timeline_;}
-    bool frameInProgress() const {return frameInProgress_;}
+    void resetDiagnostics();
+    void setPreferred(uint8_t value);bool toggleView();void requestRedraw();
+    bool wantsFrame(uint32_t nowMs)const;bool beginFrame(uint32_t nowMs);
+    bool prepareStripe(int y,int height);void drawStripe(lgfx::LGFXBase& canvas,int y,int height);void endFrame();
+    int stripeHeight()const{return frameView_==MediaView::Cover?2:18;}
+    NowPlayingMediaStatus status()const;
+    const LyricsTimeline& timeline()const{return timeline_;}
+    const CoverRenderer& cover()const{return cover_;}
+    bool frameInProgress()const{return frameInProgress_;}
+    bool presentingLyrics()const{return frameInProgress_&&frameView_==MediaView::Lyrics;}
   private:
-    FontCache* fonts_=nullptr;
-    LyricsTimeline timeline_;
-    CoverRenderer cover_;
-    LyricsRenderer renderer_;
+    FontCache* fonts_=nullptr;LyricsTimeline timeline_;CoverRenderer cover_;LyricsRenderer renderer_;
     MediaView preferred_=MediaView::Lyrics,frameView_=MediaView::Cover;
-    uint32_t positionMs_=0,durationMs_=0,shownLyricRevision_=UINT32_MAX,shownCoverRevision_=UINT32_MAX;
-    uint32_t frameAtMs_=0,animationStartedAtMs_=0,frames_=0,viewChanges_=0,cancellations_=0,serviceMaxUs_=0;
-    int shownCurrent_=-2,frameShift_=0;
-    uint8_t shownPage_=255;
+    uint32_t positionMs_=0,durationMs_=0,shownCoverRevision_=UINT32_MAX,generation_=0;
+    uint32_t frames_=0,viewChanges_=0,cancellations_=0,serviceMaxUs_=0;
+    uint32_t prepareAt_=0,presentAt_=0,prepareMaxUs_=0,presentMaxUs_=0,lyricLateMaxMs_=0,ioAt_=0,presentIoViolations_=0;
+    uint32_t preparedPosition_=0,preparedDue_=0,preparedUntil_=0;
+    uint32_t frameId_=0,deadlineUpdates_=0,missedDeadlines_=0;
+    int shownCurrent_=-2,preparedCue_=-2;
+    uint8_t shownPage_=255,shownPages_=1;
     bool active_=false,dirty_=true,paused_=true,frameInProgress_=false,seek_=false;
-    MediaView effectiveView() const {return timeline_.hasLyrics()?preferred_:MediaView::Cover;}
+    bool preparing_=false,layoutReady_=false,glyphsReady_=false,deadline_=false,redrawAfterFrame_=false;
+    void cancelPreparation();void prepareUpcoming();
+    MediaView effectiveView()const{return timeline_.hasLyrics()?preferred_:MediaView::Cover;}
 };
-// Arduino 2.0.16 defaults regular files to 4096-byte stdio buffers. The
-// workers explicitly use 128/256/512-byte buffers; reserve also covers VFS,
-// FAT handles, path strings, directory search and allocator bookkeeping.
+// Media-owned stdio buffers, File wrappers and transient path/I/O overhead.
+// The SDK's fixed global FatFs mount table is reported separately by the Gate.
 constexpr size_t kMediaFsReserve=7*1024;
 constexpr size_t kMediaBudgetBytes=FontCache::workBytes()+LyricsTimeline::workBytes()+sizeof(NowPlayingMedia)+sizeof(FontCache)+kMediaFsReserve;
-static_assert(kMediaBudgetBytes<=48*1024,
-              "P3C media memory exceeds 48 KiB; do not enlarge the budget");
+static_assert(kMediaBudgetBytes<=48*1024,"P3C media memory exceeds 48 KiB; do not enlarge the budget");
 } }

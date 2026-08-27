@@ -28,6 +28,8 @@ class UiCoordinator final {
     FontCache& fonts() { return fonts_; }
     NowPlayingPresenter& presenterForValidation() { return nowPlaying_; }
     void setHint(const char* hint);
+    // Gate-only card: never text over a partially visible media frame.
+    void setGateCard(const char* text);
     void setExternalError(const char* error);
 
     UiPage page() const;
@@ -95,6 +97,8 @@ class UiCoordinator final {
     bool metadataRequested_ = false;
 
     char hint_[64] = {};
+    char gateCard_[160] = {};
+    bool gateCardDirty_ = false;
     char externalError_[96] = {};
     bool dirty_ = true;
     bool renderRetryRequested_ = false;

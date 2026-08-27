@@ -72,7 +72,7 @@ void UiCoordinator::service() {
     if (error[0] == '\0' && snapshot.error != PlayerError::None) {
         error = playerErrorName(snapshot.error);
     }
-    if(error[0]=='\0' && (fonts_.stats().ioErrors || fonts_.stats().missing))error="FONT MISSING";
+    if(error[0]=='\0' && (fonts_.stats().ioErrors || fonts_.stats().missing || fonts_.stats().capacityErrors))error=fonts_.failure().reason;
     nowPlaying_.setContent(hint_, error);
     if (library.state() != lastLibraryState_ ||
         library.currentGeneration() != lastLibraryGeneration_ ||
@@ -85,6 +85,15 @@ void UiCoordinator::service() {
         dirty_ = true;
     }
 
+    if(gateCard_[0]) {
+        if(gateCardDirty_) {
+            display_->setFont(&fonts::Font0);display_->fillScreen(0x0861);
+            display_->setTextColor(TFT_WHITE,0x0861);display_->setTextSize(1.75f);
+            UiTextLayout::draw(*display_,gateCard_,{6,12,123,216,10,5,true});
+            gateCardDirty_=false;
+        }
+        return;
+    }
     if (page_ == UiPage::Player) {
         if (nowPlaying_.renderOne(*display_)) {
             lastRenderAtMs_ = now;
@@ -219,6 +228,13 @@ void UiCoordinator::setExternalError(const char* error) {
     std::strncpy(externalError_, value, sizeof(externalError_) - 1);
     externalError_[sizeof(externalError_) - 1] = '\0';
     dirty_ = true;
+}
+
+void UiCoordinator::setGateCard(const char* text) {
+    if(!text)text="";
+    if(std::strcmp(gateCard_,text)==0)return;
+    std::snprintf(gateCard_,sizeof(gateCard_),"%s",text);gateCardDirty_=true;dirty_=true;
+    if(!gateCard_[0])nowPlaying_.invalidateDisplay();
 }
 
 UiPage UiCoordinator::page() const {

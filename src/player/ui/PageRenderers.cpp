@@ -156,7 +156,7 @@ void SettingsPageRenderer::render(M5GFX& display,
     display.setTextColor(kAccent, kBackground);
     display.setCursor(12, 143);
     display.print("arrives in P3D");
-    footer(display, context.hint == nullptr ? "FN+ESC\nBACK TO LIBRARY"
+    footer(display, context.hint == nullptr ? "ESC\nBACK TO LIBRARY"
                                             : context.hint);
 }
 
