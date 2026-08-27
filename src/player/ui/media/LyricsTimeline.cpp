@@ -29,7 +29,7 @@ void LyricsTimeline::release() {
     count_[0]=count_[1]=0;current_=-2;windowReady_=false;alternative_[0]=0;
 }
 bool LyricsTimeline::selectTrack(const char* track) {
-    release();error_="none";failure_=ResourceFailure{};alternativeCount_=0;offsetMs_[0]=offsetMs_[1]=0;translationHant_=false;
+    release();error_="none";failure_=ResourceFailure{};failureDirectory_=false;alternativeCount_=0;offsetMs_[0]=offsetMs_[1]=0;translationHant_=false;
     hasText_[0]=hasText_[1]=false;
     std::memset(usedTranslation_,0,sizeof(usedTranslation_));
     if(!mediaResourcePath(track,"/Lyrics","",base_,sizeof(base_))) { fail("lyric_path");return false; }
@@ -94,9 +94,10 @@ void LyricsTimeline::service() {
     if(phase_==1) { openLanguage(true);if(state_==MediaState::Error)return;phase_=file_?6:2; }
     else if(phase_==2) {
         char parent[560];std::snprintf(parent,sizeof(parent),"%s",base_);char* slash=std::strrchr(parent,'/');if(slash)*slash=0;
-        errno=0;directory_=SD.open(parent,FILE_READ);phase_=3;if(!directory_){const int code=errno;failure_.set(code==ENOENT?"not_found":"directory_open","directory",code);state_=code==ENOENT?MediaState::Missing:MediaState::Error;error_=failure_.reason;phase_=0;++revision_;}
+        errno=0;directory_=SD.open(parent,FILE_READ);phase_=3;if(!directory_){const int code=errno;failureDirectory_=true;failure_.set(code==ENOENT?"not_found":"directory_open","directory",code);state_=code==ENOENT?MediaState::Missing:MediaState::Error;error_=failure_.reason;phase_=0;++revision_;}
     } else if(phase_==3) {
-        fs::File entry=directory_.openNextFile();
+        errno=0;fs::File entry=directory_.openNextFile();const int scanError=errno;
+        if(!entry && scanError && scanError!=ENOENT){failureDirectory_=true;failure_.set("directory_scan","enumerate",scanError);fail("directory_scan");return;}
         if(!entry){directory_.close();if(alternativeCount_>1)fail("ambiguous_original_lrc");else if(alternativeCount_==1)phase_=4;else {state_=MediaState::Missing;phase_=0;++revision_;}}
         else if(!entry.isDirectory()) {
             const char* filename=std::strrchr(entry.name(),'/');filename=filename?filename+1:entry.name();
@@ -169,6 +170,7 @@ uint32_t LyricsTimeline::startMs() const {return current_>=0 && work_ ? work_->c
 uint32_t LyricsTimeline::cueStart(int index) const {return index>=0 && index<count_[0] && work_?work_->cues[0][index].time:0;}
 uint32_t LyricsTimeline::cueEnd(int index) const {return index+1<count_[0]?cueStart(index+1):(durationMs_>cueStart(index)?durationMs_:cueStart(index)+10000);}
 void LyricsTimeline::failurePath(char* output,size_t size) const {
+    if(failureDirectory_){std::snprintf(output,size,"%s",base_);char* slash=std::strrchr(output,'/');if(slash)*slash=0;return;}
     if(!openedLanguage_ && alternative_[0])std::snprintf(output,size,"%s",alternative_);
     else std::snprintf(output,size,"%s%s",base_,!openedLanguage_?".lrc":(translationHant_?".zh-Hant.lrc":".zh-Hans.lrc"));
 }

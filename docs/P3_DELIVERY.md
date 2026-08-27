@@ -59,7 +59,7 @@ P3A/B/C 均为 DEVICE TEST；P3C 本地实现与六环境构建完成，不得�
 
 ## 4. P3C — Media Resources
 
-2026-08-27 实施基线为 `61692f0`。已确认的七项选择：长句先展开多列；前奏提示与
+2026-08-27 初版实施基线为 `61692f0`；修复基线为 `991d54c`。当前选择：长句先展开多列；暗色
 首句预览；同语言从右向左续列；仅极长句自动阅读分页；使用 Crucifix X 官方单曲
 封面；中文右 / 原文左；联合 PASS 后 Enter 回到暂停的普通曲库界面，无需另装 Dev。
 联合验收保持 Gate A-fix+B+C，自动部分目标 3–5 分钟，用户确认时间另计。
@@ -78,11 +78,17 @@ P3C 实现说明见 `P3C_IMPLEMENTATION.md`，构建记录见 `P3C_VALIDATION.md
 2026-08-27 用户确认 SD 在 PC 后，联合包已同步并核对 Hash；下一步是真机验收，
 不重新规划或提前实施 P3D。
 字体采用独立 B 盘工具环境、SD VLW + 索引；媒体读取分步执行，绘制不访问 SD。
-联合 Gate 同时包含冷资源加载和实际动画负载，不放宽 44.1 kHz / Error=0 /
+联合 Gate 同时包含冷资源加载和完整帧刷新负载，不放宽 44.1 kHz / Error=0 /
 Backpressure=0 / PCM gap≤70ms。脚本 Pause/Seek/重启前提示，重启后验证 Paused 和
 View；PASS 后 Enter 进入普通曲库，同版本不再自动跑 Gate。按用户追加的清理要求，
 SD 上旧 Dev / P2 Gate / P3A Gate 三个 BIN 已备存 PC 后移除，只保留联合 Walkman
 安装项；其他固件、原曲和状态不动。备存位置及交付记录见 `P3C_VALIDATION.md`。
+
+`0.7.0` 首轮联合真机为 A PASS / B SKIPPED / C 资源失败，不能按初版构建结果收口。
+`0.7.1` 先前置检查资源，再一张提示卡说明单键导航；A 只人工 Left/Right/Enter、
+Up/Down/Enter 和播放后 Esc，其余页面返回由 Gate 自动回归。B/C 的提示卡与真实
+Header / 歌词 / 封面互斥，真实展示时没有横向确认文字。取消歌词横移及“前奏”标签。
+仍只更新同一个 P3ABC BIN，不新增安装项、不重抄媒体，不进入 P3D/P4。
 
 ## 5. P3D — Product UI Completion
 

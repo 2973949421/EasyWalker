@@ -122,16 +122,20 @@ class P3CChecks(unittest.TestCase):
                library_text_available_px='97',library_text_truncated='0',library_text_invalid_utf8='0',
                library_text_layout_error='0',library_text_is_benchmark='1',orientation='135x240',rotation='2',
                sample_rate='44100',player_state='PLAYING',backpressure='0',pcm_gap_over_100ms='0',
-               player_error='NONE',audio_error='none',pcm_buffers='20')
+               player_error='NONE',audio_error='none',pcm_buffers='20',compact_navigation='1',automatic_routes='1',
+               events=''.join('LIBRARY:'+a+':x1:y1:fn0:n1|' for a in ('LEFT','RIGHT','UP','DOWN','CONFIRM','BACK')))
         audio=dict(sample_rate='44100',backpressure='0',audio_error='none',audio_error_events='0',pcm_buffers='100',pcm_gap_max_us='70000')
         b=dict(audio,version=VERSION,result='PASS',task_executed='1',measurement_ms='60000',
                model_failure='none',draw_failure='none',overlay_failure='none',audio_failure='none')
         c=dict(audio,version=VERSION,result='RUNNING',final_result='PASS',restore_view='cover',
-               measurement_frames='20',measurement_resource_bytes='1000',media_budget_bytes='48000')
+               measurement_frames='20',measurement_resource_bytes='1000',media_budget_bytes='48000',
+               preflight_pass='1',input_selfcheck='1',file_quota_checked='1',sd_max_files='12',file_quota_opened='10',
+               measurement_started='1',measurement_ms='60000',primary_failure='none',failure_captured='0',
+               frame_present_max_us='90000',lyric_late_max_ms='180',lyric_deadline_updates='4')
         for key in ('task_executed','display_confirmed','lyrics_confirmed','cover_confirmed','view_key_confirmed',
                     'pause_checked','seek_checked','fallback_checked','audio_user_confirmed','reboot_checked','restore_paused'):
             c[key]='1'
-        for key in ('font_missing','font_io_errors','font_draw_misses','lyrics_layout_error','lyrics_invalid_utf8'):c[key]='0'
+        for key in ('font_missing','font_io_errors','font_draw_misses','font_capacity_errors','lyrics_layout_error','lyrics_invalid_utf8','frame_present_sd_reads','lyric_missed_deadlines'):c[key]='0'
         self.assertTrue(validate([a,b,c]))
         for which,key,value in ((0,'result','FAIL'),(0,'library_text_lines','1'),(0,'rotation','0'),
                                 (1,'task_executed','0'),(1,'pcm_gap_max_us','70001'),(2,'final_result','FAIL'),
@@ -139,6 +143,11 @@ class P3CChecks(unittest.TestCase):
                                 (2,'measurement_resource_bytes','0'),(2,'media_budget_bytes','49153'),(2,'version','old')):
             logs=[a.copy(),b.copy(),c.copy()];logs[which][key]=value
             with self.subTest(which=which,key=key):
+                with self.assertRaises(ValueError):validate(logs)
+        for key,value in (('frame_present_max_us','100001'),('lyric_late_max_ms','201'),('frame_present_sd_reads','1'),
+                          ('preflight_pass','0'),('measurement_ms','59999'),('pcm_gap_max_us','NA')):
+            logs=[a.copy(),b.copy(),c.copy()];logs[2][key]=value
+            with self.subTest(key=key):
                 with self.assertRaises(ValueError):validate(logs)
         self.assertEqual(fields('final_result=PASS\nfinal_result=FAIL')['final_result'],'FAIL')
 

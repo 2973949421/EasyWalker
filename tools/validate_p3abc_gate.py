@@ -4,11 +4,13 @@ import re
 from pathlib import Path
 from inspect_player_state import inspect_file
 
-VERSION='0.7.0-p3c.media'
+VERSION='0.7.1-p3c.fix'
 
 def fields(text):
     result={}
     for line in text.splitlines():
+        if line.count('=')==1:
+            key,value=line.split('=',1);result[key]=value;continue
         for key,value in re.findall(r'(\w+)=([^\s]+)',line):result[key]=value
     return result
 
@@ -29,8 +31,11 @@ def validate(logs):
     for key,expected in (('backpressure','0'),('pcm_gap_over_100ms','0'),('player_error','NONE'),('audio_error','none')):
         require(a.get(key)==expected,f'A: {key}')
     require(int(a.get('pcm_buffers',0))>0,'A: no PCM')
+    require(a.get('compact_navigation')=='1' and a.get('automatic_routes')=='1','A: old navigation protocol')
+    for action in ('LEFT','RIGHT','UP','DOWN','CONFIRM','BACK'):
+        require(re.search(r':'+action+r':x\d+:y\d+:fn0:n1\|',a.get('events','')),f'A: no single physical {action}')
     require(b.get('result')=='PASS' and b.get('task_executed')=='1','B did not run/pass')
-    require(int(b.get('measurement_ms',0))>=10000,'B measurement too short')
+    require(int(b.get('measurement_ms',0))>=60000,'B measurement too short')
     for key in ('model_failure','draw_failure','overlay_failure','audio_failure'):
         require(b.get(key)=='none',f'B: {key}')
     require(c.get('result')=='RUNNING' and c.get('final_result')=='PASS','C: missing pre/post-reboot evidence')
@@ -38,6 +43,12 @@ def validate(logs):
                 'pause_checked','seek_checked','fallback_checked','audio_user_confirmed','reboot_checked','restore_paused'):
         require(c.get(key)=='1',f'C missing check: {key}')
     require(c.get('restore_view')=='cover','C: restore view')
+    for key in ('preflight_pass','input_selfcheck','file_quota_checked','measurement_started'):
+        require(c.get(key)=='1',f'C: {key}')
+    require(c.get('sd_max_files')=='12','C: file budget')
+    require(0<int(c.get('file_quota_opened',0))<=12,'C: file quota not exercised')
+    require(int(c.get('measurement_ms',0))>=60000,'C: continuous window too short')
+    require(c.get('primary_failure')=='none' and c.get('failure_captured')=='0','C: failure evidence overwritten')
     for label,log in [('B',b),('C',c)]:
         require(log.get('sample_rate')=='44100',f'{label}: sample rate')
         require(log.get('backpressure')=='0',f'{label}: backpressure')
@@ -45,17 +56,36 @@ def validate(logs):
         require(log.get('audio_error_events')=='0',f'{label}: error events')
         require(int(log.get('pcm_buffers',0))>10,f'{label}: no PCM')
         require(int(log.get('pcm_gap_max_us',9999999))<=70000,f'{label}: PCM gap')
-    for key in ('font_missing','font_io_errors','font_draw_misses','lyrics_layout_error','lyrics_invalid_utf8'):
+    for key in ('font_missing','font_io_errors','font_draw_misses','font_capacity_errors','lyrics_layout_error','lyrics_invalid_utf8','frame_present_sd_reads','lyric_missed_deadlines'):
         require(c.get(key)=='0',f'C: {key}')
+    require(0<int(c.get('frame_present_max_us',0))<=100000,'C: frame presentation >100ms or missing')
+    require(0<=int(c.get('lyric_late_max_ms',99999))<=200,'C: lyric deadline >200ms')
+    require(int(c.get('lyric_deadline_updates',0))>0,'C: natural lyric deadlines not exercised')
     require(int(c.get('measurement_frames',0))>=6,'C: media frames not exercised')
     require(int(c.get('measurement_resource_bytes',0))>0,'C: cold reads not exercised')
     require(0<int(c.get('media_budget_bytes',0))<=48*1024,'C: memory budget')
     return True
 
+def diagnose(logs):
+    """Report original failure without turning NA into a measurement of zero."""
+    c=logs[2]
+    return (f"A={logs[0].get('result','missing')} B={logs[1].get('result','missing')} "
+            f"C={c.get('final_result',c.get('result','missing'))}; "
+            f"phase={c.get('primary_failure_phase','unknown')} "
+            f"component={c.get('resource_component','unknown')} "
+            f"reason={c.get('primary_failure','unknown')} "
+            f"operation={c.get('resource_operation','unknown')} path={c.get('resource_path','unknown')} "
+            f"errno={c.get('resource_errno','NA')} "
+            f"expected/actual={c.get('resource_expected','NA')}/{c.get('resource_actual','NA')}; "
+            f"measured_pcm_gap={c.get('pcm_gap_max_us','NA')} "
+            f"failure_pcm_gap={c.get('failure_pcm_gap_max_us','NA')}")
+
 def main(root):
     path=root/'ADVWalkman/logs'
     logs=[fields((path/name).read_text(encoding='utf-8-sig')) for name in ('p3a-last.txt','p3b-last.txt','p3c-last.txt')]
-    validate(logs)
+    try:validate(logs)
+    except (ValueError,TypeError) as error:
+        print(diagnose(logs));raise SystemExit(str(error))
     sessions=[]
     for suffix in ('a','b'):
         file=root/f'ADVWalkman/state/session-{suffix}.bin'

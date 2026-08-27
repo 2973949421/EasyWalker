@@ -1,7 +1,7 @@
 # ADV Walkman
 
 > 工作名：ADV Walkman  
-> 当前阶段：P3C 本地实现与构建完成；P3A/B/C 均为 `DEVICE TEST`，等待一次联合验收
+> 当前阶段：P3ABC `0.7.1` 修复与联合验收；A/B/C 仍为 `DEVICE TEST`
 > 平台：M5Stack Cardputer ADV
 
 ## 1. 项目是什么
@@ -73,13 +73,14 @@ V1 不以以下内容为目标：
 
 ### P3C 当前交付入口
 
-版本 `0.7.0-p3c.media`：字体、中文右 / 原文左的竖排双语歌词、长句多列 / 极长句
+版本 `0.7.1-p3c.fix`：字体、中文右 / 原文左的竖排双语歌词、长句多列 / 极长句
 分页、彩色 ASCII 封面、实体 View 和 Session 偏好保存。仍不是 P4 完整盲操播放器。
 唯一下一次安装是 `ADV-Walkman-P3ABC-Gate.bin`，同时回归 A 文本与验收 B/C。
 P3D 黑胶曲库 / Settings / 息屏不在本轮。
 
-本地媒体检查 15 项、既有 P3B 检查 10 项、Session 自测及 29 组真实歌词像素边界
-检查通过；Dev / 联合 Gate / P3A / P1 A/B / P2 共六环境构建通过。大小与完整 SHA-256
+初版真机 A 导航和两行通过，B 未执行，C 资源失败；资源包并未漏放。修复采用单键
+导航、整组歌词准备与呈现、资源前置检查、具体失败日志；取消横移与“前奏”标签。
+本地媒体检查 15 项、既有 P3B 检查 10 项及新增修复检查 8 项；六环境构建结果、大小与完整 SHA-256
 集中记录在 `docs/P3C_VALIDATION.md`，不将这些结果当成真机 PASS。
 
 本地构建 / 检查入口（不烧录）：
@@ -88,6 +89,7 @@ P3D 黑胶曲库 / Settings / 息屏不在本轮。
 .\tools\build_player.ps1 -Target Dev
 .\tools\build_player.ps1 -Target P3ABCGate
 & '.\.venv-media\Scripts\python.exe' tools/check_p3c.py
+& '.\.venv-media\Scripts\python.exe' tools/check_p3abc_fix.py
 & 'B:\PlatformIO\penv\Scripts\python.exe' tools/check_p3b.py
 ```
 
@@ -102,11 +104,21 @@ P3D 黑胶曲库 / Settings / 息屏不在本轮。
   将 SD 上旧 Dev / P2 Gate / P3A Gate 三个 BIN 备存 PC 后移除；当前 Walkman 安装项
   只保留 `/firmware/ADV-Walkman-P3ABC-Gate.bin`。Bruce、UIFlow2、原曲和状态未改。
 
-真机屏幕逐步引导：A 原导航 → 前奏 / Header 确认 → 双语长句确认 → View（顶部
-第二排第二颗）→ Cover 确认 → 自动连续播放 / 浮层 → 听感确认 → Pause/Seek、无歌词
-回退、保存并重启一次。Enter 确认，确认页 Fn+Esc 表示不通过。脚本动作前有提示，
+本轮 `0.7.1` 已仅覆盖同名联合 BIN（761168 bytes），PC/SD SHA-256 一致；资源未变，
+没有再次复制媒体，也未清理其他文件。启动先自动检查资源，失败会
+标出组件 / 阶段 / 具体原因；通过才出现单键说明卡。
+真机顺序：Library 左 / 右 / Enter → Playlist 上 / 下 / Enter → 播放后单键 Esc；
+剩余 A 页面路由自动回归。随后提示卡说明 B/C 看什么，再清除提示，分别显示真实
+Header / 暗色首句预览、双语长句、View（顶部第二排第二颗）与 Cover。
+真实展示按 Enter 确认，单键 Esc 拒绝，不再按 Fn；提示不会压在歌词上。
+之后自动 60 秒连续播放 / 冷资源 / 浮层 → 听感确认 → Pause/Seek、缺歌词回退及重启。
+脚本动作前有提示；人工提示卡使用短行，保留完整的下一键说明。
 自动部分目标 3–5 分钟，等待人确认不计时。`PASS` 后 Enter 可直接回曲库继续试用，
 保持暂停；同版本下次启动不自动重跑。
+
+70 ms PCM、100 ms 完整歌词呈现及 200 ms 正常换句延迟均未放宽。SD 文件名额为 12；
+SDK 全局文件表比原默认值增加 28,959 bytes，独立于仍受 48 KiB 限制的媒体工作集。
+总 Heap 余量需看真机记录，不能只看编译静态 RAM。
 
 测试后只需 SD 回 PC，读取：
 

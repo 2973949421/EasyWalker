@@ -1,5 +1,20 @@
 # Changelog
 
+## V0.7.1 — P3ABC single-key / complete lyric frames / resource diagnostics
+
+Date: 2026-08-27
+
+- 留存初版 A PASS / B SKIPPED / C 资源 FAIL；资源 Hash 正确，旧日志不能将根因唯一
+  归于文件名额。没有擦 Flash、改分区、重做资源或改变音频链路。
+- 官方键盘物理位图 + 每键 25 ms 去抖，方向 / Esc 单键，等数量换键不漏报；无完整 P4。
+- 字模按实际尺寸缓存，整组准备、pin、固定帧后快速条带显示；取消横移与前奏文字。
+  修复空字模在 arena 压缩时的别名风险，以及缺封面时等待不存在像素行的问题。
+- Gate 提示卡与真实媒体互斥；资源前置检查先于人工导航，A 简化，B/C 保留严格连续窗口。
+- SD max_files=12；新增全局 FatFs 开销精确为 28,959 bytes，和 ≤48 KiB 媒体工作集分开
+  核算。Cover/LRC 读完及时关闭；打开、读取、校验错误可归因，失败先快照再清理。
+- 保留 70 ms PCM、100 ms 呈现和 200 ms 正常换句门槛；未测量写 NA，未执行写 SKIPPED。
+- 自动 / 构建 / SD 交付结果统一见 `docs/P3C_VALIDATION.md`；A/B/C 仍 DEVICE TEST。
+
 ## P3ABC SD delivery / old BIN cleanup
 
 Date: 2026-08-27

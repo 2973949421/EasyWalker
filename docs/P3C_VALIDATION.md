@@ -1,6 +1,66 @@
 # P3C validation record
 
-Baseline: `61692f0`; target version: `0.7.0-p3c.media`.
+Current fix baseline: `991d54c`; target: `0.7.1-p3c.fix`.
+
+## 0.7.1 修复与验证
+
+### 已确认的失败证据
+
+- 初版 `0.7.0`：A 导航及 `ADVWalkmanBenchmark` 两行 PASS，B SKIPPED；C 在开始
+  连续测量前报告 `real_track_media_missing_or_bad`，不能把其零值当作实测音频指标。
+- 三份原日志已保存在 PC 的 Git 忽略目录 `test-data/local/p3-media/failure-0.7.0/`。
+- SD 媒体与交付包一致，不能归因于用户漏拷文件。5 个默认文件名额存在并发不足风险，
+  但旧日志无 errno / 组件证据，未证明它是唯一根因。
+- UI 的确用 Fn 作为导航条件，并依赖只比较按键数量的旧接口；提示也的确画在歌词
+  上。逐条带等待字模会产生长时间旧句 / 新句混杂，这些均有代码证据。
+
+### 自动验证与边界
+
+- `check_p3c.py` 15 项、`check_p3b.py` 10 项、`check_p3abc_fix.py` 8 项通过；Session
+  自测通过。覆盖 29 组实际字模 / 分页容量、资源错误 / 日志契约、无提示压字等。
+- PC 参考与源码检查不是设备执行；真正 C++ 按键自检、只读文件名额耗尽 / 恢复、
+  Cover CRC / LRC / 代表字模与显示计时均须在本次 Gate 上运行。
+- 使用原来的 135×18 行缓冲、Candidate A、Queue/Session；没有新增媒体或修改 MP3。
+- 严格保持 70 ms PCM，新增显式 100 ms 整帧 / 200 ms 到期刷新检查；漏过自然歌词
+  deadline 也会失败，不通过丢掉慢帧来隐藏问题。至少一个自然换句必须实际测量。
+- `max_files=12` 的全局 FatFs 表相较默认值增加 **28,959 bytes**；本地 SDK/GDB 确认
+  `sizeof(FIL)=4136`，加每槽 1-byte o_append。它独立于受 ≤48 KiB 断言约束的媒体
+  工作集，不能称为“全系统只多用了48 KiB”。真实剩余 Heap / 泄漏仍要真机确认。
+- 固件 / 日志匹配版本 `0.7.1-p3c.fix`。原始失败现场先快照，再 Pause / close；未测量
+  用 NA，后续未执行用 SKIPPED。日志保留完整路径、组件、操作、errno 和读长。
+
+### 最终构建 — 2026-08-27
+
+六环境全部成功，`.pio` 与 `artifacts` 逐项匹配，全部小于 `0x140000`。Dev / P3A /
+联合 Gate 版本为 `0.7.1-p3c.fix`；历史 P1/P2 只做共享 SD 挂载代码的编译回归，
+保留原 Gate 版本。未重建 Benchmark A/B/C，也未更换依赖。
+
+| Artifact | Bytes | Static RAM bytes | SHA-256 |
+|---|---:|---:|---|
+| `ADV-Walkman-Dev.bin` | 734912 | 114264 | `e5577d20328ea3a0e7871b3a2fbd172922fa136295acb83c09dfba2d7af76b64` |
+| `ADV-Walkman-P3ABC-Gate.bin` | 761168 | 117560 | `48cc428e0fb3cac2a68b61d7086bbc08564c68124b7e04c6a243420692b20f60` |
+| `ADV-Walkman-P3A-Gate.bin` | 741616 | 115144 | `15cdfbbe83d57b33ca8c5c3663b79ec97f237dc8c2c707517242662bd414a08d` |
+| `ADV-Walkman-P1-Gate-A.bin` | 673984 | 55088 | `83d1302305c94c374540ac5c5d3a10428035e799fcdf4343c81ad7e4fd6bb971` |
+| `ADV-Walkman-P1-Gate-B.bin` | 674656 | 55088 | `3852245c9d0a4c55bce3772d687608225d95d8ca4f1ad4ed5785112353368161` |
+| `ADV-Walkman-P2-Gate.bin` | 724352 | 152664 | `b20743a805ac70a074770a44cefbbcc84a1811b65fb70bac879d01356128bf06` |
+
+联合固件占现有预算的 58.1%。静态 RAM 不包括运行时分配，不等于剩余 Heap。
+最终 BIN 已检查包含新版本及短行单键说明卡；人工确认卡在 123 px 内框中不会把
+末尾的确认键提示挤掉。33 项 PC 检查、Session 自测及 `git diff --check` 通过。
+
+### 本轮 SD 单文件交付
+
+- 重新确认 D 盘现有联合 BIN 和原曲路径 / 大小后，仅覆盖
+  `D:\firmware\ADV-Walkman-P3ABC-Gate.bin`。
+- SD 文件为 **761168 bytes**，SHA-256 与上表联合固件完全一致。
+- 媒体包未变化，未重复复制字体、歌词、封面或音乐；未删除其他 BIN、日志或状态。
+- 未操作 COM、设备 Flash、分区或 eFuse。由用户通过 M5Launcher 安装同名 BIN。
+- 新版本尚未在 ADV 上运行。A/B/C 继续 `DEVICE TEST`，待本次三份日志与人工显示 /
+  听感确认，不能以编译或 PC 参考检查代替真机 PASS。
+
+## 0.7.0 历史交付记录
+
+以下为初版 `61692f0` 起点的历史结果，不代表当前修复版生成物。
 
 ## Local validation
 
@@ -54,9 +114,10 @@ M5GFX 0.2.27 / ESP8266Audio 1.9.7 / Arduino 2.0.16。
 - SD `/firmware` 顶层只保留联合 Walkman BIN；Bruce / UIFlow2 子目录及其他用户文件不动。
 - 未操作 COM3 或设备内部 Flash；SD 上删 BIN 不等于删除 Launcher 已安装的 App。
 
-## Device validation — pending
+## Device validation — 原计划及当前待验项
 
-SD 已交付，但尚未安装或读取本轮真机日志。不能将以上结果当作真实显示或连续播放通过。
+初版已实际测试，结果见顶部 A PASS / B SKIPPED / C FAIL。修复版仍需新的联合
+日志与人工确认，不能将以下历史构建或计划当作真实显示 / 连续播放通过。
 
 - A：方向 / 导航 / 跨页音频与 `ADVWalkmanBenchmark` 两行。
 - B：真实 Header/Footer、长标题、浮层 / 局部刷新。

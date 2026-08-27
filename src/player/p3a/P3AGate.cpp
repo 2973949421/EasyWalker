@@ -11,14 +11,15 @@ namespace adv_walkman {
 namespace player {
 
 void P3AGate::begin(int16_t displayWidth, int16_t displayHeight,
-                    uint8_t displayRotation,bool excludeHumanWait) {
+                    uint8_t displayRotation,bool excludeHumanWait,bool compact) {
     displayWidth_ = displayWidth;
     displayHeight_ = displayHeight;
     displayRotation_ = displayRotation;
     startedAtMs_ = millis();
     lastTickAtMs_ = startedAtMs_;automaticMs_=0;excludeHumanWait_=excludeHumanWait;
     minimumHeap_ = ESP.getFreeHeap();
-    setStep(Step::Orientation);
+    compact_=compact;
+    setStep(compact?Step::LibraryLeft:Step::Orientation);
 }
 
 bool P3AGate::beforeAction(UiAction action, const RawKeyEvent& raw,
@@ -106,6 +107,17 @@ void P3AGate::service(UiCoordinator& ui, PlayerRuntime& player) {
     }
 
     const PlayerSnapshot snapshot = player.snapshot();
+    if(compact_) {
+        UiAction automatic=UiAction::None;
+        if(step_==Step::PlaylistBack)automatic=UiAction::Back;
+        if(step_==Step::SettingsOpen)automatic=UiAction::OpenSettings;
+        if(step_==Step::SettingsBack)automatic=UiAction::Back;
+        if(automatic!=UiAction::None) {
+            RawKeyEvent raw;raw.x=raw.y=-1;raw.fn=false;raw.keyCount=0;
+            beforeAction(automatic,raw,ui.page());ui.handleAction(automatic);
+            return;
+        }
+    }
     switch (step_) {
         case Step::WaitPlaylist:
             if (ui.page() == UiPage::Playlist) {
@@ -194,21 +206,33 @@ void P3AGate::service(UiCoordinator& ui, PlayerRuntime& player) {
 }
 
 const char* P3AGate::hint() const {
+    if(compact_) {
+        switch(step_) {
+            case Step::LibraryLeft:return "LEFT / RIGHT\nENTER: OPEN";
+            case Step::LibraryRight:return "RIGHT\nENTER: OPEN";
+            case Step::LibraryEnter:return "SELECT BENCHMARK\nENTER: OPEN";
+            case Step::PlaylistUp:return "UP / DOWN\nENTER: PLAY";
+            case Step::PlaylistDown:return "DOWN\nENTER: PLAY";
+            case Step::PlaylistEnter:return "BENCHMARK.MP3\nENTER: PLAY";
+            case Step::PlayerBack:return "ESC: BACK\nKEEP PLAYING";
+            default:return "";
+        }
+    }
     switch (step_) {
         case Step::Orientation:
             return "STEP 01 / 11\nPRESS ENTER";
         case Step::LibraryLeft:
-            return "STEP 02 / 11\nFN + LEFT";
+            return "STEP 02 / 11\nLEFT";
         case Step::LibraryRight:
-            return "STEP 03 / 11\nFN + RIGHT";
+            return "STEP 03 / 11\nRIGHT";
         case Step::LibraryEnter:
             return "STEP 04 / 11\nPRESS ENTER";
         case Step::WaitPlaylist:
             return "PLEASE WAIT\nOPENING LIST";
         case Step::PlaylistUp:
-            return "STEP 05 / 11\nFN + UP";
+            return "STEP 05 / 11\nUP";
         case Step::PlaylistDown:
-            return "STEP 06 / 11\nFN + DOWN";
+            return "STEP 06 / 11\nDOWN";
         case Step::PlaylistEnter:
             return "STEP 07 / 11\nPRESS ENTER";
         case Step::WaitPlayer:
@@ -216,11 +240,11 @@ const char* P3AGate::hint() const {
         case Step::PlayWait:
             return "AUTO CHECK\nPLAYING 10 SEC";
         case Step::PlayerBack:
-            return "STEP 08 / 11\nFN + ESC";
+            return "STEP 08 / 11\nESC";
         case Step::WaitPlaylistBack:
             return "PLEASE WAIT\nRESTORE LIST";
         case Step::PlaylistBack:
-            return "STEP 09 / 11\nFN + ESC";
+            return "STEP 09 / 11\nESC";
         case Step::WaitLibrary:
             return "PLEASE WAIT\nOPEN LIBRARY";
         case Step::SettingsOpen:
@@ -228,7 +252,7 @@ const char* P3AGate::hint() const {
         case Step::WaitSettings:
             return "PLEASE WAIT\nOPEN SETTINGS";
         case Step::SettingsBack:
-            return "STEP 11 / 11\nFN + ESC";
+            return "STEP 11 / 11\nESC";
         case Step::WaitFinal:
             return "PLEASE WAIT\nFINAL CHECK";
         case Step::Passed:
@@ -361,6 +385,7 @@ void P3AGate::writeLog(const char* reason, const UiCoordinator& ui,
     player.currentPath(track, sizeof(track));
     file.printf("result=%s\n", passed() ? "PASS" : "FAIL");
     file.printf("version=%s\n", ADV_WALKMAN_VERSION);
+    file.printf("task_executed=1\ncompact_navigation=%d\nautomatic_routes=%d\n",compact_,compact_);
     file.printf("reason=%s\n", reason == nullptr ? "unknown" : reason);
     file.printf("final_step=%s\n", stepName(step_));
     file.printf("orientation=%dx%d rotation=%u\n", displayWidth_,

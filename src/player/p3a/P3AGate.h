@@ -13,7 +13,7 @@ namespace player {
 class P3AGate final {
   public:
     void begin(int16_t displayWidth, int16_t displayHeight,
-               uint8_t displayRotation,bool excludeHumanWait=false);
+               uint8_t displayRotation,bool excludeHumanWait=false,bool compact=false);
     // Returns true only when the Gate consumes an action instead of forwarding
     // it to UiCoordinator (the initial orientation confirmation).
     bool beforeAction(UiAction action, const RawKeyEvent& raw, UiPage page);
@@ -67,6 +67,7 @@ class P3AGate final {
     uint32_t startedAtMs_ = 0;
     uint32_t lastTickAtMs_ = 0,automaticMs_ = 0;
     bool excludeHumanWait_ = false;
+    bool compact_ = false;
     uint32_t playbackStartedAtMs_ = 0;
     int16_t displayWidth_ = 0;
     int16_t displayHeight_ = 0;

@@ -96,7 +96,11 @@ void loop() {
     // Audio remains first. Library, keyboard and one bounded dirty render
     // follow; title animation is capped at 20 fps, without a full framebuffer.
     player.service();
+#if defined(P3ABC_DEVICE_GATE)
+    if(!gate.suspendBackground()) libraryRuntime.service();
+#else
     libraryRuntime.service();
+#endif
     M5Cardputer.update();
 
     UiAction action = UiAction::None;
@@ -128,6 +132,7 @@ void loop() {
 #elif defined(P3ABC_DEVICE_GATE)
     gate.service(ui,player);
     if(gate.renderResult(M5Cardputer.Display)){delay(1);return;}
+    if(gate.suspendBackground()){delay(1);return;}
 #endif
     ui.service();
     delay(1);

@@ -42,6 +42,7 @@ class LyricsTimeline final {
     const char* error_="none";
     ResourceFailure failure_{};
     uint8_t openedLanguage_=0;
+    bool failureDirectory_=false;
     MediaState state_=MediaState::Idle;
     uint16_t count_[2]{},sortAt_=0,pairAt_=0;
     uint8_t usedTranslation_[64]{};
