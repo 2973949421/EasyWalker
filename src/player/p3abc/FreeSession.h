@@ -1,5 +1,6 @@
 #pragma once
 #include <SD.h>
+#include <algorithm>
 #include "player/ui/UiCoordinator.h"
 namespace adv_walkman { namespace player {
 // Observer only: never changes transport, view, cache, or persistence.
@@ -11,12 +12,20 @@ class FreeSession final {
     void action(UiAction action,const RawKeyEvent& raw,UiPage page,bool accepted);
     void observe(const UiCoordinator& ui,const PlayerRuntime& player);
     void service(UiCoordinator& ui,const PlayerRuntime& player,uint32_t uiBurstUs);
+    bool workDue()const{return bool(file_)||requestSave_||millis()-lastSaved_>=15000;}
+    void recordBurst(uint32_t us){if(us>uiBurstMaxUs_)uiBurstMaxUs_=us;}
+    void recordWork(uint32_t audio,uint32_t library,uint32_t input){audioMax_=std::max(audioMax_,audio);libraryMax_=std::max(libraryMax_,library);inputMax_=std::max(inputMax_,input);}
  private:
     void fail(const char* component,const char* reason);
     void prepare(const UiCoordinator& ui,const PlayerRuntime& player);
     void append(const char* format,...);
     fs::File file_;
-    char buffer_[4096]{},track_[512]{},failure_[64]{},component_[24]{};
+    char buffer_[6144]{},track_[512]{},failure_[64]{},component_[24]{};
+    char restoredTrack_[512]{};
+    uint32_t bootId_=1,audioMax_=0,libraryMax_=0,inputMax_=0,restoredPosition_=0;
+    uint32_t noLyricsView_=0,preferenceTransitions_=0,startupObservedMs_=0;
+    uint8_t restoredView_=0,previousPreferred_=0;
+    bool startupCaptured_=false,startupPaused_=false,startupSilent_=true,noLyricsPending_=false;
     char resourcePath_[560]{},resourceOperation_[24]{};
     struct Event {uint32_t ms;UiAction action;UiPage page;int8_t x,y;bool accepted;};
     Event events_[12]{};

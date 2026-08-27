@@ -4,24 +4,26 @@
 > `TECH_DESIGN.md`、任务状态以 `TASKS.md` 为准。P3 不重新选择 Audio Backend，
 > 不改变 P1 Queue / Session 或 P2 Library Engine 语义。
 
-## 当前验收方式 — 0.7.4（覆盖下方历史 Gate 操作顺序）
+## 当前验收方式 — 0.7.5（覆盖下方历史 Gate 操作顺序）
 
 工程仍按 A → B → C → D，不跳阶段；用户只安装一份同名 P3ABC BIN，但改为普通
 界面自由试用 + 后台日志，不再要求先过 A 提示卡才能看到 B/C。可以自由浏览、播放、
 看歌词、切 View、调音量；不自动 Seek / 切封面 / 暂停 / 重启。
 
 按用户本轮授权只前置冻结的两个 Play/Pause 及 Vol+/−，其他 P4 控制 / DSP 不做。
-当前显示校准为28 / 188 / 24 px、CJK16、仅当前双语组、英文单词整体换列、
-透明细音量条。无前后句 / 前奏预览；ASCII默认34×26；显示100%限于旧约25%，
-启动50%实际为旧约12.5%。不改变按键、阶段顺序或新增固定测试流程。
-0.7.3已有42次真实歌词换句、零Audio Error / Backpressure；但PCM最大93.100ms
-仍超70ms，导航回归未覆盖，不能写全通过。0.7.4结果等待新日志和人工观感确认。
+Cover保持28 / 188 / 24 px；Lyrics去掉Header，上方216 px显示当前双语组，
+18 px微加粗楷体 / 14 px Times、英文整词换列。所有正常UI统一楷体 / Times。
+透明细音量条、无前后句 / 前奏预览；ASCII默认40×32；100%为最初未限幅版40%，
+启动逻辑80 / 约31%仍为raw32。新增10首AveMujica歌曲及9组中日歌词，暗黑天国无歌词。
+0.7.4约10分钟日志零Audio Error / Backpressure、歌词更新69 ms，但PCM最大70.494 ms
+仍超70 ms，不能写全通过。本轮工作包及交付证据见 `P3ABC_CLOSURE.md`。
 
-日志 `/ADVWalkman/logs/p3-free-last.txt` 每 15 秒分块追加并带 CRC，T 主动保存。
+日志 `/ADVWalkman/logs/p3-free-last.txt` 按启动编号、每15秒分块追加并带CRC。
+T等待状态checkpoint完成后报告保存成功，用户最后手动重启一次，观察至少3秒恢复暂停。
 分别记录 A/B/C 主路径覆盖；连续播放 60 秒是被动覆盖项，不是固定测试阶段。
 结果为 INCOMPLETE / FAIL / READY_FOR_REVIEW，最后一项仍需人工可读性和听感确认，
-不得自动改为 DONE。旧 Gate 额外的脚本 Seek / 重启偏好恢复不在本次后台自动执行，
-显式记为 not_exercised；后续用小范围验证补足，不要求重跑全套。
+不得自动改为DONE。脚本Seek / 重启不在后台自动执行；播放中Seek仍显式未验，
+手动重启恢复由Host比较前后启动日志，不要求重跑全套。
 
 保留严格 70 ms PCM、100 ms 完整歌词呈现、200 ms 到期更新，错误不被后续日志
 覆盖。0.7.2 的 media_not_exercised 已定位到冷歌词被封面优先级饿死，不是音频失败。
@@ -67,10 +69,12 @@ Gate A-fix+B+C 真机确认文本不越界后，P3-01 / P3-08 / P3-09 才完成�
 ## 3. P3B — Now Playing Chrome
 
 - 实现 Title / Artist Header、克制的长标题滚动；
-- 当前 Header / Content / Footer 为 28 / 188 / 24 px，边距 6 px；Title14 / Artist12 / 时间10 px；
+- Cover Header / Content / Footer为28 / 188 / 24 px；Lyrics为216 / 24 px且隐藏Header；
+  边距6 px，Title14 / Artist12 / 时间10 px；
 - 真实时间、进度、状态与紧凑模式标识，不常驻 NORM Original；透明细音量浮层 3 秒；
 - 复用 P3A 文本布局能力：Header / Footer 先保证不越界，Title / Artist 再按本阶段
-  规则决定单行静态或 24 px/s 滚动、首尾各停 5 秒；Artist 单行省略，暂停不冻结标题；
+  规则决定单行静态或24 px/s滚动、首尾各停5秒；Artist单行省略，Cover暂停不冻结标题，
+  Lyrics不推进不可见标题动画；
 - 建立 Player 页面 Dirty Region，Content Stage 仍允许使用明确 fallback；
 - 不在该阶段伪造歌词、封面或字体资源。
 
@@ -82,7 +86,7 @@ P3A/B/C 均为 DEVICE TEST；P3C 本地实现与六环境构建完成，不得�
 
 ## 4. P3C — Media Resources（含 0.7.0～0.7.2 历史实施）
 
-2026-08-27 初版实施基线为 `61692f0`；修复基线为 `991d54c`。当前选择：长句先展开多列；暗色
+2026-08-27 初版实施基线为 `61692f0`；修复基线为 `991d54c`。当时选择（非当前AC）：长句先展开多列；暗色
 首句预览；同语言从右向左续列；仅极长句自动阅读分页；使用 Crucifix X 官方单曲
 封面；中文右 / 原文左；联合 PASS 后 Enter 回到暂停的普通曲库界面，无需另装 Dev。
 联合验收保持 Gate A-fix+B+C，自动部分目标 3–5 分钟，用户确认时间另计。

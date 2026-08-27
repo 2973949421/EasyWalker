@@ -82,7 +82,7 @@ class FreeChecks(unittest.TestCase):
         with self.assertRaises(ValueError):checkpoints(good.replace(b'mode=free',b'mode=xxxx'))
         with self.assertRaises(ValueError):checkpoints(b'BEGIN sequence=1\npartial')
     def test_incomplete_is_not_pass_and_fail_cannot_hide(self):
-        data=dict(version=VERSION,mode='free',failure_reason='none',audio_errors='0',backpressure='0',pcm_gap_max_us='42404',present_max_us='70000',lyric_late_max_ms='50',a_auto='COVERED',b_auto='COVERED',c_auto='INCOMPLETE',volume='128',speaker_volume_raw='32',speaker_volume_cap='63')
+        data=dict(version=VERSION,mode='free',failure_reason='none',audio_errors='0',backpressure='0',pcm_gap_max_us='42404',present_max_us='70000',lyric_late_max_ms='50',a_auto='COVERED',b_auto='COVERED',c_auto='INCOMPLETE',volume='80',speaker_volume_raw='32',speaker_volume_cap='102')
         self.assertEqual(evaluate(data)[0],'INCOMPLETE')
         data.update(speaker_volume_raw='128')
         self.assertIn('volume_policy',evaluate(data)[1])

@@ -1,7 +1,7 @@
 # ADV Walkman
 
 > 工作名：ADV Walkman  
-> 当前阶段：P3ABC `0.7.4-p3c.tune` 当前句 / 16px / 音量限幅 / 精细 ASCII 校准；A/B/C 仍为 `DEVICE TEST`
+> 当前阶段：P3ABC `0.7.5-p3c.closure` 显示统一 / 新曲库 / 自由验收；A/B/C 仍为 `DEVICE TEST`
 > 平台：M5Stack Cardputer ADV
 
 ## 1. 项目是什么
@@ -71,7 +71,7 @@ V1 不以以下内容为目标：
 
 ## 5. 当前最重要的技术任务
 
-### P3C 当前交付入口 — 0.7.4 自由试用
+### P3C 当前交付入口 — 0.7.5 自由试用
 
 仍安装同一个 `/firmware/ADV-Walkman-P3ABC-Gate.bin`，名称保留以免增加 SD 安装项。
 启动直接进入普通界面；恢复歌曲保持 Paused。没有必须按顺序完成的提示卡、自动
@@ -87,20 +87,25 @@ Seek / 切 View / 暂停 / 重启，也不再盯着封面等 60 秒后被测试�
 | `] }` | Lyrics / Cover |
 | Esc | 返回播放列表；列表内继续返回曲库 |
 | 方向位置、Enter | 曲库 / 播放列表导航、选歌 |
-| T | 保存本次诊断；Player 底栏短暂显示 LOG SAVED |
+| T | 请求状态及诊断保存；等现有状态保存完成后显示 LOG SAVED |
 
 可以按自己的顺序听歌、看歌词、切封面、调音量和浏览。日志每 15 秒自动分块保存；
-结束前按 T，等 LOG SAVED 后再关机取 SD。日志保留第一项错误，不会为了测试主动停播。
+日志按启动编号追加，不覆盖上次启动。结束前按 T，等 LOG SAVED 后再关机取 SD。
+日志保留同版本每次启动的第一项错误，不会为了测试主动停播。
 自然连续播放满 60 秒只是后台覆盖项；没测到的操作写 INCOMPLETE，不是假 PASS。
-真实 Seek / 重启偏好恢复仍是未验项，本次不会偷跑这些动作。
+本次只需最后手动重启一次，先等待至少3秒不要按键，确认恢复暂停、歌曲和视图正确；
+不自动重启，也不要求每首完整听完。播放中的 Seek 仍单列未验，不以无声启动自检冒充。
 
-画面保持 28 / 188 / 24 px 三段；CJK 16 px，只显示当前双语歌词，不显示暗色前后句，
-首句时间戳前留空。长句完整续列 / 必要时分页；英文单词放不下优先整体换列，不拆 never。
-ASCII 默认34×26，字符格比旧30×24多约23%，输出仍120×144，不是普通缩略图。
-新版100%对应旧版约25%（Speaker raw63）；启动50%对应旧版约12.5%（raw32）。
+Cover 保留28 / 188 / 24 px；Lyrics 隐藏歌名/歌手，将上方216 px全部留给歌词。
+歌词采用18 px微加粗楷体 / 14 px Times New Roman，只显示当前双语组；首句前留空。
+长句完整续列 / 必要时分页；英文单词放不下优先整体换列，不拆 never。
+正常UI同样统一楷体与Times，歌名14、歌手12、底栏时间10 px；透明音量条不加黑底。
+ASCII 默认40×32，提供34×26 / 40×32 / 48×40预览，输出仍120×144真实字符mask。
+新版100%对应最初未限幅版40%（Speaker raw102）；启动约31%仍是raw32，不提高开机响度。
 这是当前耳机的用户校准，不是绝对安全声压保证；先从低音量试听，不必试到最大。
-音量浮层只有细条和数字，无黑色面板；默认模式不再常驻 NORM Original。原 MP3 与
-日文原稿不改。只提前接通已冻结的播放暂停和音量，其他 P4 按键 / DSP 仍未实施。
+默认模式不常驻 NORM Original。`/Music/AveMujica/`新增10首转码歌曲、9组中日歌词；
+暗黑天国故意无歌词，用于Cover-only验证。原文件、benchmark及日文原稿不改。
+只提前接通已冻结的播放暂停和音量，其他 P4 按键 / DSP 仍未实施。
 
 检查与构建：
 
@@ -108,6 +113,7 @@ ASCII 默认34×26，字符格比旧30×24多约23%，输出仍120×144，不是
 .\tools\build_player.ps1 -Target Dev
 .\tools\build_player.ps1 -Target P3ABCGate
 & '.\.venv-media\Scripts\python.exe' tools/check_p3_free.py
+& '.\.venv-media\Scripts\python.exe' tools/check_p3_closure.py
 & '.\.venv-media\Scripts\python.exe' tools/preview_p3_lyrics.py
 & 'B:\PlatformIO\penv\Scripts\python.exe' tools/validate_p3_free.py D:\ADVWalkman\logs\p3-free-last.txt
 ```
@@ -119,8 +125,10 @@ SD 在 PC 时使用 `tools/sync_p3_media.py --sd-root D:\`，按旧清单校验�
 音频 70 ms PCM / 零 Error / 零 Backpressure、歌词 100 ms 呈现 / 200 ms 到期延迟
 阈值不变；本地检查不代表实际听感、刷新或按键已通过。
 
-2026-08-27：已覆盖D盘同名BIN（745920 bytes）和中文标点修订，Hash核对一致；
-原曲与其他资源不动。三个UI环境构建及41项PC检查通过，待本版实际显示 / 听感确认。
+本版六环境构建、48项PC检查及D盘同名BIN/受管资源同步均完成，拷贝Hash一致。
+本轮实现、生成物及自由验收清单见 `docs/P3ABC_CLOSURE.md`。历史0.7.4约10分钟日志
+Audio Error / Backpressure为0，但PCM峰值70.494 ms仍超70 ms；不能据此宣称收口。
+新版仍须实际显示、音频和手动重启日志通过，才将对应任务标记DONE。
 
 ### P3C 0.7.0～0.7.2 历史交付与旧 Gate（以下不再是操作步骤）
 

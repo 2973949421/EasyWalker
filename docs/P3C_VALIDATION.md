@@ -1,6 +1,65 @@
 # P3C validation record
 
-Current baseline: `03b2180`; target: `0.7.4-p3c.tune`.
+Current baseline: `0b185f8`; target: `0.7.5-p3c.closure`.
+
+## 0.7.5 P3ABC收尾 — 2026-08-27
+
+### 基线与证据边界
+
+- 原0.7.4日志保存在`test-data/local/p3-media/trial-0.7.4/p3-free-last.txt`，65273 bytes，
+  SHA-256 `929d8257513f1ed4cee481af7768db18662abb2b9776cca3477664fe292c2c5a`。
+- 41份完整检查点，最终elapsed596024ms；Audio Error0 / Backpressure0，歌词更新69ms，
+  完整呈现80551µs；PCM70494µs仍超过70000，绝不计为本版或已通过证据。
+- 本轮双布局、字体、曲库和自由日志实现见`P3ABC_CLOSURE.md`。没有新版设备运行数据，
+  不把PC排版参考测试、编译期断言或构建成功当成实际显示与音频验收。
+
+### 构建结果
+
+六环境成功；稳定依赖不变；Benchmark A/B/C不重建。P1/P2保持各自历史Gate版本号，
+只重编译共享代码兼容性，不作为本次SD安装项。
+
+| 产物 | Bytes | Static RAM bytes | SHA-256 |
+|---|---:|---:|---|
+| Dev | 750736 | 122992 | `9b4d4bc43730ea63c3c0025b4367add82fdaa8984217d8f119c9fe2dd7ce3fa9` |
+| P3ABC | 750800 | 122992 | `fb04750d616a04b594671ca6d5dc50e6c3e5e7974225b1180d3d7ba4e7a1a608` |
+| P3A | 749232 | 115688 | `ced145f77869b7faa7df8c95fa1b4908efea7ef9d7a79f01bb2ba6dd90bbc145` |
+| P1A | 674048 | 55088 | `3440014b00df3d31ab49e9e39c7c819e6c229e0ba7752833570012ec41519f6c` |
+| P1B | 674704 | 55088 | `efe40840268745f8e7519222c6df3b83340a918178aa7848f05d645cdb43a2ad` |
+| P2 | 724416 | 152664 | `8554438cbc72653e3c0bf3bf82867c7fa1c6d436aaadc68821377a8ba80041d1` |
+
+均小于0x140000（1310720）bytes；媒体48KiB编译断言通过。Static RAM不是可用Heap，
+实际最低Heap和持续增长/下降仍由新设备日志判断。
+
+### 资源及检查
+
+- 10首MP3格式、时长、Title/Artist/Album、绑定及暗黑天国无LRC检查。
+- 298组实际歌词全分页的像素边界/整词检查；最多50个不同字形、5485 bytes压缩位图。
+- 检查不只覆盖歌词：实际Title/Artist/Album也纳入字体覆盖。末轮抓到标题△/▽缺字，
+  生成器已把Metadata纳入必需字集，不能带着缺字错误交付。
+- 95字符mask、40×32默认及新旧网格、RGB565逐像素一致性/坏CRC；看过原尺寸与放大预览。
+- 音量、视图、跨启动日志比较、完整性和历史失败隔离有自动检查；门槛保持70/100/200ms。
+- 私有逐句译文与疑义见SONG_REVIEW；字体与补字明细见FONT_REPORT。版权媒体不入Git。
+
+最终48项PC检查全部通过（P3B10 / P3C15 / fix8 / free9 / closure6），另外重新生成并
+检查29组Crucifix排版预览。补字后CJK各28599字形，实际歌词与Metadata均无缺字；
+非实际使用的320个BMP码位不支持，不能宣称覆盖全部Unicode。
+
+### SD交付
+
+- D盘仍为已确认的SD，FAT32；按旧manifest核对受管归属后同步成功，所有拷贝Hash一致。
+- 仅覆盖同一个`D:\firmware\ADV-Walkman-P3ABC-Gate.bin`（750800 bytes，Hash见表）。
+- 63个变化资源：11封面（含benchmark新ASCII）、14字体文件、10封面源图、18中日LRC、
+  10新MP3；同时更新受管资源校验清单。未删除文件，不增加其他Walkman安装BIN。
+- 原benchmark音频11972484 bytes / `4003b057…db51d63`在同步前验证不变；原LRC、
+  状态、日志及其他用户歌曲不改。旧自由日志已留存PC，SD原记录不清空。
+- 字体/源图/歌词/音频均未进入Git；无Flash写入、分区、eFuse、完整备份或push。
+
+### 真机待验
+
+普通界面自由使用，不强制顺序Gate。至少60秒自然连续播放，覆盖歌词/Cover、
+暗黑天国无歌词、跨歌偏好、导航及音量；T保存后由用户手动重启，比较暂停静音、
+歌曲/位置/偏好。播放中Seek仍单列未验，不以启动无声定位检查替代。
+A/B/C继续DEVICE TEST；P3D/P4范围不扩展。
 
 ## 0.7.4 用户真机校准 — 2026-08-27
 

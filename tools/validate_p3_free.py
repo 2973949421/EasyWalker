@@ -4,7 +4,7 @@ import re
 import zlib
 from pathlib import Path
 
-VERSION='0.7.4-p3c.tune'
+VERSION='0.7.5-p3c.closure'
 
 def checkpoints(data):
     result=[]
@@ -32,7 +32,7 @@ def evaluate(record):
     if record.get('result')=='FAIL':problems.append('device_reported_failure')
     if record.get('failure_reason')!='none':problems.append(record.get('failure_reason','missing_failure_field'))
     level=int(record.get('volume',-1));raw=int(record.get('speaker_volume_raw',-1))
-    if not 0<=level<=255 or int(record.get('speaker_volume_cap',-1))!=63 or raw!=(level*63+127)//255:
+    if not 0<=level<=255 or int(record.get('speaker_volume_cap',-1))!=102 or raw!=(level*102+127)//255:
         problems.append('volume_policy')
     for key,limit in [('audio_errors',0),('backpressure',0),('pcm_gap_max_us',70000),('present_max_us',100000),('lyric_late_max_ms',200)]:
         if int(record[key])>limit:problems.append(key)
@@ -45,15 +45,42 @@ def evaluate(record):
         if int(record[key])<=0:return 'INCOMPLETE',[key]
     return 'READY_FOR_REVIEW',['human readability / orientation / listening confirmation still required']
 
+def current_boots(records):
+    groups={}
+    for record in records:
+        if record.get('version')==VERSION:groups.setdefault(int(record['boot_id']),[]).append(record)
+    if not groups:raise ValueError('No checkpoints from current firmware; history is preserved, not accepted as new evidence')
+    return groups
+
+def reboot_evidence(groups):
+    ids=sorted(groups)
+    for before,after in zip(ids,ids[1:]):
+        saved=[r for r in groups[before] if r.get('manual_checkpoint')=='1']
+        if not saved:continue
+        a=saved[-1];b=groups[after][-1]
+        if (a.get('track')==b.get('restored_track') and a.get('preferred_view')==b.get('restored_view')
+            and b.get('startup_paused')=='1' and b.get('startup_silent')=='1' and int(b.get('startup_observed_ms',0))>=3000
+            and abs(int(a['position_ms'])-int(b['restored_position_ms']))<=10000):return True
+    return False
+
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('log',type=Path)
     args=parser.parse_args()
     records=checkpoints(args.log.read_bytes())
     # No later checkpoint may hide a recorded error from this session.
-    failed=[r for r in records if evaluate(r)[0]=='FAIL']
-    record=failed[0] if failed else records[-1]
+    groups=current_boots(records)
+    current=[r for group in groups.values() for r in group]
+    failed=[r for r in current if evaluate(r)[0]=='FAIL']
+    record=failed[0] if failed else max(current,key=lambda r:sum(r.get(k)=='COVERED' for k in ('a_auto','b_auto','c_auto')))
     status,details=evaluate(record)
+    if status!='FAIL':
+        extra=[]
+        if not reboot_evidence(groups):extra.append('manual_reboot_not_verified')
+        if not any(int(r.get('no_lyrics_view_noop',0)) for r in current):extra.append('no_lyrics_View_not_observed')
+        if not any(int(r.get('preference_track_transitions',0)) for r in current):extra.append('cross_track_preference_not_observed')
+        if extra:status='INCOMPLETE';details+=extra
+    print('boots='+','.join(map(str,groups)))
     print(f'{status}: {", ".join(details)}\ncheckpoint={record["sequence"]} version={record["version"]}')
     print(f'coverage_scope={record.get("coverage_scope","NA")}\nnot_exercised={record.get("not_exercised","NA")}')
     for key in ('track','player_state','longest_playing_ms','pcm_gap_max_us','lyrics_frames','cover_frames','lyric_deadline_updates','resource_path'):

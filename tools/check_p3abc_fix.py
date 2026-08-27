@@ -44,19 +44,19 @@ class FixChecks(unittest.TestCase):
                 unique = {g[0] for g in glyphs}
                 total = 0
                 for char in unique:
-                    name = 'latin-12' if ord(char)<256 else 'cjk-16'
+                    name = 'latin-14' if ord(char)<256 else 'cjk-18'
                     record = fonts.records[name][ord(char)]
-                    total += record[2]*record[3]
-                self.assertLessEqual(total, 16*1024)
-                self.assertLessEqual(len(unique), 240)
+                    total += (record[2]*record[3]+1)//2
+                self.assertLessEqual(total, 15*1024)
+                self.assertLessEqual(len(unique), 200)
 
     def test_compact_metrics_cover_actual_assets_and_preflight(self):
-        for name in ('cjk-12','cjk-14','cjk-16','latin-12'):
+        for name in ('cjk-12','cjk-14','cjk-16','cjk-18','latin-10','latin-12','latin-14'):
             data = (PACKAGE/f'ADVWalkman/fonts/{name}.idx').read_bytes()
             records = [struct.unpack_from('<IIHHhhhHI',data,i) for i in range(16,len(data),24)]
             for cp,offset,w,h,advance,dx,dy,px,reserved in records:
                 self.assertLessEqual(cp,65535)
-                self.assertLessEqual(max(w,h),16)
+                self.assertLessEqual(max(w,h),18)
                 self.assertTrue(-128<=dx<=127 and -128<=dy<=127)
             if name=='cjk-16':
                 self.assertTrue({0x6218,0x8056,0x3042,0x306e}<={r[0] for r in records})

@@ -711,16 +711,21 @@ Portrait 基线冻结为 `rotation 2`。V1 不使用 IMU 自动旋转 UI。
 
 ### 9.2 Screen Regions
 
-初始布局：
+按有效视图选择布局，完整呈现期间固定坐标与资源代次：
 
 ```text
 Header          28 px  (y=0)
 Content Stage  188 px  (y=28)
 Footer          24 px  (y=216)
+
+Lyrics view:
+Content Stage  216 px  (y=0; no Header)
+Footer          24 px  (y=216)
 ```
 
 135×240、rotation 2、水平边距 6 px。Title 约 14 px，Artist 12 px，Footer 时间 10 px。
-P3C Content 显示真实媒体；自由试用没有覆盖歌词的 Gate 指引。
+前一布局为Cover；Lyrics不显示/滚动不可见标题。P3C Content显示真实媒体；
+自由试用没有覆盖歌词的Gate指引。全部正常UI使用实际楷体/Times字模；故障时才备用字体。
 
 ### 9.2.1 Text Layout Contract
 
@@ -752,8 +757,9 @@ drawable rect + active font + text size + UTF-8 text + max lines + overflow poli
 UTF-8 字符边界。末行省略使用 ASCII `...`；无效 UTF-8 字节仅在显示副本中替换为
 `?` 并报告 `invalidUtf8`，源文本不变。
 
-P3A Library 名称框为 `(19, 76, 97, 38)`、字号 `1.5`、最多两行；Font0 的静态尺寸
-核对预期为 `ADVWalkman`（90 px）和 `Benchmark`（81 px），仍须联合 Gate 真机确认。
+Library名称框为`(19,76,97,38)`、12px实际SD字模、最多两行。PC实际Times字模检查和
+无声启动字体检查要求`ADVWalkmanBenchmark`完整两行、每行≤97px；旧Font0宽度不再适用，
+最终仍须真机确认可读性和裁剪。
 Renderer 返回 `UiTextLayoutResult`（行数、最大行宽、可用宽度、截断 / UTF-8 / 布局
 错误），`UiStats` 保留实际名称的最近结果及是否为 Benchmark 名称。Gate 等待返回
 Library 后的新一次绘制，才执行 `P3AGate::libraryTextPasses()`，避免读取旧页面证据。
@@ -806,9 +812,9 @@ buffer。不可拆分 SD 操作可超软预算，真实 burst / PCM 耗时仍记
 如果歌词代次或页面已变化则显示当前整帧，不能贴回过时截图。
 本次授权提前接通固定 PlayerKeys：Vol+ (13,0)、Vol− (12,0)、Play/Pause (13,1)/(13,2)、
 View (12,1)，来自官方键盘坐标。UiCoordinator 先调用真实音量 setter / play / pause，
-再派发显示事件；逻辑音量步长 8，默认 128，未增加音量存档或改 Queue / Session。
-0.7.4 的 VolumePolicy 在 PlayerRuntime 边界统一映射 raw=(level*63+127)/255；
-启动先设置 raw32 再 begin，最大 raw63。UI 与日志 volume 仍是逻辑刻度，另记
+再派发显示事件；逻辑音量步长 8，默认 80，未增加音量存档或改 Queue / Session。
+0.7.5 的 VolumePolicy 在 PlayerRuntime 边界统一映射 raw=(level*102+127)/255；
+启动先设置 raw32 再 begin，最大 raw102。UI 与日志 volume 仍是逻辑刻度，另记
 speaker_volume_raw / speaker_volume_cap，避免百分比与硬件值混淆。P0 历史基准不改。
 
 P3B 本地验证与设备验证区分：可注入时间检查、布局检查编入测试支持；真机才验证
@@ -850,7 +856,7 @@ Loading / Idle 是尚未知，不是 Missing；准备时保留完整旧画面或
 - 无可用歌词时，`View` no-op；可以显示短暂、非阻塞的 `No lyrics` 提示，但不是必做项；
 - 偏好为 Lyrics、当前歌曲无歌词时只临时显示 Cover，不修改偏好；下一首有歌词时自动回到 Lyrics；
 - 偏好为 Cover 时，无论是否有歌词都显示 Cover；
-- 切换只将 Content Stage 标记为 dirty；Header / Footer 不重建，资源加载继续 cooperative；
+- 切换按有效视图重排上方216px：Cover为Header28/Content188，Lyrics为Content216，无Header；Footer不变。完整帧固定坐标与资源代次，资源加载继续cooperative；
 - View Action 不调用 Play / Pause / Seek / Queue / Track / Sound / Volume，不改变播放进度或 Decoder 生命周期。
 
 ### 9.5 Lyrics Renderer
@@ -887,8 +893,8 @@ original block | Chinese block
 准备时不擦旧画面；自然播放最多提前 2 秒预取下一句 / 分页。中文块右、原文块左，每列向下、
 同语言向左续列；长句先多列，极长句才阅读分页，短语言不重复消失。分页按相邻
 时间戳区间分配；Pause 以 Player position 冻结，Seek 直接定位。仅当前组显示，
-首句前 Content 留空；前后句只可在内部预取，不呈现暗色预览。内框 123×174 px，
-CJK 16 px、列距 2 px、双语间距 6 px、最多六列。MediaLayout 定义这些公共常量。
+首句前 Content 留空；前后句只可在内部预取，不呈现暗色预览。内框 123×202 px，
+CJK 18 px微加粗、列距1 px、双语间距6 px、最多六列。MediaLayout定义这些公共常量。
 VerticalWords 按真实 Latin advance 预量整个英文单词；本列放不下则整体换列，
 超过整列的超长词才拆字符。计列与放置共用 advanceColumn，保证分页不会漏字。
 词内 ASCII 撇号 / 连字符保留；lookahead 超过一列即停止，无额外动态内存。
@@ -897,9 +903,10 @@ VerticalWords 按真实 Latin advance 预量整个英文单词；本列放不下
 连续推进已准备条带，然后返回音频；100 / 200 ms 限值不变。
 Gate 提示卡和真实媒体互斥，不把 STEP / 确认文字压在歌词上。
 
-CJK：楷体约 `16 px`，正常竖排；小标点右上定位，括号 / 书名号 / 引号旋转。
+CJK：楷体 `18 px` 微加粗，正常竖排；小标点右上定位，括号 / 书名号 / 引号旋转。
 
-Latin：Times New Roman 约 `12 px`，每个 glyph 单独顺时针旋转 90°后沿纵轴布局；不是整句整体旋转。V1 UI 不跟随设备物理旋转。
+Latin：Times New Roman `14 px`，每个glyph顺时针旋转90°后沿纵轴布局；不是整句整体旋转。
+整词换列按实际advance与旋转后bitmap宽度共同计算。V1 UI不跟随设备物理旋转。
 
 ### 9.6 Font Storage
 
@@ -933,7 +940,7 @@ PC Tool 负责：
 - 为每首歌曲输出独立 `/ADVWalkman/covers/<relative>/<basename>.cover.adv`；
 - 不建立 Album / Folder 共享封面或运行时 fallback 数据库。
 
-网格保留 26×20 / 30×24 / 34×26，0.7.4 默认 34×26。收紧字体单元共用空白边，
+网格保留26×20 / 30×24 / 34×26，增加40×32（默认）和48×40。可打印ASCII按轮廓、密度和边缘匹配，
 不单独放大标点；字符形状 / 密度拟合与原图取色不变。ACOV v1、120×144、34588 bytes
 总文件大小不变，不增加设备画布或工作集。
 

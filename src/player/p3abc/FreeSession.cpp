@@ -5,13 +5,18 @@
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 namespace adv_walkman { namespace player {
 namespace {constexpr const char* kLog="/ADVWalkman/logs/p3-free-last.txt";}
 void FreeSession::begin(){
     started_=lastSaved_=millis();inputCheck_=checkInputEdges();
     if(!inputCheck_)fail("input","edge_selfcheck");
     if(!SD.exists("/ADVWalkman/logs"))SD.mkdir("/ADVWalkman/logs");
-    auto f=SD.open(kLog,"w");if(f)f.close();else fail("logging","open_log");
+    // Reuse the existing buffer for a bounded tail read; never truncate history.
+    auto previous=SD.open(kLog,"r");if(previous){const size_t n=std::min<size_t>(sizeof(buffer_)-1,previous.size());previous.seek(previous.size()-n);
+        const int got=previous.read(reinterpret_cast<uint8_t*>(buffer_),n);buffer_[got>0?got:0]=0;previous.close();
+        const char* p=buffer_;while((p=std::strstr(p,"boot_id="))){bootId_=std::max(bootId_,uint32_t(std::strtoul(p+8,nullptr,10)+1));p+=8;}}
+    auto f=SD.open(kLog,"a");if(f){f.println();f.close();}else fail("logging","open_log");
 }
 void FreeSession::fail(const char* component,const char* reason){
     if(failure_[0])return;
@@ -22,6 +27,7 @@ void FreeSession::fail(const char* component,const char* reason){
 void FreeSession::action(UiAction action,const RawKeyEvent& raw,UiPage page,bool accepted){
     events_[eventCount_%12]={millis()-started_,action,page,raw.x,raw.y,accepted};++eventCount_;++actions_;
     if(action==UiAction::SaveDiagnostics){requestSave_=manual_=true;return;}
+    if(action==UiAction::ToggleView&&!accepted&&page==UiPage::Player)noLyricsPending_=true;
     if(!accepted)return;
     switch(action){
         case UiAction::Left:nav_|=1;break;case UiAction::Right:nav_|=2;break;
@@ -36,12 +42,18 @@ void FreeSession::action(UiAction action,const RawKeyEvent& raw,UiPage page,bool
 void FreeSession::observe(const UiCoordinator& ui,const PlayerRuntime& player){
     const uint32_t now=millis();const auto s=player.snapshot();const auto m=ui.nowPlaying().mediaStatus();
     const auto& font=ui.fonts();
+    if(!startupCaptured_){startupCaptured_=true;player.currentPath(restoredTrack_,sizeof(restoredTrack_));restoredPosition_=s.positionMs;
+        restoredView_=previousPreferred_=player.preferredNowPlayingView();startupPaused_=s.state==PlayerState::Paused||s.state==PlayerState::Empty;}
+    if(!actions_){startupObservedMs_=std::min<uint32_t>(3000,now-started_);if(s.pcmBuffersSinceReset)startupSilent_=false;}
+    if(noLyricsPending_){if(m.lyrics==MediaState::Missing&&m.view==MediaView::Cover&&player.preferredNowPlayingView()==previousPreferred_)++noLyricsView_;noLyricsPending_=false;}
+    if(ui.nowPlaying().model().active && m.frames && m.view==MediaView::Lyrics && ui.nowPlaying().model().headerVisible)fail("layout","lyrics_header_visible");
     minimumHeap_=std::min(minimumHeap_,ESP.getFreeHeap());
     pcmGapMaxUs_=std::max(pcmGapMaxUs_,s.pcmSubmitGapMaxUs);
     backpressure_=std::max(backpressure_,s.backpressureEvents);audioErrors_=std::max(audioErrors_,s.audioErrorEvents);
     const char* path=ui.nowPlaying().model().path;
     const bool changed=std::strcmp(track_,path)!=0;
-    if(changed){std::snprintf(track_,sizeof(track_),"%s",path);playing_=false;loading_=false;}
+    if(changed){if(track_[0]&&previousPreferred_==player.preferredNowPlayingView())++preferenceTransitions_;std::snprintf(track_,sizeof(track_),"%s",path);playing_=false;loading_=false;}
+    previousPreferred_=player.preferredNowPlayingView();
     if(s.state==PlayerState::Playing && s.sampleRateHz==44100){
         if(!playing_){playing_=true;playingAt_=now;}
         longestPlaying_=std::max(longestPlaying_,now-playingAt_);
@@ -95,8 +107,12 @@ void FreeSession::prepare(const UiCoordinator& ui,const PlayerRuntime& player){
     const bool b=longestPlaying_>=60000 && volumeEvents_ && playEvents_ && r.titleDraws && r.timeDraws;
     const bool c=lyricsReady_&&coverReady_&&lyricFrames_&&coverFrames_&&deadlineUpdates_&&viewEvents_;
     append("BEGIN sequence=%lu\n",(unsigned long)sequence_);
+    append("boot_id=%lu\nmanual_checkpoint=%u\nstate_writes=%lu\nrestored_track=%s\nrestored_position_ms=%lu\nrestored_view=%u\nstartup_paused=%u\nstartup_silent=%u\n",(unsigned long)bootId_,manual_,(unsigned long)player.stateWriteCount(),restoredTrack_,(unsigned long)restoredPosition_,restoredView_,startupPaused_,startupSilent_);
+    append("startup_observed_ms=%lu\nmuted_media_selfcheck=position_pagination_cancel\n",(unsigned long)startupObservedMs_);
+    append("effective_view=%u\nheader_visible=%u\nno_lyrics_view_noop=%lu\npreference_track_transitions=%lu\nui_latin_font=Times_New_Roman\nui_cjk_font=KaiTi\nlatin_lyric_px=14\nfont_coverage_bits=4\n",unsigned(m.view),ui.nowPlaying().model().headerVisible,(unsigned long)noLyricsView_,(unsigned long)preferenceTransitions_);
+    append("audio_service_max_us=%lu\nlibrary_service_max_us=%lu\ninput_work_max_us=%lu\nfont_service_max_us=%lu\nmedia_service_max_us=%lu\n",(unsigned long)audioMax_,(unsigned long)libraryMax_,(unsigned long)inputMax_,(unsigned long)ui.fonts().stats().serviceMaxUs,(unsigned long)m.serviceMaxUs);
     append("schema=1\nversion=%s\nmode=free\nresult=%s\nhuman_review=PENDING\na_auto=%s\nb_auto=%s\nc_auto=%s\n",ADV_WALKMAN_VERSION,failure_[0]?"FAIL":a&&b&&c?"READY_FOR_REVIEW":"INCOMPLETE",a?"COVERED":"INCOMPLETE",b?"COVERED":"INCOMPLETE",c?"COVERED":"INCOMPLETE");
-    append("coverage_scope=free_main_path\nnot_exercised=scripted_seek,reboot_view_persistence\ndisplay_selfchecks=%u\ndisplay_self_failure=%s\n",ui.stats().displaySelfChecks,ui.stats().displaySelfFailure?ui.stats().displaySelfFailure:"none");
+    append("coverage_scope=free_main_path\nnot_exercised=playing_seek;manual_reboot_requires_host_comparison\ndisplay_selfchecks=%u\ndisplay_self_failure=%s\n",ui.stats().displaySelfChecks,ui.stats().displaySelfFailure?ui.stats().displaySelfFailure:"none");
     append("resource_expected=%ld\nresource_actual=%ld\nrepeat_raw=%u\nshuffle_raw=%u\n",(long)resourceExpected_,(long)resourceActual_,unsigned(s.repeatMode),s.shuffleEnabled);
     append("speaker_volume_raw=%u\nspeaker_volume_cap=%u\nheap_free=%lu\n",player.rawSpeakerVolume(),VolumePolicy::maximumRaw,(unsigned long)ESP.getFreeHeap());
     append("lyric_font_px=%u\nlyric_columns=%u\nadjacent_preview=0\n",unsigned(MediaLayout::cell),unsigned(MediaLayout::columns));
@@ -117,7 +133,10 @@ void FreeSession::service(UiCoordinator& ui,const PlayerRuntime& player,uint32_t
     const uint32_t start=micros();
     if(file_){
         if(written_<length_){const size_t n=std::min<size_t>(512,length_-written_);if(file_.write(reinterpret_cast<const uint8_t*>(buffer_+written_),n)!=n){file_.close();fail("logging","write_log");ui.notifyLogSaved(false);length_=written_=0;lastSaved_=millis();return;}written_+=n;}
-        else{file_.flush();file_.close();lastSaved_=millis();if(writingManual_)ui.notifyLogSaved(true);writingManual_=false;}
+        else{file_.flush();const bool logOk=file_.getWriteError()==0;file_.close();lastSaved_=millis();
+            const bool persisted=player.stateStoreAvailable()&&player.lastPersistenceResult()==PersistenceResult::Ok;
+            if(!logOk)fail("logging","flush_log");if(writingManual_&&!persisted)fail("persistence","manual_checkpoint_not_saved");
+            if(writingManual_)ui.notifyLogSaved(logOk&&persisted);writingManual_=false;}
     }else if(requestSave_ || millis()-lastSaved_>=15000){
         prepare(ui,player);requestSave_=false;writingManual_=manual_;manual_=false;
         if(overflow_){fail("logging","checkpoint_buffer");lastSaved_=millis();return;}

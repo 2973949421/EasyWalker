@@ -95,13 +95,13 @@ class P3CChecks(unittest.TestCase):
         self.assertEqual(validate_cover(data),(120,144))
         for malformed in (data[:20],data[:-1],b'BAD!'+data[4:],data[:30]+bytes([data[30]^1])+data[31:]):
             with self.assertRaises(ValueError):validate_cover(malformed)
-        self.assertEqual(struct.unpack_from('<HH',data,12),(34,26))
-        preview=Image.open(LOCAL/'previews/crucifix-x-34x26.png').convert('RGB')
+        self.assertEqual(struct.unpack_from('<HH',data,12),(40,32))
+        preview=Image.open(LOCAL/'previews/crucifix-x-40x32.png').convert('RGB')
         for i,(r,g,b) in enumerate(preview.get_flattened_data()):
             self.assertEqual(struct.unpack_from('<H',data,28+i*2)[0],((r>>3)<<11)|((g>>2)<<5)|(b>>3))
 
-    def test_three_grids_are_glyphs_not_thumbnail(self):
-        for cols,rows in ((26,20),(30,24),(34,26)):
+    def test_five_grids_are_glyphs_not_thumbnail(self):
+        for cols,rows in ((26,20),(30,24),(34,26),(40,32),(48,40)):
             lines=(LOCAL/f'previews/crucifix-x-{cols}x{rows}.txt').read_text().splitlines()
             self.assertEqual(len(lines),rows)
             self.assertTrue(all(len(s)==cols for s in lines))

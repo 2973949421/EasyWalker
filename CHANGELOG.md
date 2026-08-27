@@ -1,5 +1,22 @@
 # Changelog
 
+## V0.7.5 — P3ABC closure, typography and real music library
+
+Date: 2026-08-27
+
+- Lyrics去掉Header，216px内容区配18px微加粗楷体/14px Times；Cover保留28/188/24。
+  所有正常UI统一实际SD字体度量，保留整词换列与透明音量浮层，无前后句/前奏标签。
+- 7种字体、4-bit RAM覆盖缓存、相交像素绘制，仍≤48KiB媒体预算与135×18行缓冲。
+  音量上限raw102，启动逻辑80/raw32；100%对应最初未限幅版40%，不是声压安全保证。
+- 新增10首320kbps/44.1kHz MP3、9份中文LRC与逐句审阅稿；暗黑天国无歌词。
+  9张匹配内嵌封面、Octagram Dance使用官方Completeness通常盘；默认40×32真实ASCII。
+  原输入、benchmark及日文不改；私人媒体和字体不入Git。
+- UI读取/绘制分轮，burst软预算6ms，字模只画相交区域；记录分模块耗时。
+  0.7.4约10分钟日志PCM70.494ms仍超70ms，阈值不变，不凭代码优化宣称已修复真机峰值。
+- 自由日志按boot_id跨重启追加；T先等状态保存，Host比较用户手动重启前后歌曲/位置/
+  视图及暂停静音。启动媒体自检不是播放中Seek测试，不自动操纵播放或重启。
+- 本地检查、六构建和SD交付见P3ABC_CLOSURE / P3C_VALIDATION；A/B/C保持DEVICE TEST。
+
 ## V0.7.4 — Current lyrics, whole words and calibrated volume
 
 Date: 2026-08-27
