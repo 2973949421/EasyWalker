@@ -723,7 +723,7 @@ Content Stage  216 px  (y=0; no Header)
 Footer          24 px  (y=216)
 ```
 
-135×240、rotation 2、水平边距 6 px。Title 约 14 px，Artist 12 px，Footer 时间 10 px。
+135×240、rotation 2、水平边距 6 px。Title 约 14 px，Artist 12 px，Footer 时间 14 px。
 前一布局为Cover；Lyrics不显示/滚动不可见标题。P3C Content显示真实媒体；
 自由试用没有覆盖歌词的Gate指引。全部正常UI使用实际楷体/Times字模；故障时才备用字体。
 
@@ -773,6 +773,25 @@ Footer 并增加长标题滚动；P3C 以正式 SD 中日文字体 glyph metrics
 Lyrics Renderer 保持独立竖排规则；P3D 只做字号、行距、圆弧、留白和截断阈值的
 真机视觉校准，不得把基础防越界推迟到最终阶段。
 
+### 9.2.2 Navigation and Browser Presentation
+
+0.7.6列表返回/选歌实现见 `P3C_NAVIGATION_FIX.md`：`NavigationLoad`独立记录目标路径
+对应的请求代次及Loading/Ready/Error；页面切换不等待目录或字模Ready。
+退出Player先取消媒体代次、释放歌词/封面与固定字模，再清屏，随后打开目录。
+加载中Esc能取消返回；错误Enter重试。连续5秒无扫描/排序/写索引进展报告停滞，
+六行分页准备另记录进展；无依据不归因于OOM或SD，也不扩缓存/重写排序。
+
+`MusicLibrary::cancelOpen()`只取消浏览器临时工作，不解除正在播放Queue的pin；
+`LibraryRuntime::cancelSelection()`阻止过时的待选歌请求。只有列表选歌成功才进入
+Player，通过原`selectTrack()`建立当前文件夹非递归Queue。浏览和返回不调用Stop。
+列表上下文按行准备，绘制不读SD；字模只加载固定标签/当前可见文本，不预热全ASCII。
+标题/六行/Footer分区绘制，列表选中项改变不再整屏清空；首次页面切换仍可靠清屏。
+
+Footer时间用现有Latin14，文本框`(33,2,96,16)`位于18px行缓冲，最终贴到y216；
+24px Footer、图标与进度条不变，音量百分比仍Latin10。
+布局自检在135×240显示对象上度量`(19,76,97,38)`；18px缓冲只在局部合法坐标测试墨迹。
+同一错误屏幕坐标放到18px缓冲必须被负例拒绝，不删除自检来制造通过。
+
 ### 9.3 Header Marquee
 
 Title / Artist 能完整显示时保持静态。超长 Title：
@@ -803,8 +822,11 @@ Player 自己的完整 512-byte 有界名称，以免长文件名在滚动前就
 重绘；页面切换允许一次完整初始化。固定 `135×18×2=4860 bytes` RGB565 行缓冲复用，
 不分配全屏 Sprite；UiTextLayout 面向 `lgfx::LovyanGFX`，绘制不读 SD。
 主循环保持 Player → Library → 输入 → UI burst → 日志。UI burst 最多 64 个小工作或
-16 ms 软预算，然后回到音频；避免每条 2 / 18 px 显示带之间都等待约 35 ms 的音频
+6 ms 软预算，然后回到音频；避免每条 2 / 18 px 显示带之间都等待约 35 ms 的音频
 buffer。不可拆分 SD 操作可超软预算，真实 burst / PCM 耗时仍记录，不排除慢操作。
+0.7.6在Library单次工作达到6ms时先补一次音频service，再进入输入/UI；输入耗时
+包含导航动作，额外音频service同样记峰值。日志追加目录/分页准备、实际页面完成、
+不同歌曲选择、队列数量和资源代次，音频/显示限值与首项故障分别保留。
 
 `notifyVolumeAdjusted(volume, nowMs)` 只接收已调节音量的显示事件，不改变音频音量。
 左侧浮层只有 3 px 条和透明背景数字，覆盖 Content，不改变布局；3 秒后局部恢复。

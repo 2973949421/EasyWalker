@@ -323,7 +323,7 @@ AC：
 |---|---|---|---|
 | P3A UI Foundation | DEVICE TEST | P3-01、P3-08、P3-09；P3-07 功能骨架 | `0.5.1` 功能 Gate PASS；`0.5.2` 文本修复及本地构建完成，待 Gate A-fix+B+C 回归 |
 | P3B Now Playing Chrome | DEVICE TEST | P3-02 | `0.6.0` 代码、自动检查及三环境构建完成；待联合 Gate 验收 |
-| P3C Media Resources | DEVICE TEST | P3-03～06、P3-12 | `0.7.5` 收尾：双布局、统一字体、10首新歌和自由验收；待新版日志与人工确认 |
+| P3C Media Resources | DEVICE TEST | P3-03～06、P3-12 | `0.7.6` 导航、分区绘制、自检及14px时间修复；仅本地，待与P3D合并真机确认 |
 | P3D Product UI Completion | TODO | P3-07、P3-10、P3-11 | 黑胶曲库、设置、息屏与最终校准 |
 
 P3A 编译成功后进入 `DEVICE TEST`，不能提前把 P3-01 / 08 / 09 标为 `DONE`。
@@ -334,7 +334,31 @@ P3-07 在 P3A 只完成可用骨架，最终视觉仍由 P3D 验收。
 和提交，真机仍只安装同一个 P3ABC BIN。0.7.3 改为自由试用后台分项记录，不强制用户
 按 A/B/C 顺序操作；P3A 文本回归未通过时仍不得标记 P3-01 / 08 / 09 为 `DONE`。
 
-### P3ABC 收尾 — 0.7.5
+### P3C 导航修复 — 0.7.6（当前）
+
+证据与实现：`docs/P3C_NAVIGATION_FIX.md`。不以存在10首MP3或接受Esc代替选歌成功。
+实施顺序：**P3C 修复与自动验证 → 单独规划并实施 P3D → 一次安装、合并真机验收**。
+本轮没有写 SD、没有安装，P3D 保持 TODO；不添加实体上一首/下一首。
+
+Automatic Validation：
+
+- [x] 目标页面立即切换，旧媒体取消，目录/分页异步加载，错误可重试/返回
+- [x] 导航代次、Ready/Pending/Error、5秒无进展、取消及过期结果的生产 C++ 编译期测试
+- [x] 六行窗口分步准备/绘制，按需字模；屏幕135×240和18px缓冲的正反自检
+- [x] 14px Times时间实际字模检查；播放队列仍通过当前目录 selectTrack 建立
+- [x] 日志区分自检/导航/字体/性能故障，记录实际列表成帧、不同歌曲选择和队列数量
+- [x] Dev/P3ABC/P3A/P2构建、0x140000体积及48KiB媒体编译断言；不重建P1/Benchmark
+
+Device Validation（并入后续P3D自由试用，不要求独立安装）：
+
+- [ ] 从Lyrics及Cover退出均显示干净列表，加载中Esc和失败后Enter/Esc可用
+- [ ] 可进入AveMujica，选至少两首不同歌曲（含暗黑天国），实际队列为10首
+- [ ] 浏览不改变benchmark原单曲队列；选歌后Metadata/歌词/封面归属正确
+- [ ] 跨页播放持续，光标/目录返回合理，14px时间可读且无越界
+- [ ] ≥60秒自由播放，PCM≤70ms、歌词呈现≤100ms、正常预取更新≤200ms
+- [ ] 日志及人工确认全部满足才收口A/B/C；旧154.195ms/109.328ms/687ms仍是失败证据
+
+### 历史 P3ABC 收尾 — 0.7.5
 
 本轮实施记录见 `docs/P3ABC_CLOSURE.md`，不进入P3D/P4，不重选Backend。
 
@@ -456,7 +480,7 @@ Automatic Validation — 2026-08-27：
 
 Device AC — 等待 Gate A-fix+B+C，不用构建结果代替：
 
-- [ ] 28 / 188 / 24 px 三段布局、6 px 边距；Title14 / Artist12 / 时间10 px
+- [ ] Cover 28 / 188 / 24 px、Lyrics 216 / 24 px；6 px 边距；Title14 / Artist12 / 时间14 px
 - [ ] 按歌曲路径核对异步 Title / Artist；缺失时分别回退文件名 / 留空，不串歌
 - [ ] 复用 P3A 文本布局；Header / Footer 在长文本和不同字号下均不越界
 - [ ] 长 Title 静止约 5 秒后滚动一遍

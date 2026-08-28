@@ -1,6 +1,14 @@
 # P3C validation record
 
-Current baseline: `0b185f8`; target: `0.7.5-p3c.closure`.
+Current baseline: `e7f45bd`; target: `0.7.6-p3c.navfix`.
+
+## 0.7.6 P3C导航修复 — 2026-08-28
+
+当前证据和构建表见 [`P3C_NAVIGATION_FIX.md`](P3C_NAVIGATION_FIX.md)。本次仅本地，
+未同步SD、未运行ADV。下方0.7.5同步记录是历史，不表示0.7.6已安装。
+旧日志保留：PCM154.195ms、呈现109.328ms、歌词延迟687ms；原严格条件未通过。
+本轮修复导航/字体自检/布局和诊断，不声称仅凭构建消除了这些峰值。
+先完成本地修复，再独立规划P3D；A/B/C与后续P3D一次安装合并自由验收。
 
 ## 0.7.5 P3ABC收尾 — 2026-08-27
 

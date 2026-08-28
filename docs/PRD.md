@@ -373,7 +373,7 @@ Footer 不变；Header 仅 Cover 可见，Lyrics 收回顶部空间，不残留�
 - 播放 / 暂停 / 停止 / 错误图标；非默认模式用 `1 / A / S` 表示单曲 / 列表循环 / 随机
 - 不常驻 `NORM Original`；当前无 DSP，不能伪装其他音效已生效。P4 音效反馈另行接入
 
-Footer 时间约 10 px，在歌词 / ASCII 两种状态下保持稳定。时间读取真实播放状态；重启
+Footer 时间约 14 px，在歌词 / ASCII 两种状态下保持稳定，保留24px Footer。时间读取真实播放状态；重启
 恢复尚未首次播放时显示恢复位置与 `--:--` 总时长，进度未知，不为显示额外 Probe。
 旧状态含非标准 Repeat / Shuffle 组合时显示 `?` 并记录原值，不静默修改播放状态。
 
@@ -448,7 +448,7 @@ Pause 冻结歌词位置和分页；Cover Header 标题仍可滚动，Lyrics 无
 - 歌词英文：Times New Roman `14 px`
 - Song Title：约 `14 px`
 - Artist：约 `12 px`
-- Footer 时间：约 `10 px`
+- Footer 时间：约 `14 px`
 
 真机原型允许约 `±2 px` 微调。
 

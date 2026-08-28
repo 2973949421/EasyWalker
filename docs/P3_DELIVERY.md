@@ -4,7 +4,12 @@
 > `TECH_DESIGN.md`、任务状态以 `TASKS.md` 为准。P3 不重新选择 Audio Backend，
 > 不改变 P1 Queue / Session 或 P2 Library Engine 语义。
 
-## 当前验收方式 — 0.7.5（覆盖下方历史 Gate 操作顺序）
+## 当前验收方式 — 0.7.6（覆盖下方历史 Gate 操作顺序）
+
+本轮只修复P3C导航及文字显示，**本地固件，不写SD、不要求单独安装**。
+后续顺序已获用户确认：P3C修复与自动验证 → 单独规划并实施P3D → 一次安装、
+合并真机自由验收。P3D本轮仍TODO；A/B/C保持DEVICE TEST。合并只减少安装次数，
+不能用P3D视觉完成掩盖列表返回、选歌或音频失败。详情见 `P3C_NAVIGATION_FIX.md`。
 
 工程仍按 A → B → C → D，不跳阶段；用户只安装一份同名 P3ABC BIN，但改为普通
 界面自由试用 + 后台日志，不再要求先过 A 提示卡才能看到 B/C。可以自由浏览、播放、
@@ -70,7 +75,7 @@ Gate A-fix+B+C 真机确认文本不越界后，P3-01 / P3-08 / P3-09 才完成�
 
 - 实现 Title / Artist Header、克制的长标题滚动；
 - Cover Header / Content / Footer为28 / 188 / 24 px；Lyrics为216 / 24 px且隐藏Header；
-  边距6 px，Title14 / Artist12 / 时间10 px；
+  边距6 px，Title14 / Artist12 / 时间14 px（0.7.6）；
 - 真实时间、进度、状态与紧凑模式标识，不常驻 NORM Original；透明细音量浮层 3 秒；
 - 复用 P3A 文本布局能力：Header / Footer 先保证不越界，Title / Artist 再按本阶段
   规则决定单行静态或24 px/s滚动、首尾各停5秒；Artist单行省略，Cover暂停不冻结标题，

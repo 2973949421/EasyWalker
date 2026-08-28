@@ -1,7 +1,7 @@
 # ADV Walkman
 
 > 工作名：ADV Walkman  
-> 当前阶段：P3ABC `0.7.5-p3c.closure` 显示统一 / 新曲库 / 自由验收；A/B/C 仍为 `DEVICE TEST`
+> 当前阶段：P3C `0.7.6-p3c.navfix` 列表返回 / 选歌 / 时间字号修复，仅本地；A/B/C 仍为 `DEVICE TEST`
 > 平台：M5Stack Cardputer ADV
 
 ## 1. 项目是什么
@@ -71,7 +71,18 @@ V1 不以以下内容为目标：
 
 ## 5. 当前最重要的技术任务
 
-### P3C 当前交付入口 — 0.7.5 自由试用
+### P3C 当前交付入口 — 0.7.6 导航修复（仅本地）
+
+本轮不复制 SD、不安装。顺序为 **P3C 修复与自动验证 → 单独规划并实施 P3D →
+一次安装、合并真机验收**；P3D 当前仍为 TODO，不自动开工。
+修复详情与证据见 [`P3C_NAVIGATION_FIX.md`](docs/P3C_NAVIGATION_FIX.md)。
+
+Esc 先退出歌词/封面并清屏，再异步打开播放列表；加载时仍可返回，错误显示原因，
+Enter 重试、Esc 返回。可从曲库进入 AveMujica，选中歌曲后才切换为该文件夹队列。
+浏览本身不换歌；不会把 benchmark 的单曲队列强行变成全 SD 队列。
+本轮没有提前接通实体上一首/下一首。时间改为14 px Times，音量、歌词和封面资源不改。
+
+以下为后续合并固件的自由试用方式，不要求现在安装 0.7.6：
 
 仍安装同一个 `/firmware/ADV-Walkman-P3ABC-Gate.bin`，名称保留以免增加 SD 安装项。
 启动直接进入普通界面；恢复歌曲保持 Paused。没有必须按顺序完成的提示卡、自动
@@ -99,7 +110,7 @@ Seek / 切 View / 暂停 / 重启，也不再盯着封面等 60 秒后被测试�
 Cover 保留28 / 188 / 24 px；Lyrics 隐藏歌名/歌手，将上方216 px全部留给歌词。
 歌词采用18 px微加粗楷体 / 14 px Times New Roman，只显示当前双语组；首句前留空。
 长句完整续列 / 必要时分页；英文单词放不下优先整体换列，不拆 never。
-正常UI同样统一楷体与Times，歌名14、歌手12、底栏时间10 px；透明音量条不加黑底。
+正常UI同样统一楷体与Times，歌名14、歌手12、底栏时间14 px；透明音量条不加黑底。
 ASCII 默认40×32，提供34×26 / 40×32 / 48×40预览，输出仍120×144真实字符mask。
 新版100%对应最初未限幅版40%（Speaker raw102）；启动约31%仍是raw32，不提高开机响度。
 这是当前耳机的用户校准，不是绝对安全声压保证；先从低音量试听，不必试到最大。
@@ -113,20 +124,21 @@ ASCII 默认40×32，提供34×26 / 40×32 / 48×40预览，输出仍120×144真
 .\tools\build_player.ps1 -Target Dev
 .\tools\build_player.ps1 -Target P3ABCGate
 & '.\.venv-media\Scripts\python.exe' tools/check_p3_free.py
+& '.\.venv-media\Scripts\python.exe' tools/check_p3_navigation.py
 & '.\.venv-media\Scripts\python.exe' tools/check_p3_closure.py
 & '.\.venv-media\Scripts\python.exe' tools/preview_p3_lyrics.py
 & 'B:\PlatformIO\penv\Scripts\python.exe' tools/validate_p3_free.py D:\ADVWalkman\logs\p3-free-last.txt
 ```
 
 媒体 package / 预览仍在 `test-data/local/p3-media/`，Git 忽略；只用现有独立媒体环境。
-SD 在 PC 时使用 `tools/sync_p3_media.py --sd-root D:\`，按旧清单校验归属后仅复制变化
+后续获得合并交付授权、SD 在 PC 时才使用 `tools/sync_p3_media.py --sd-root D:\`，按旧清单校验归属后仅复制变化
 资源与同名 BIN，不改其他音乐、状态或日志。资源格式见 `docs/P3C_IMPLEMENTATION.md`，
 本次自动验证、构建和 SD 交付结果见 `docs/P3C_VALIDATION.md`。
 音频 70 ms PCM / 零 Error / 零 Backpressure、歌词 100 ms 呈现 / 200 ms 到期延迟
 阈值不变；本地检查不代表实际听感、刷新或按键已通过。
 
-本版六环境构建、48项PC检查及D盘同名BIN/受管资源同步均完成，拷贝Hash一致。
-本轮实现、生成物及自由验收清单见 `docs/P3ABC_CLOSURE.md`。历史0.7.4约10分钟日志
+历史0.7.5六环境构建、48项PC检查及D盘同名BIN/受管资源同步已完成；本轮0.7.6仅本地。
+前版收尾内容见 `docs/P3ABC_CLOSURE.md`。历史0.7.4约10分钟日志
 Audio Error / Backpressure为0，但PCM峰值70.494 ms仍超70 ms；不能据此宣称收口。
 新版仍须实际显示、音频和手动重启日志通过，才将对应任务标记DONE。
 
@@ -208,7 +220,8 @@ UI、曲库 / 播放列表和跨页播放。P3B 在其上实现正式 Now Playin
 左对齐与字号；P3B 复用到 Now Playing，P3C 完成正式中日文字体适配，P3D 只做最终
 视觉校准。代码和静态尺寸检查通过不代表真机显示已通过。
 
-当前实施与真机节奏为：代码和提交继续按 `P3A text fix → P3B → P3C` 分开推进；
+以下为历史 A-fix+B+C 安排；当前按上方“P3C 修复 → 独立 P3D → 合并真机”执行。
+此前代码和提交按 `P3A text fix → P3B → P3C` 分开推进；
 由于原 Gate A 的功能与音频路径已经通过，不再要求单独安装只修换行的 P3A 固件。
 用户下一次实机操作将安装一份 Gate A-fix+B+C 固件，一次确认曲库名换行并验收
 Now Playing、字体、歌词、ASCII Cover 与 View Selector。其后只剩 P3D Gate。

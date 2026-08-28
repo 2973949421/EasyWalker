@@ -1,5 +1,20 @@
 # Changelog
 
+## V0.7.6 — P3C navigation, clean page lifecycle and readable time
+
+Date: 2026-08-28
+
+- Esc立即进入列表上下文，取消旧媒体并清屏后异步打开目录；加载中可返回，失败显示
+  原因并支持Enter重试/Esc返回。导航代次隔离旧结果，5秒无进展单列错误。
+- 六行列表分步取项、加载字模和区域绘制，移除每次预热95个ASCII；切换选中项不再
+  整屏清空。保持原当前文件夹selectTrack和Queue pin，不增加实体上一首/下一首。
+- Footer时间10→14px Times；修复把屏幕坐标用于18px行缓冲的字体自检，保留正反例。
+  字模重载在准备阶段先确认字体文件，保留原读取阶段的防错检查。
+- 日志增加实际页面完成、目录请求/错误、选歌成功/队列数量、媒体归属及模块耗时；
+  不只凭按键事件算导航通过。列表上的字体错误也记录，音频/显示阈值不放宽。
+- 本地验证和构建见 `docs/P3C_NAVIGATION_FIX.md`；不复制SD、不烧录、不改媒体/存档。
+  A/B/C仍DEVICE TEST；下一步仅到独立P3D规划入口，后续一次安装合并验收。
+
 ## V0.7.5 — P3ABC closure, typography and real music library
 
 Date: 2026-08-27
