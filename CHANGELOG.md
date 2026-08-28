@@ -1,5 +1,22 @@
 # Changelog
 
+## V0.8.1 — P3 navigation, media prefetch and stable redraw
+
+Date: 2026-08-28
+
+- Tab仅导航当前歌曲目录/Player，不改transport；Enter保留重播。列表同窗口只画新旧
+  高亮行，Metadata按路径核对；加载提示延迟250ms置于底部，最终省略文字先准备字模。
+- 同曲离页暂停资源工作、保留索引与已验证封面；当前/下一歌词两槽交换、立即预取，
+  两份紧凑布局共享字模，当前/下一/UI各自固定；增加512byte索引页缓存，不扩媒体预算。
+- 修复占位绘制结束误关封面CRC文件；动态stride兼容旧图和全宽135px新图。11张ASCII
+  从原有源图重制，未重新搜图或更换归属；居中Header、灰色首组、底栏两小标识。
+- 独立保留字体/歌词/封面/导航首错，记录Tab前后状态、歌词目标/准备/提交时间、
+  文件打开与索引命中、PCM峰值页面/代次；区分transport和persistence耗时。
+- 67项本地检查通过，包含298组真实歌词双帧+UI上限9974bytes/110项。构建与SD记录见
+  `docs/P3_OPTIMIZATION_FIX.md`；旧305.885ms PCM失败不豁免，A/B/C/D仍DEVICE TEST。
+- 六环境最终构建通过；同名联合BIN及11张歌曲ASCII已同步SD并核对，字体无需更新，
+  原音乐、歌词、存档和历史日志保持不变。
+
 ## V0.8.0 — P3D library records, settings and screen-off
 
 Date: 2026-08-28

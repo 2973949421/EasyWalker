@@ -794,7 +794,15 @@ Footer时间用现有Latin14，文本框`(33,2,96,16)`位于18px行缓冲，最�
 
 ### 9.3 Header Marquee
 
-Title / Artist 能完整显示时保持静态。超长 Title：
+P3的Tab导航、双帧预取及0.8.1修复明细见[`P3_OPTIMIZATION_FIX.md`](P3_OPTIMIZATION_FIX.md)。
+Tab只改变页面：Player→当前歌曲目录、Playlist/Library→Player；Enter仍走选歌重播。
+同曲离页暂停媒体I/O/绘制并关闲置句柄，不释放歌词索引/已验证封面；换歌才替换资源。
+列表六行窗口区分数据失效与高亮变化；最终排版文本（包括省略号/标记）准备后再绘制。
+资源prepare/current及UI使用独立pin；LyricsTimeline仅current+next文本，Renderer双布局，
+当前帧完成立即预取，显示阶段无SD读取。512byte索引页缓存、200项metrics、15KiB位图，
+含LibraryVisual与文件开销预算总计47896bytes，不突破48KiB。盖住浮层后恢复已显示帧。
+
+Cover Title / Artist能完整显示时居中、保持静态。超长 Title：
 
 ```text
 hold 5s → scroll left once → hold 5s → repeat
@@ -815,8 +823,8 @@ hold 5s → scroll left once → hold 5s → repeat
 Player 自己的完整 512-byte 有界名称，以免长文件名在滚动前就被截断。
 
 时间 / 进度只来自 Snapshot；恢复 Pause 且 duration=0 时总时长为 `--:--`、进度未知，
-不额外 Probe。模型保留原播放模式语义；显示只在非默认模式绘制 1 / A / S 标识，
-异常组合绘制 ? 并记录原值。移除常驻 NORM Original；不实现或伪装 DSP。
+不额外Probe。14px时间区域x17/width84；右侧x103～112显示顺序箭头或1/A/S，
+x118～128圆内直线表示Original。异常组合绘制?并记录原值，不伪装DSP。
 
 标题、Artist、时间 / 进度、状态行与 Content 独立更新。非 Player 页面不因秒数变化
 重绘；页面切换允许一次完整初始化。固定 `135×18×2=4860 bytes` RGB565 行缓冲复用，
@@ -912,10 +920,10 @@ original block | Chinese block
 ```
 
 换句取消横移动画；目标组布局与全部字模就绪后，固定帧数据，再分条带快速呈现。
-准备时不擦旧画面；自然播放最多提前 2 秒预取下一句 / 分页。中文块右、原文块左，每列向下、
+准备时不擦旧画面；当前帧完成立即预取下一分页/下一组，不再等剩两秒。中文块右、原文块左，每列向下、
 同语言向左续列；长句先多列，极长句才阅读分页，短语言不重复消失。分页按相邻
 时间戳区间分配；Pause 以 Player position 冻结，Seek 直接定位。仅当前组显示，
-首句前 Content 留空；前后句只可在内部预取，不呈现暗色预览。内框 123×202 px，
+首句前灰色显示首组第一页，到期原位置点亮；正常播放不显示前后句。内框123×202 px，
 CJK 18 px微加粗、列距1 px、双语间距6 px、最多六列。MediaLayout定义这些公共常量。
 VerticalWords 按真实 Latin advance 预量整个英文单词；本列放不下则整体换列，
 超过整列的超长词才拆字符。计列与放置共用 advanceColumn，保证分页不会漏字。
@@ -963,10 +971,11 @@ PC Tool 负责：
 - 不建立 Album / Folder 共享封面或运行时 fallback 数据库。
 
 网格保留26×20 / 30×24 / 34×26，增加40×32（默认）和48×40。可打印ASCII按轮廓、密度和边缘匹配，
-不单独放大标点；字符形状 / 密度拟合与原图取色不变。ACOV v1、120×144、34588 bytes
-总文件大小不变，不增加设备画布或工作集。
+不单独放大标点；字符形状/密度拟合与原图取色不变。ACOV v1头仍28bytes，方图135×135，
+其他比例适配135×188；旧120×144仍可读，不增加全屏缓冲。
 
-`.cover.adv` 使用小型 Header（Magic / Width / Height / Pixel Format）加 RGB565 Pixels。候选画布约 120×144 px，需在 135×240 逻辑竖屏真机原型中与 Header / Footer 一起校准，不在文档阶段伪装成固定像素规格。
+`.cover.adv`使用Header加RGB565 Pixels，按实际width计算stride和payload，不硬编码480bytes/两行。
+每次读取≤512bytes：135px一行270bytes；绘制居中，保持比例和完整图面。
 
 设备侧优先：
 

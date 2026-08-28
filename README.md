@@ -1,7 +1,7 @@
 # ADV Walkman
 
 > 工作名：ADV Walkman  
-> 当前阶段：P3D `0.8.0-p3d.ui` 黑胶曲库 / 设置 / 息屏，与P3C修复合并验收；未真机收口
+> 当前阶段：P3 修复 `0.8.1-p3d.fix`，Tab导航、媒体预取和稳定刷新；A/B/C/D仍待真机收口
 > 平台：M5Stack Cardputer ADV
 
 ## 1. 项目是什么
@@ -71,17 +71,25 @@ V1 不以以下内容为目标：
 
 ## 5. 当前最重要的技术任务
 
-### 当前交付入口 — 0.8.0 P3D + P3C导航修复
+### 当前交付入口 — 0.8.1 Tab导航与媒体修复
 
-顺序为 **P3C 修复与自动验证 → 独立P3D实施 → 同一BIN一次安装、合并自由验收**。
-P3D新增普通彩色曲库封面、黑胶选择带、四项中文设置、独立显示存档及息屏吞键。
+本轮实现与交付证据见 [`P3_OPTIMIZATION_FIX.md`](docs/P3_OPTIMIZATION_FIX.md)。
+67项本地检查与六环境构建通过；SD已更新同名联合BIN及11张全宽歌曲ASCII封面。
+性能和手感尚待新版真机日志，A/B/C/D不提前标记DONE。
+Player单键Tab打开当前歌曲目录并定位；Playlist/Library单键Tab回Player，保持歌曲、
+进度和暂停状态。Enter仍选歌从头播放，Esc仍逐层返回；Settings不接管Tab。
+同窗口移动只更新两行；同曲页面往返保留歌词索引和封面校验，真正换歌才替换资源。
+歌词当前＋下一组提前准备、独立字模固定；封面结束绘制不再误关校验文件。
+
+前序已按 **P3C修复 → 独立P3D实施** 完成本地交付；当前修复实测问题，仍用同一BIN合并自由验收。
+P3D已加入普通彩色曲库封面、黑胶选择带、四项中文设置、独立显示存档及息屏吞键。
 实施、构建和SD交付见 [`P3D_IMPLEMENTATION.md`](docs/P3D_IMPLEMENTATION.md)，
 P3C前置修复见 [`P3C_NAVIGATION_FIX.md`](docs/P3C_NAVIGATION_FIX.md)。
 
 Esc 先退出歌词/封面并清屏，再异步打开播放列表；加载时仍可返回，错误显示原因，
 Enter 重试、Esc 返回。可从曲库进入 AveMujica，选中歌曲后才切换为该文件夹队列。
 浏览本身不换歌；不会把 benchmark 的单曲队列强行变成全 SD 队列。
-本轮没有提前接通实体上一首/下一首。时间改为14 px Times，音量、歌词和封面资源不改。
+本轮没有提前接通实体上一首/下一首。时间保留14 px Times，音量、歌词不改；歌曲ASCII封面按原图重新生成全宽版本。
 
 合并固件自由试用，不再单独安装0.7.6：
 
@@ -98,6 +106,7 @@ Seek / 切 View / 暂停 / 重启，也不再盯着封面等 60 秒后被测试�
 | `\` 或 Enter | 播放 / 暂停，两个冻结盲操位置均可用 |
 | `] }` | Lyrics / Cover |
 | Esc | 返回播放列表；列表内继续返回曲库 |
+| Tab | Player→当前歌曲目录；Playlist/Library→Player，不重播；Settings及无当前歌曲时无动作 |
 | 方向位置、Enter | 曲库 / 播放列表导航、选歌 |
 | S（曲库页） | 进入设置；上下选择、左右调整、Enter打开内部子面板、Esc返回 |
 | T | 请求状态及诊断保存；等现有状态保存完成后显示“已保存” |
@@ -110,10 +119,11 @@ Seek / 切 View / 暂停 / 重启，也不再盯着封面等 60 秒后被测试�
 不自动重启，也不要求每首完整听完。播放中的 Seek 仍单列未验，不以无声启动自检冒充。
 
 Cover 保留28 / 188 / 24 px；Lyrics 隐藏歌名/歌手，将上方216 px全部留给歌词。
-歌词采用18 px微加粗楷体 / 14 px Times New Roman，只显示当前双语组；首句前留空。
+歌词采用18 px微加粗楷体 / 14 px Times New Roman，只显示当前双语组；首句前灰色预览第一页，到期点亮。
 长句完整续列 / 必要时分页；英文单词放不下优先整体换列，不拆 never。
 正常UI同样统一楷体与Times，歌名14、歌手12、底栏时间14 px；透明音量条不加黑底。
-ASCII 默认40×32，提供34×26 / 40×32 / 48×40预览，输出仍120×144真实字符mask。
+ASCII 默认40×32，从原图重制全宽135px真字符mask，方图135×135，其他比例适配135×188不裁切。
+Cover歌名、歌手分别居中；14px时间右侧增加播放模式和Original原声小标识，不占歌词空间。
 新版100%对应最初未限幅版40%（Speaker raw102）；启动约31%仍是raw32，不提高开机响度。
 这是当前耳机的用户校准，不是绝对安全声压保证；先从低音量试听，不必试到最大。
 默认模式不常驻 NORM Original。`/Music/AveMujica/`新增10首转码歌曲、9组中日歌词；
@@ -123,6 +133,8 @@ ASCII 默认40×32，提供34×26 / 40×32 / 48×40预览，输出仍120×144真
 本轮自由验收要点（不锁顺序）：
 
 - 从歌词及封面退回列表，去AveMujica选择至少两首不同歌曲，包含无歌词的暗黑天国。
+- 分别在播放和暂停时Tab往返，确认不重播；Enter仍重播。息屏首次Tab仅唤醒，松开再按才导航。
+- 自选Sophie、Black Birthday、Symbol 1、Crucifix X查看封面和歌词；不要求逐首完整听完。
 - 看曲库五人合图、黑胶切换和两行长名称；浏览时音乐持续。
 - 曲库按S进入设置，试调亮度；播放器默认3分钟、其他页面默认30秒，可先改成15秒测试。
 - 息屏后第一次按View或音量只亮屏，全部松开再按才执行；组合键也仅唤醒。
@@ -141,14 +153,15 @@ Launcher若出现其原有自动启动倒计时，按它的Enter提示进入菜�
 & '.\.venv-media\Scripts\python.exe' tools/check_p3_navigation.py
 & '.\.venv-media\Scripts\python.exe' tools/check_p3_closure.py
 & '.\.venv-media\Scripts\python.exe' tools/check_p3d.py
+& '.\.venv-media\Scripts\python.exe' tools/check_p3_optimization.py
 & '.\.venv-media\Scripts\python.exe' tools/preview_p3_lyrics.py
 & 'B:\PlatformIO\penv\Scripts\python.exe' tools/validate_p3_free.py D:\ADVWalkman\logs\p3-free-last.txt
 ```
 
 媒体 package / 预览仍在 `test-data/local/p3-media/`，Git 忽略；只用现有独立媒体环境。
-P3D使用`tools/prepare_p3d.py`生成独立LCOV和像素预览；本轮只同步新增曲库封面与同名BIN，
-已有字体覆盖全部新增菜单，无需重复复制；音乐、歌词、歌曲ASCII、存档与旧日志不动。
-资源格式见 `docs/TECH_DESIGN.md`；本次交付结果见 `docs/P3D_IMPLEMENTATION.md`。
+P3D独立LCOV不变；本轮用`tools/refresh_p3_covers.py`重制11张已绑定歌曲ASCII及预览，
+仅同步歌曲ASCII和同名BIN。已有字体覆盖新文字；音乐、歌词、曲库封面、存档与旧日志不动。
+资源格式见 `docs/TECH_DESIGN.md`；本次交付结果见 `docs/P3_OPTIMIZATION_FIX.md`。
 音频 70 ms PCM / 零 Error / 零 Backpressure、歌词 100 ms 呈现 / 200 ms 到期延迟
 阈值不变；本地检查不代表实际听感、刷新或按键已通过。
 
@@ -470,20 +483,20 @@ Footer
 时间 / 进度 / 播放状态 / Play Mode / Sound Preset
 ```
 
-Header / Footer 不随 View 切换变化。切换不影响歌曲、播放状态、进度、Queue、Sound Preset 或 Volume。`preferred_now_playing_view` 默认 `LYRICS` 并跨歌曲、跨重启保留；无歌词歌曲临时退化为 Cover 时不覆盖该偏好，下一首重新有歌词后会恢复 Lyrics。
+Footer不变，Header仅Cover可见。切换不影响歌曲、播放状态、进度、Queue、Sound Preset 或 Volume。`preferred_now_playing_view` 默认 `LYRICS` 并跨歌曲、跨重启保留；无歌词歌曲临时退化为 Cover 时不覆盖该偏好，下一首重新有歌词后会恢复 Lyrics。
 
-P3B 确认三区高度为 34 / 168 / 38 px；Title 约 14 px、Artist / Footer 约 12 px。
+当前Cover三区为28 / 188 / 24 px，Lyrics为216 / 24 px；Title14、Artist12、时间14 px。
 Title 单行，长标题首尾各停 5 秒、24 px/s 滚动，暂停不冻结；Artist 单行省略。
-音量不常驻 Footer，改为 Content 左侧 3 秒临时浮层；本阶段仅提供显示事件接口，
-P4 才接入真实按键。P3B 音效仍为实际 Original，不表示其他 DSP 已实现。
+音量不常驻 Footer，Content左侧3秒透明细条；已按授权接通实体Vol+/−。
+音效仍为实际 Original，不表示其他 DSP 已实现。
 
 歌词：
 
 - 逐行 LRC，不做逐字 Karaoke；
-- 上一组在左、当前组居中、下一组在右；
-- 换句时整体向左移动；
-- 中文 / CJK 使用楷体约 16 px；
-- 英文使用 Times New Roman 约 12 px，每个字形单独旋转 90°后沿纵向排列；
+- 当前双语组居中，中文右、原文左；正常播放不显示前后组；
+- 整组准备完成后切换，不做横移动画；前奏灰色首组第一页；
+- 中文 / CJK 使用楷体18 px微加粗；
+- 英文使用 Times New Roman 14 px，每个字形单独旋转90°后纵向排列，整词换列；
 - 外文歌曲优先支持“中文译文 + 原文”双语；
 - 字体资源优先放 SD。
 

@@ -4,11 +4,17 @@
 > `TECH_DESIGN.md`、任务状态以 `TASKS.md` 为准。P3 不重新选择 Audio Backend，
 > 不改变 P1 Queue / Session 或 P2 Library Engine 语义。
 
-## 当前验收方式 — 0.8.0（覆盖下方历史 Gate 操作顺序）
+## 当前验收方式 — 0.8.1（覆盖下方历史 Gate 操作顺序）
 
-P3C导航/文字本地修复已完成，本轮实施P3D黑胶曲库、显示设置、息屏及Launcher返回。
-顺序为：P3C修复与自动验证 → 独立规划并实施P3D → 同一个BIN一次安装、合并自由验收。
-A/B/C继续DEVICE TEST，D本地构建后也只进入DEVICE TEST。不能用P3D视觉完成掩盖
+当前是P3修复优化，不进入P4。Tab导航与Enter重播分离；六行列表局部更新；
+当前/下一歌词和独立字模固定；同曲页面往返保留索引/封面校验；灰色前奏预览；
+全宽135px歌曲ASCII与居中Header、小型模式/原声标识。交付见`P3_OPTIMIZATION_FIX.md`。
+0.8.0日志PCM305.885ms、呈现124.780ms、歌词迟到4170ms继续保留为失败证据，
+新版本编译或PC检查不代表这些真机峰值已消失。A/B/C/D均保持DEVICE TEST。
+
+前序已本地完成P3C导航/文字修复及P3D黑胶曲库、显示设置、息屏和Launcher返回。
+当前在此基础上修复Tab、列表和媒体性能，仍使用同一个BIN合并自由验收。
+A/B/C/D继续DEVICE TEST。不能用P3D视觉完成掩盖
 列表返回、选歌或音频失败。详情见 `P3C_NAVIGATION_FIX.md` 和 `P3D_IMPLEMENTATION.md`。
 
 工程仍按 A → B → C → D，不跳阶段；用户只安装一份同名 P3ABC BIN，但改为普通
@@ -18,7 +24,7 @@ A/B/C继续DEVICE TEST，D本地构建后也只进入DEVICE TEST。不能用P3D�
 按用户本轮授权只前置冻结的两个 Play/Pause 及 Vol+/−，其他 P4 控制 / DSP 不做。
 Cover保持28 / 188 / 24 px；Lyrics去掉Header，上方216 px显示当前双语组，
 18 px微加粗楷体 / 14 px Times、英文整词换列。所有正常UI统一楷体 / Times。
-透明细音量条、无前后句 / 前奏预览；ASCII默认40×32；100%为最初未限幅版40%，
+透明细音量条、正常播放无前后句，前奏灰色首组第一页；ASCII默认40×32；100%为最初未限幅版40%，
 启动逻辑80 / 约31%仍为raw32。新增10首AveMujica歌曲及9组中日歌词，暗黑天国无歌词。
 0.7.4约10分钟日志零Audio Error / Backpressure、歌词更新69 ms，但PCM最大70.494 ms
 仍超70 ms，不能写全通过。本轮工作包及交付证据见 `P3ABC_CLOSURE.md`。
