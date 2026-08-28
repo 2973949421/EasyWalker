@@ -13,6 +13,10 @@ class FreeSession final {
     void observe(const UiCoordinator& ui,const PlayerRuntime& player);
     void service(UiCoordinator& ui,const PlayerRuntime& player,uint32_t uiBurstUs);
     bool workDue()const{return bool(file_)||requestSave_||millis()-lastSaved_>=15000;}
+    bool storageIdle()const{return !file_;}
+    void requestManualSave(){requestSave_=manual_=true;}
+    bool manualSavePending()const{return manual_||writingManual_;}
+    bool lastSaveOk()const{return lastSaveOk_;}
     void recordBurst(uint32_t us){if(us>uiBurstMaxUs_)uiBurstMaxUs_=us;}
     void recordWork(uint32_t audio,uint32_t library,uint32_t input){audioMax_=std::max(audioMax_,audio);libraryMax_=std::max(libraryMax_,library);inputMax_=std::max(inputMax_,input);}
  private:
@@ -20,7 +24,9 @@ class FreeSession final {
     void prepare(const UiCoordinator& ui,const PlayerRuntime& player);
     void append(const char* format,...);
     fs::File file_;
-    char buffer_[8192]{},track_[512]{},failure_[64]{},component_[24]{};
+    // P3D fields plus five maximum-length paths need >8 KiB; bounded host
+    // capacity test covers the complete checkpoint including twelve events.
+    char buffer_[9216]{},track_[512]{},failure_[64]{},component_[24]{};
     char restoredTrack_[512]{};
     uint32_t bootId_=1,audioMax_=0,libraryMax_=0,inputMax_=0,restoredPosition_=0;
     uint32_t noLyricsView_=0,preferenceTransitions_=0,startupObservedMs_=0;
@@ -40,5 +46,6 @@ class FreeSession final {
     bool playing_=false,loading_=false,requestSave_=true,manual_=false,writingManual_=false;
     bool inputCheck_=false,textSeen_=false,textOk_=false,lyricsReady_=false,coverReady_=false,overflow_=false;
     uint32_t lastPageCount_=0,lastSelections_=0,lastNavigationErrors_=0;
+    bool lastSaveOk_=false;
 };
 } }

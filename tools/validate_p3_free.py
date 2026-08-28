@@ -4,7 +4,23 @@ import re
 import zlib
 from pathlib import Path
 
-VERSION='0.7.6-p3c.navfix'
+VERSION='0.8.0-p3d.ui'
+
+def evaluate_p3d(record):
+    failures=[k for k in ('settings_errors','launcher_errors','library_cover_errors') if int(record.get(k,0))]
+    if failures:return 'FAIL',failures
+    missing=[k for k in ('settings_changes','settings_writes','screen_sleeps','screen_wakes','library_cover_frames','vinyl_frames') if int(record.get(k,0))<=0]
+    if record.get('d_auto')!='COVERED':missing.append('d_auto')
+    return ('INCOMPLETE',missing) if missing else ('READY_FOR_REVIEW',['human visual and wake-key review required'])
+
+def display_reboot_evidence(groups):
+    ids=sorted(groups)
+    for before,after in zip(ids,ids[1:]):
+        saved=[r for r in groups[before] if r.get('manual_checkpoint')=='1' and r.get('settings_saved')=='1']
+        if not saved:continue
+        a=saved[-1];b=groups[after][-1]
+        if b.get('display_settings_loaded')=='1' and all(a.get(key)==b.get('restored_'+key) for key in ('brightness','player_timeout_ms','other_timeout_ms')):return True
+    return False
 
 def checkpoints(data):
     result=[]
@@ -76,12 +92,16 @@ if __name__=='__main__':
     # No later checkpoint may hide a recorded error from this session.
     groups=current_boots(records)
     current=[r for group in groups.values() for r in group]
-    failed=[r for r in current if evaluate(r)[0]=='FAIL']
-    record=failed[0] if failed else max(current,key=lambda r:sum(r.get(k)=='COVERED' for k in ('a_auto','b_auto','c_auto')))
+    failed=[r for r in current if evaluate(r)[0]=='FAIL' or evaluate_p3d(r)[0]=='FAIL']
+    record=failed[0] if failed else max(current,key=lambda r:(sum(r.get(k)=='COVERED' for k in ('a_auto','b_auto','c_auto','d_auto')),int(r['boot_id']),int(r['sequence'])))
     status,details=evaluate(record)
+    d_status,d_details=evaluate_p3d(record)
+    if d_status=='FAIL':status='FAIL';details+=d_details
+    elif status=='READY_FOR_REVIEW' and d_status=='INCOMPLETE':status='INCOMPLETE';details+=d_details
     if status!='FAIL':
         extra=[]
         if not reboot_evidence(groups):extra.append('manual_reboot_not_verified')
+        if not display_reboot_evidence(groups):extra.append('display_settings_reboot_not_verified')
         if not any(int(r.get('no_lyrics_view_noop',0)) for r in current):extra.append('no_lyrics_View_not_observed')
         if not any(int(r.get('preference_track_transitions',0)) for r in current):extra.append('cross_track_preference_not_observed')
         if extra:status='INCOMPLETE';details+=extra

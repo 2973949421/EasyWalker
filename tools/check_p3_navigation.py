@@ -39,9 +39,9 @@ class NavigationChecks(unittest.TestCase):
         self.assertIn('if (!model_.active) return false;',presenter)
         region=source('src/player/ui/PageRenderers.cpp').split('void PlaylistPageRenderer::renderRegion')[1].split('void SettingsPageRenderer')[0]
         self.assertNotIn('fillScreen(',region)
-        self.assertIn('ENTER: RETRY',region)
+        self.assertIn('Enter 重试',region)
         log=source('src/player/p3abc/FreeSession.cpp')
-        self.assertLess(log.index('if(font.stats().missing'),log.index('if(ui.page()!=UiPage::Player)'))
+        self.assertLess(log.index('if(font.stats().missing'),log.index('if(ui.page()!=UiPage::Player||'))
 
     def test_actual_footer_metrics(self):
         raw=(PACKAGE/'ADVWalkman/fonts/latin-14.idx').read_bytes()

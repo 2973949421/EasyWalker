@@ -59,7 +59,7 @@ LibraryResult LibraryCatalog::selected(MusicLibrary& library,
     if (selectedIndex_ == directoryCount_) {
         output.uncategorized = true;
         output.rootEntryIndex = directoryCount_;
-        std::strcpy(output.name, "Uncategorized");
+        std::strcpy(output.name, "未分类");
         std::strcpy(output.path, MusicLibrary::kMusicRoot);
         return LibraryResult::Ok;
     }

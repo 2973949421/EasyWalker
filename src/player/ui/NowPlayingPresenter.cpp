@@ -226,13 +226,14 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
         clearPage_ = false;
         ++stats_.pageClears;
     } else if (model_.dirty & DirtyTitle) {
+        if(fonts_&&!model_.title[0]&&!fonts_->requestUiWindow("暂无歌曲",14,0,123,1))return false;
         // Measure the whole title before drawing a clipped visible window.
         if(fonts_){bool invalid=false;const char* p=model_.title;while(*p){auto cp=mediaCodepoint(p,invalid);if(cp<256&&!fonts_->requestMetric(cp,FontCache::faceFor(cp,14)))return false;}
             measureTitle(millis());if(!fonts_->requestUiWindow(model_.title,14,model_.titleOffsetPx,123,1))return false;}
         prepareRow(16, kBackground, kTitleSize);
         CachedUiFont font(fonts_,14); if(fonts_)row_.setFont(&font);
         row_.setTextColor(kAccent, kBackground);
-        UiTextLayout::drawScrolledLine(row_, model_.title[0] ? model_.title : "No track",
+        UiTextLayout::drawScrolledLine(row_, model_.title[0] ? model_.title : "暂无歌曲",
                                        {6, 1, 123, 15, 1, 0, false}, model_.titleOffsetPx);
         pushRow(display, 0);
         model_.clearDirty(DirtyTitle);
@@ -248,7 +249,7 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
         ++stats_.artistDraws;
         row_.setFont(&fonts::Font0);
     } else if (model_.dirty & (DirtyTime|DirtyStatus)) {
-        if(fonts_&&!fonts_->requestUiWindow("0123456789:/-?ASLOG VEDR",14,0,1000,1))return false;
+        if(fonts_&&!fonts_->requestUiWindow("0123456789:/-?AS 已保存 保存失败",14,0,1000,1))return false;
         prepareRow(18, kBackground, 1.0f);
         CachedUiFont font(fonts_,14);if(fonts_)row_.setFont(&font);
         drawStateIcon(model_.state);
@@ -264,7 +265,7 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
         if (model_.durationMs) formatTime(duration, sizeof(duration), model_.durationMs);
         else std::strcpy(duration, "--:--");
         std::snprintf(text, sizeof(text), "%s/%s", position, duration);
-        UiTextLayout::draw(row_, logNote_?(logNote_==1?"LOG SAVED":"LOG ERROR"):text, {33, 2, 96, 16, 1, 0, true});
+        UiTextLayout::draw(row_, logNote_?(logNote_==1?"已保存":"保存失败"):text, {33, 2, 96, 16, 1, 0, true});
         pushRow(display, G::footerY);
         row_.setFont(&fonts::Font0);
         model_.clearDirty(DirtyTime|DirtyStatus);

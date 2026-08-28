@@ -4,9 +4,15 @@
 #include "PlayerKeys.h"
 namespace adv_walkman { namespace player {
 bool InputRouter::poll(UiAction& action,RawKeyEvent& raw,bool playerPage){
-    action=UiAction::None;raw=RawKeyEvent{};uint64_t mask=0;
+    return pollMask(physicalMask(),millis(),action,raw,playerPage);
+}
+uint64_t InputRouter::physicalMask(){uint64_t mask=0;
     for(const auto& p:M5Cardputer.Keyboard.keyList())if(p.x>=0&&p.x<14&&p.y>=0&&p.y<4)mask|=uint64_t(1)<<(p.y*14+p.x);
-    uint8_t key;if(!edges_.sample(mask,millis(),key))return false;
+    return mask;
+}
+bool InputRouter::pollMask(uint64_t mask,uint32_t now,UiAction& action,RawKeyEvent& raw,bool playerPage){
+    action=UiAction::None;raw=RawKeyEvent{};
+    uint8_t key;if(!edges_.sample(mask,now,key))return false;
     raw.x=key%14;raw.y=key/14;raw.fn=false;raw.keyCount=1;
     const auto at=[&](int x,int y){return raw.x==x&&raw.y==y;};
     if(at(0,0))action=UiAction::Back;

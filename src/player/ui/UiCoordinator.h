@@ -9,17 +9,32 @@
 #include "PageRenderers.h"
 #include "NowPlayingPresenter.h"
 #include "UiTypes.h"
+#include "LibraryVisual.h"
+#include "SettingsPanel.h"
 #include "player/app/LibraryRuntime.h"
 #include "player/app/PlayerRuntime.h"
 
 namespace adv_walkman {
 namespace player {
+constexpr size_t kP3DMediaBudgetBytes=kMediaBudgetBytes+sizeof(LibraryVisual);
+static_assert(kP3DMediaBudgetBytes<=48*1024,"P3D media memory exceeds 48 KiB");
 
 class UiCoordinator final {
   public:
     bool begin(M5GFX& display, PlayerRuntime& player,
                LibraryRuntime& libraryRuntime);
     void service();
+    void serviceBackground(bool logIdle);
+    bool physicalActivity(uint64_t mask,uint32_t now);
+    void recordSuppressedAction(){++suppressedActions_;}
+    uint32_t suppressedActions()const{return suppressedActions_;}
+    const ScreenPowerController& screenPower()const{return power_;}
+    const SettingsPanel& settings()const{return settings_;}
+    const LibraryVisual& libraryVisual()const{return libraryVisual_;}
+    bool settingsBusy()const{return settings_.store.writing();}
+    bool displaySettingsSaved()const{return settings_.store.idle()&&settings_.store.error()[0]=='n';}
+    bool readyToReturn()const{return settings_.readyToReturn();}
+    void finishLauncherReturn(bool logOk){settings_.finishReturn(logOk);}
     bool handleAction(UiAction action);
     // Deterministic test entry; changes only the visible page and browser.
     // It does not stop or alter the restored Player state.
@@ -131,6 +146,13 @@ class UiCoordinator final {
     uint8_t prepareRow_ = 0, drawRegion_ = 0;
     NowPlayingPresenter nowPlaying_;
     FontCache fonts_;
+    LibraryVisual libraryVisual_;
+    SettingsPanel settings_;
+    ScreenPowerController power_;
+    bool p3dPrepared_=false,libraryVisualDirty_=true;
+    int libraryMoveDirection_=0;
+    uint8_t appliedBrightness_=255;
+    uint32_t suppressedActions_=0;
 };
 
 }  // namespace player

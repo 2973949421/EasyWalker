@@ -81,7 +81,13 @@ void FreeSession::observe(const UiCoordinator& ui,const PlayerRuntime& player){
         if(!failure_[0]){font.failurePath(resourcePath_,sizeof(resourcePath_));resourceErrno_=font.failure().systemError;resourceExpected_=font.failure().expected;resourceActual_=font.failure().actual;std::snprintf(resourceOperation_,sizeof(resourceOperation_),"%s",font.failure().operation);}
         fail("font",font.stats().drawMisses?"glyph_draw_missing":font.stats().capacityErrors?"glyph_cache_capacity":font.failure().reason);
     }
-    if(ui.page()!=UiPage::Player){loading_=false;return;}
+    if(ui.settings().store.errors)fail("settings",ui.settings().store.error());
+    if(ui.settings().returnErrors)fail("launcher",ui.settings().returnError());
+    if(ui.libraryVisual().cover.errors){const auto& cover=ui.libraryVisual().cover;
+        if(!failure_[0]){std::snprintf(resourcePath_,sizeof(resourcePath_),"%s",cover.path());resourceErrno_=cover.failure().systemError;
+            std::snprintf(resourceOperation_,sizeof(resourceOperation_),"%s",cover.failure().operation);}
+        fail("library_cover",cover.failure().reason);}
+    if(ui.page()!=UiPage::Player||ui.screenPower().asleep()){loading_=false;return;}
     lyricFrames_=std::max(lyricFrames_,m.lyricsFrames);coverFrames_=std::max(coverFrames_,m.coverFrames);
     deadlineUpdates_=std::max(deadlineUpdates_,m.deadlineUpdates);
     prepareMaxUs_=std::max(prepareMaxUs_,m.prepareMaxUs);presentMaxUs_=std::max(presentMaxUs_,m.presentMaxUs);lateMaxMs_=std::max(lateMaxMs_,m.lyricLateMaxMs);
@@ -114,12 +120,21 @@ void FreeSession::prepare(const UiCoordinator& ui,const PlayerRuntime& player){
     const bool a=textSeen_&&textOk_&&u.playlistFrames&&u.libraryFrames&&u.differentTrackSelections;
     const bool b=longestPlaying_>=60000 && volumeEvents_ && playEvents_ && r.titleDraws && r.timeDraws;
     const bool c=lyricsReady_&&coverReady_&&lyricFrames_&&coverFrames_&&deadlineUpdates_&&viewEvents_;
+    const auto& ds=ui.settings();const auto& power=ui.screenPower();const auto& visual=ui.libraryVisual();
+    const bool d=visual.coverFrames&&visual.frames&&ds.changes&&ds.store.writes&&power.sleeps&&power.wakes;
     append("BEGIN sequence=%lu\n",(unsigned long)sequence_);
     append("boot_id=%lu\nmanual_checkpoint=%u\nstate_writes=%lu\nrestored_track=%s\nrestored_position_ms=%lu\nrestored_view=%u\nstartup_paused=%u\nstartup_silent=%u\n",(unsigned long)bootId_,manual_,(unsigned long)player.stateWriteCount(),restoredTrack_,(unsigned long)restoredPosition_,restoredView_,startupPaused_,startupSilent_);
     append("startup_observed_ms=%lu\nmuted_media_selfcheck=position_pagination_cancel\n",(unsigned long)startupObservedMs_);
     append("effective_view=%u\nheader_visible=%u\nno_lyrics_view_noop=%lu\npreference_track_transitions=%lu\nui_latin_font=Times_New_Roman\nui_cjk_font=KaiTi\nlatin_lyric_px=14\nfont_coverage_bits=4\n",unsigned(m.view),ui.nowPlaying().model().headerVisible,(unsigned long)noLyricsView_,(unsigned long)preferenceTransitions_);
     append("audio_service_max_us=%lu\nlibrary_service_max_us=%lu\ninput_work_max_us=%lu\nfont_service_max_us=%lu\nmedia_service_max_us=%lu\n",(unsigned long)audioMax_,(unsigned long)libraryMax_,(unsigned long)inputMax_,(unsigned long)ui.fonts().stats().serviceMaxUs,(unsigned long)m.serviceMaxUs);
-    append("schema=1\nversion=%s\nmode=free\nresult=%s\nhuman_review=PENDING\na_auto=%s\nb_auto=%s\nc_auto=%s\n",ADV_WALKMAN_VERSION,failure_[0]?"FAIL":a&&b&&c?"READY_FOR_REVIEW":"INCOMPLETE",a?"COVERED":"INCOMPLETE",b?"COVERED":"INCOMPLETE",c?"COVERED":"INCOMPLETE");
+    append("schema=1\nversion=%s\nmode=free\nresult=%s\nhuman_review=PENDING\na_auto=%s\nb_auto=%s\nc_auto=%s\nd_auto=%s\n",ADV_WALKMAN_VERSION,failure_[0]?"FAIL":a&&b&&c&&d?"READY_FOR_REVIEW":"INCOMPLETE",a?"COVERED":"INCOMPLETE",b?"COVERED":"INCOMPLETE",c?"COVERED":"INCOMPLETE",d?"COVERED":"INCOMPLETE");
+    append("brightness=%u\nplayer_timeout_ms=%lu\nother_timeout_ms=%lu\ndisplay_settings_loaded=%u\nrestored_brightness=%u\nrestored_player_timeout_ms=%lu\nrestored_other_timeout_ms=%lu\nsettings_changes=%lu\nsettings_writes=%lu\nsettings_errors=%lu\nsettings_saved=%u\nsettings_service_max_us=%lu\n",
+        ds.store.value.brightness,(unsigned long)displayTimeoutMs(ds.store.value.playerTimeout),(unsigned long)displayTimeoutMs(ds.store.value.otherTimeout),ds.store.loaded,ds.store.restored.brightness,
+        (unsigned long)displayTimeoutMs(ds.store.restored.playerTimeout),(unsigned long)displayTimeoutMs(ds.store.restored.otherTimeout),(unsigned long)ds.changes,(unsigned long)ds.store.writes,(unsigned long)ds.store.errors,ui.displaySettingsSaved(),(unsigned long)ds.store.serviceMaxUs);
+    append("screen_asleep=%u\nwake_swallowing=%u\nscreen_sleeps=%lu\nscreen_wakes=%lu\nlibrary_cover_frames=%lu\nvinyl_frames=%lu\nlibrary_cover_state=%u\nlibrary_cover_errors=%lu\nlibrary_cover_service_max_us=%lu\nlauncher_requests=%lu\nlauncher_errors=%lu\nlauncher_error=%s\n",
+        power.asleep(),power.swallowing(),(unsigned long)power.sleeps,(unsigned long)power.wakes,(unsigned long)visual.coverFrames,(unsigned long)visual.frames,unsigned(visual.cover.state()),(unsigned long)visual.cover.errors,(unsigned long)visual.cover.serviceMaxUs,(unsigned long)ds.returnRequests,(unsigned long)ds.returnErrors,ds.returnError());
+    append("wake_mask_high=%lu\nwake_mask_low=%lu\nwake_suppressed_actions=%lu\nsettings_invalid_slots=%lu\nsettings_open_failures=%lu\n",
+        (unsigned long)(power.lastWakeMask>>32),(unsigned long)power.lastWakeMask,(unsigned long)ui.suppressedActions(),(unsigned long)ds.store.invalidSlots,(unsigned long)ds.store.openFailures);
     append("nav_state=%u\nnav_generation=%lu\nnav_target=%s\nnav_error=%s\nnav_errors=%lu\npage_frame_complete=%u\nplaylist_frames=%lu\nlibrary_frames=%lu\ntrack_selections=%lu\ndifferent_track_selections=%lu\nqueue_count=%u\nselected_queue_count=%lu\ncurrent_index=%u\ntime_font_px=14\n",
         unsigned(u.navigationState),(unsigned long)u.navigationGeneration,ui.navigationTarget(),ui.navigationError()[0]?ui.navigationError():"none",(unsigned long)u.navigationErrors,u.pageFirstFrameComplete,
         (unsigned long)u.playlistFrames,(unsigned long)u.libraryFrames,(unsigned long)u.trackSelections,(unsigned long)u.differentTrackSelections,unsigned(s.queueCount),(unsigned long)u.lastQueueCount,unsigned(s.currentIndex));
@@ -139,7 +154,7 @@ void FreeSession::prepare(const UiCoordinator& ui,const PlayerRuntime& player){
     append("input_selfcheck=%u\nactions=%lu\nnav_mask=%lu\nvolume_events=%lu\nplay_events=%lu\nview_events=%lu\nlibrary_text_seen=%u\nlibrary_text_ok=%u\nlibrary_width_px=%lu\n",inputCheck_,(unsigned long)actions_,(unsigned long)nav_,(unsigned long)volumeEvents_,(unsigned long)playEvents_,(unsigned long)viewEvents_,textSeen_,textOk_,(unsigned long)libraryWidth_);
     append("longest_playing_ms=%lu\naudio_errors=%lu\nbackpressure=%lu\npcm_gap_max_us=%lu\npcm_buffers=%lu\n",(unsigned long)longestPlaying_,(unsigned long)audioErrors_,(unsigned long)backpressure_,(unsigned long)pcmGapMaxUs_,(unsigned long)s.pcmBuffersSinceReset);
     append("lyrics_state=%u\ncover_state=%u\nlyrics_frames=%lu\ncover_frames=%lu\nlyric_deadline_updates=%lu\nprepare_max_us=%lu\npresent_max_us=%lu\nlyric_late_max_ms=%lu\nresource_bytes=%lu\n",unsigned(m.lyrics),unsigned(m.cover),(unsigned long)lyricFrames_,(unsigned long)coverFrames_,(unsigned long)deadlineUpdates_,(unsigned long)prepareMaxUs_,(unsigned long)presentMaxUs_,(unsigned long)lateMaxMs_,(unsigned long)m.reads);
-    append("overlay_patches=%lu\nrender_max_us=%lu\nui_burst_max_us=%lu\nlog_write_max_us=%lu\nminimum_heap=%lu\nmedia_budget_bytes=%u\n",(unsigned long)r.overlayPatches,(unsigned long)r.renderMaxUs,(unsigned long)uiBurstMaxUs_,(unsigned long)writeMaxUs_,(unsigned long)minimumHeap_,unsigned(kMediaBudgetBytes));
+    append("overlay_patches=%lu\nrender_max_us=%lu\nui_burst_max_us=%lu\nlog_write_max_us=%lu\nminimum_heap=%lu\nmedia_budget_bytes=%u\n",(unsigned long)r.overlayPatches,(unsigned long)r.renderMaxUs,(unsigned long)uiBurstMaxUs_,(unsigned long)writeMaxUs_,(unsigned long)minimumHeap_,unsigned(kP3DMediaBudgetBytes));
     const uint32_t first=eventCount_>12?eventCount_-12:0;
     for(uint32_t i=first;i<eventCount_;++i){const auto& e=events_[i%12];append("event_%lu=%lu,%s,%s,%d,%d,%u\n",(unsigned long)i,(unsigned long)e.ms,uiPageName(e.page),uiActionName(e.action),e.x,e.y,e.accepted);}
     const uint32_t crc=mediaCrc(~0U,reinterpret_cast<const uint8_t*>(buffer_),length_)^~0U;
@@ -147,20 +162,23 @@ void FreeSession::prepare(const UiCoordinator& ui,const PlayerRuntime& player){
 }
 void FreeSession::service(UiCoordinator& ui,const PlayerRuntime& player,uint32_t uiBurstUs){
     uiBurstMaxUs_=std::max(uiBurstMaxUs_,uiBurstUs);
-    if(ui.nowPlaying().presentingLyrics() || !player.persistenceIdle())return;
+    if(ui.nowPlaying().presentingLyrics() || !player.persistenceIdle() || ui.settingsBusy())return;
+    if(manual_&&!ui.settings().store.idle())return;
     const uint32_t start=micros();
     if(file_){
-        if(written_<length_){const size_t n=std::min<size_t>(512,length_-written_);if(file_.write(reinterpret_cast<const uint8_t*>(buffer_+written_),n)!=n){file_.close();fail("logging","write_log");ui.notifyLogSaved(false);length_=written_=0;lastSaved_=millis();return;}written_+=n;}
+        if(written_<length_){const size_t n=std::min<size_t>(512,length_-written_);if(file_.write(reinterpret_cast<const uint8_t*>(buffer_+written_),n)!=n){file_.close();writingManual_=lastSaveOk_=false;fail("logging","write_log");ui.notifyLogSaved(false);length_=written_=0;lastSaved_=millis();return;}written_+=n;}
         else{file_.flush();const bool logOk=file_.getWriteError()==0;file_.close();lastSaved_=millis();
             const bool persisted=player.stateStoreAvailable()&&player.lastPersistenceResult()==PersistenceResult::Ok;
             if(!logOk)fail("logging","flush_log");if(writingManual_&&!persisted)fail("persistence","manual_checkpoint_not_saved");
-            if(writingManual_)ui.notifyLogSaved(logOk&&persisted);writingManual_=false;}
+            lastSaveOk_=logOk&&persisted&&ui.displaySettingsSaved();
+            if(writingManual_)ui.notifyLogSaved(lastSaveOk_);writingManual_=false;}
     }else if(requestSave_ || millis()-lastSaved_>=15000){
         prepare(ui,player);requestSave_=false;writingManual_=manual_;manual_=false;
-        if(overflow_){fail("logging","checkpoint_buffer");lastSaved_=millis();return;}
+        lastSaveOk_=false;
+        if(overflow_){writingManual_=false;fail("logging","checkpoint_buffer");ui.notifyLogSaved(false);lastSaved_=millis();return;}
         file_=SD.open(kLog,"a");
-        if(file_){if(!file_.setBufferSize(512)){file_.close();fail("logging","log_buffer");ui.notifyLogSaved(false);lastSaved_=millis();}}
-        else{fail("logging","open_log");ui.notifyLogSaved(false);lastSaved_=millis();}
+        if(file_){if(!file_.setBufferSize(512)){file_.close();writingManual_=false;fail("logging","log_buffer");ui.notifyLogSaved(false);lastSaved_=millis();}}
+        else{writingManual_=false;fail("logging","open_log");ui.notifyLogSaved(false);lastSaved_=millis();}
     }
     writeMaxUs_=std::max<uint32_t>(writeMaxUs_,micros()-start);
 }

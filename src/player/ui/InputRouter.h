@@ -12,6 +12,8 @@ namespace player {
 class InputRouter final {
   public:
     bool poll(UiAction& action, RawKeyEvent& raw, bool playerPage=false);
+    static uint64_t physicalMask();
+    bool pollMask(uint64_t mask,uint32_t now,UiAction& action,RawKeyEvent& raw,bool playerPage);
 
   private:
     InputEdges edges_;

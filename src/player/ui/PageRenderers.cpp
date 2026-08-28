@@ -109,12 +109,12 @@ void PlaylistPageRenderer::renderRegion(M5GFX& display,
     display.fillRect(0,0,display.width(),43,kBackground);
     display.setTextWrap(false);display.setTextSize(1.0f);
     display.setTextColor(kAccent,kBackground);
-    display.setCursor(7,7);display.print("PLAYLIST");
+    display.setCursor(7,7);display.print("播放列表");
     display.drawFastHLine(6,25,display.width()-12,kMuted);
     display.setTextSize(1.0f);
     display.setTextColor(kMuted, kBackground);
     UiTextLayout::draw(display,
-                       context.libraryName[0] == '\0' ? "Loading..."
+                       context.libraryName[0] == '\0' ? "加载中"
                                                        : context.libraryName,
                        textBox(6, 28, display.width() - 12, 13));
     return;
@@ -150,14 +150,14 @@ void PlaylistPageRenderer::renderRegion(M5GFX& display,
     if(region!=kP3AVisibleRows+1)return;
     if (context.playlistCount == 0 && context.error == nullptr) {
         display.setTextColor(kMuted, kBackground);
-        UiTextLayout::draw(display, "No playable entries",
+        UiTextLayout::draw(display, "暂无歌曲",
                            textBox(12, 90, display.width() - 24, 32, 2));
     }
     if(context.error) {
         display.setTextColor(TFT_ORANGE,kBackground);
         UiTextLayout::draw(display,context.error,textBox(10,75,display.width()-20,72,4));
     }
-    footer(display, context.error ? "ENTER: RETRY\nESC: BACK" : context.hint == nullptr ? "UP/DOWN + ENTER\nESC: BACK" : context.hint);
+    footer(display, context.error ? "Enter 重试\nEsc 返回" : context.hint == nullptr ? "上下选择 Enter播放\nEsc 返回" : context.hint);
 }
 
 void SettingsPageRenderer::render(M5GFX& display,

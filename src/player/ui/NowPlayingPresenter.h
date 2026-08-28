@@ -51,6 +51,8 @@ class NowPlayingPresenter final {
     bool renderOne(M5GFX& display);
     const NowPlayingModel& model() const { return model_; }
     const NowPlayingRenderStats& stats() const { return stats_; }
+    // Browser/settings borrow the existing stripe only while Player is inactive.
+    M5Canvas& sharedRow() { row_.setBuffer(pixels_,135,18,16);row_.setTextWrap(false);return row_; }
 
   private:
     friend P3BCheckResult checkP3BOverlayRestoration(NowPlayingPresenter& presenter);

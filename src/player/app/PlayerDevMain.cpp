@@ -26,6 +26,7 @@ LibraryRuntime libraryRuntime;
 UiCoordinator ui;
 InputRouter input;
 bool ready=false;
+bool returnCheckpointRequested=false;
 
 #if defined(P3A_DEVICE_GATE)
 P3AGate gate;
@@ -70,7 +71,7 @@ void setup() {
     const bool uiReady = libraryReady &&
                          ui.begin(M5Cardputer.Display, player, libraryRuntime);
     Serial.printf(
-        "boot app=adv-walkman-p3c version=%s sd=%d player=%d library=%d ui=%d "
+        "boot app=adv-walkman-p3d version=%s sd=%d player=%d library=%d ui=%d "
         "display=%dx%d rotation=%u\n",
         ADV_WALKMAN_VERSION, sdReady, playerReady, libraryReady, uiReady,
         M5Cardputer.Display.width(), M5Cardputer.Display.height(),
@@ -107,9 +108,21 @@ void loop() {
     if(libraryUs>=6000){workAt=micros();player.service();audioUs=std::max<uint32_t>(audioUs,micros()-workAt);}
     workAt=micros();M5Cardputer.update();
 
+#if defined(P3A_DEVICE_GATE)
+    ui.serviceBackground(true);
+#else
+    ui.serviceBackground(session.storageIdle());
+#endif
+
     UiAction action = UiAction::None;
     RawKeyEvent raw;
-    if (input.poll(action, raw, ui.page()==UiPage::Player)) {
+    const uint32_t inputNow=millis();const uint64_t physical=input.physicalMask();
+    const bool dispatch=ui.physicalActivity(physical,inputNow);
+    // Always advance debouncing while swallowed; a held wake key must never
+    // become a fresh action on the next loop.
+    const bool hasAction=input.pollMask(physical,inputNow,action,raw,ui.page()==UiPage::Player);
+    if(hasAction&&!dispatch)ui.recordSuppressedAction();
+    if (hasAction && dispatch) {
 #if defined(P3A_DEVICE_GATE)
         const bool consumed = gate.beforeAction(action, raw, ui.page());
         if (!consumed) {
@@ -128,6 +141,7 @@ void loop() {
 #if !defined(P3A_DEVICE_GATE)
     session.recordWork(audioUs,libraryUs,micros()-workAt);
 #endif
+    if(micros()-workAt>=6000){player.service();}
 
 #if defined(P3A_DEVICE_GATE)
     gate.service(ui, player);
@@ -154,10 +168,14 @@ void loop() {
     const uint32_t burstUs=micros()-burstAt;
     // Logging gets a fresh audio service boundary, not the tail of a render
     // burst. Actual logging and resource load remain inside PCM measurement.
-    if(session.workDue() && !ui.nowPlaying().presentingLyrics()){
+    if(session.workDue() && !ui.nowPlaying().presentingLyrics() && !ui.settingsBusy()){
         workAt=micros();player.service();session.recordWork(micros()-workAt,0,0);
         session.service(ui,player,burstUs);
     }else session.recordBurst(burstUs);
+    if(ui.readyToReturn()){
+        if(!returnCheckpointRequested){session.requestManualSave();returnCheckpointRequested=true;}
+        else if(session.storageIdle()&&!session.manualSavePending())ui.finishLauncherReturn(session.lastSaveOk());
+    }else returnCheckpointRequested=false;
 #endif
     delay(1);
 }
