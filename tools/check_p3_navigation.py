@@ -61,7 +61,8 @@ class NavigationChecks(unittest.TestCase):
 
     def test_reload_and_diagnostics_are_not_silenced(self):
         font=source('src/player/ui/media/FontCache.cpp')
-        self.assertIn('currentFont_==font&&index_&&fontFile_?(old->offset?4:3):1',font)
+        self.assertIn('currentFont_==font&&fontFile_&&(old->offset||index_)?(old->offset?4:3):1',font)
+        self.assertIn('if(g.offset&&!metricOnly_&&indexes_[g.font].paired)',font)
         self.assertIn('if(currentFont_!=g.font || !fontFile_){phase_=1;}',font)
         ui=source('src/player/ui/UiCoordinator.cpp')
         self.assertIn('navigation_.observe(browserRequest_',ui)
@@ -81,6 +82,7 @@ class NavigationChecks(unittest.TestCase):
     def test_failure_and_coverage_evidence(self):
         r=dict(version=VERSION,mode='free',result='READY_FOR_REVIEW',failure_reason='none',volume='80',speaker_volume_raw='32',speaker_volume_cap='102',audio_errors='0',backpressure='0',pcm_gap_max_us='40000',present_max_us='90000',lyric_late_max_ms='90',a_auto='COVERED',b_auto='COVERED',c_auto='COVERED',longest_playing_ms='61000',lyrics_frames='2',cover_frames='2',lyric_deadline_updates='1',view_events='1',volume_events='1',play_events='1',library_text_ok='1',playlist_frames='1',library_frames='1',different_track_selections='1',time_font_px='14')
         r.update(tab_playing='2',tab_paused='2')
+        r.update(render_contract='1',render_pixel_selfcheck='PASS',frame_starts='4',frame_rejects='0',frame_repairs='0',frame_failure='none',frame_pending='0',frame_expected_rows='188',frame_submitted_rows='188',frame_complete_ms='100',full_frames='4')
         r.update(input_accept_max_ms='25',selection_feedback_max_ms='50',warm_return_max_ms='100',view_warm_max_ms='100',view_cold_max_ms='1000',view_failures='0',input_queue_overflow='0',warm_returns='2',view_warm_completed='1',view_cold_completed='1')
         self.assertEqual(evaluate(r)[0],'READY_FOR_REVIEW')
         for key,value,expected in [('playlist_frames','0','INCOMPLETE'),('different_track_selections','0','INCOMPLETE'),('nav_errors','1','FAIL'),('display_self_failure','actual_font_layout','FAIL'),('pcm_gap_max_us','154195','FAIL'),('present_max_us','109328','FAIL'),('lyric_late_max_ms','687','FAIL')]:

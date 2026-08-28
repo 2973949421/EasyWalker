@@ -9,7 +9,7 @@ void CoverRenderer::selectTrack(const char* track){
     state_=MediaState::Loading;phase_=1;
 }
 void CoverRenderer::service(){
-    auto fail=[&](const char* reason){if(std::strcmp(failure_.reason,reason))failure_.set(reason,"validate",errno);state_=MediaState::Error;error_=reason;phase_=0;file_.close();++revision_;};
+    auto fail=[&](const char* reason){band_.cancel();if(std::strcmp(failure_.reason,reason))failure_.set(reason,"validate",errno);state_=MediaState::Error;error_=reason;phase_=0;file_.close();++revision_;};
     if(phase_==1){++opens_;state_=openResource(file_,path_,512,failure_);phase_=state_==MediaState::Loading?2:0;
         if(!phase_){error_=failure_.reason;++revision_;}}
     else if(phase_==2){
@@ -32,7 +32,7 @@ void CoverRenderer::service(){
         const uint32_t offset=band_.offset(28);
         errno=0;if(file_.position()!=offset){if(!file_.seek(offset)){failure_.set("cover_seek","seek",errno);fail("cover_seek");}return;}
         const int n=file_.read(bytes_,length);if(n!=int(length)){failure_.set("cover_read","read",errno,length,n);fail("cover_read");return;}
-        bytesRead_+=length;band_.append(bytes_,length);
+        bytesRead_+=length;if(!band_.append(bytes_,length))fail("cover_band_canvas");
     }
 }
 void CoverRenderer::requestRow(int y){if(y>=top() && y<top()+height_)requestedRow_=y-top();else requestedRow_=-1;}

@@ -50,13 +50,17 @@ void LibraryCatalog::move(int delta) {
 
 LibraryResult LibraryCatalog::selected(MusicLibrary& library,
                                        LibraryDescriptor& output) const {
+    return at(selectedIndex_,library,output);
+}
+
+LibraryResult LibraryCatalog::at(size_t index,MusicLibrary& library,LibraryDescriptor& output)const {
     output = LibraryDescriptor{};
     if (library.state() != LibraryState::Ready ||
         std::strcmp(library.currentPath(), MusicLibrary::kMusicRoot) != 0 ||
-        selectedIndex_ >= count()) {
+        index >= count()) {
         return LibraryResult::Pending;
     }
-    if (selectedIndex_ == directoryCount_) {
+    if (index == directoryCount_) {
         output.uncategorized = true;
         output.rootEntryIndex = directoryCount_;
         std::strcpy(output.name, "未分类");
@@ -65,7 +69,7 @@ LibraryResult LibraryCatalog::selected(MusicLibrary& library,
     }
 
     LibraryEntry entry;
-    const LibraryResult result = library.entryAt(selectedIndex_, entry);
+    const LibraryResult result = library.entryAt(index, entry);
     if (result != LibraryResult::Ok) {
         return result;
     }
@@ -78,7 +82,7 @@ LibraryResult LibraryCatalog::selected(MusicLibrary& library,
     if (written <= 0 || static_cast<size_t>(written) >= sizeof(output.path)) {
         return LibraryResult::Error;
     }
-    output.rootEntryIndex = selectedIndex_;
+    output.rootEntryIndex = index;
     std::strncpy(output.name, entry.name, sizeof(output.name) - 1);
     return LibraryResult::Ok;
 }

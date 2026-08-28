@@ -52,7 +52,11 @@ class P3DChecks(unittest.TestCase):
         self.assertIn('if(power_.asleep())return;',ui)
         self.assertLess(main.index('ui.physicalActivity'),main.index('input.capture'))
         self.assertIn('input.capture(mask,now,ui.inputEpoch(),!allowed)',main)
-        self.assertIn('row_.setBuffer(pixels_,135,18,16)',source('src/player/ui/NowPlayingPresenter.h'))
+        presenter=source('src/player/ui/NowPlayingPresenter.cpp')
+        self.assertEqual(presenter.count('row_.setBuffer('),1)
+        self.assertIn('row_.setBuffer(pixels_, G::width, G::rowHeight, 16)',presenter)
+        borrow=source('src/player/ui/NowPlayingPresenter.h').split('M5Canvas* sharedRow()')[1].split('\n')[0]
+        self.assertNotIn('setBuffer',borrow);self.assertIn('commit_.active?nullptr',borrow)
         for p in ('LibraryVisual.cpp','SettingsPanel.cpp'):
             render=source('src/player/ui/'+p).split('bool '+('LibraryVisual' if p.startswith('Library') else 'SettingsPanel')+'::render(')[1]
             self.assertNotIn('SD.',render);self.assertNotIn('pushImage',render);self.assertIn('pushSprite',render)
@@ -84,23 +88,30 @@ class P3DChecks(unittest.TestCase):
         for encoded in strings:
             fmt=encoded.replace('\\n','\n')
             if fmt.startswith('%s_'):
-                # Four independent components, each retaining its own full path.
-                total+=4*(len(fmt)+559+64+64+6*10)
+                # Exact bounded fields, not an arbitrary per-component margin.
+                numeric=re.sub(r'%l[ud]', '%d',fmt)
+                for component in ('lyrics','cover','font','navigation'):
+                    total+=len((numeric%(component,'x'*63,component,'x'*559,component,
+                        4294967295,4294967295,4294967295,'x'*23,-2147483648,-2147483648,-2147483648)).encode())
                 continue
             if fmt.startswith('event_'):
                 total+=12*128;continue
             if fmt.startswith('store_%s'):
-                total+=15*64;continue
+                phases=re.findall(r'"([a-z_]+)"',body.split('storagePhases[]={')[1].split('};')[0])[1:]
+                total+=sum(len(fmt.replace('%s',phase).replace('%lu','9'*10).encode()) for phase in phases);continue
+            if fmt.startswith('sleep_%s'):
+                total+=sum(len((fmt.replace('%s',scene).replace('%u','255')).encode()) for scene in ('lyrics','cover','playlist','library','settings'));continue
             for line in fmt.splitlines(keepends=True):
                 key=line.split('=',1)[0];limit=paths.get(key,bounds.get(key,32))
                 value=re.sub(r'%[0-9]*[lu]*[udx]',lambda m:'9'*10,line)
                 value=value.replace('%s','x'*limit);total+=len(value.encode())
         capacity=int(re.search(r'buffer_\[(\d+)\]',source('src/player/p3abc/FreeSession.h'))[1])
+        print(f'LOG_BOUND: {total}/{capacity} bytes')
         self.assertLessEqual(total,capacity,'bounded paths must fit a complete log checkpoint')
         service=code.split('void FreeSession::service(')[1]
         for failure in ('checkpoint_buffer','log_buffer','open_log','write_log'):
             self.assertIn('fail("logging","'+failure+'")',service)
         self.assertIn('else if(!logFlushed_)',service)
         self.assertIn('lastSaveOk_=logOk&&persisted&&ui.displaySettingsSaved()',service)
-        self.assertIn('c.error&&c.error[0]',source('src/player/ui/LibraryVisual.cpp'))
+        self.assertIn('navigationError_',source('src/player/ui/UiCoordinator.cpp'))
 if __name__=='__main__':unittest.main(verbosity=2)

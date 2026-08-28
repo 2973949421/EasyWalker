@@ -9,7 +9,8 @@ class LibraryCoverReader {
     void suspend(){band_.cancel();file_.close();if(state_==MediaState::Loading)phase_=1;}
     void release(){band_.cancel();file_.close();phase_=0;state_=MediaState::Idle;row_=requested_=-1;path_[0]=0;}
     bool bandActive()const{return band_.active();}
-    bool prepareBand(lgfx::LGFXBase& row,int y,int h){band_.begin(row,y,h,0,width_,height_);return band_.ready();}
+    bool prepareBand(lgfx::LGFXBase& row,int y,int h){return band_.begin(row,y,h,0,width_,height_)&&band_.ready();}
+    bool bandReady()const{return band_.ready();}
     void finishBand(){band_.cancel();}
     void service();
     void requestRow(int y){requested_=y;}

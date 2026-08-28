@@ -24,6 +24,8 @@ struct PlaylistRenderRow {
     char label[kTrackPathCapacity] = {};
     // Retain filename independently of asynchronous display metadata.
     char basename[kTrackPathCapacity] = {};
+    uint8_t displayLength=0,displayFlags=0,markerWidth=0;
+    void displayText(char (&output)[128])const;
 };
 
 struct UiRenderContext {

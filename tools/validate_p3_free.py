@@ -4,7 +4,23 @@ import re
 import zlib
 from pathlib import Path
 
-VERSION='0.8.3-p3d.refine'
+VERSION='0.8.4-p3d.renderfix'
+
+def evaluate_render(record):
+    required=('render_contract','render_pixel_selfcheck','frame_starts','frame_rejects','frame_repairs',
+              'frame_failure','frame_pending','frame_expected_rows','frame_submitted_rows','frame_complete_ms','full_frames')
+    absent=[key for key in required if key not in record]
+    failures=[]
+    if int(record.get('frame_rejects',0)) or record.get('frame_failure','none')!='none':failures.append('frame_integrity_failure')
+    if record.get('render_pixel_selfcheck','PASS')!='PASS':failures.append('render_pixel_selfcheck')
+    if 'frame_expected_rows' in record and int(record.get('frame_submitted_rows',0))>int(record['frame_expected_rows']):failures.append('frame_row_overrun')
+    if int(record.get('frame_complete_ms',0)) and (record.get('frame_pending')!='0' or record.get('frame_expected_rows')!=record.get('frame_submitted_rows')):
+        failures.append('frame_false_completion')
+    if failures:return 'FAIL',failures
+    if absent:return 'INCOMPLETE',absent
+    if record['render_contract']!='1':return 'FAIL',['render_contract']
+    if int(record['frame_starts'])<=0 or int(record['full_frames'])<=0:return 'INCOMPLETE',['no_full_submission']
+    return 'READY_FOR_REVIEW',['submission contract covered; screen appearance still requires human review']
 
 def evaluate_wake(record):
     required=('reset_reason','previous_phase_valid','wake_complete','wake_unfinished_count',
@@ -75,6 +91,8 @@ def evaluate(record):
     for key,limit in [('input_accept_max_ms',50),('selection_feedback_max_ms',100),('warm_return_max_ms',300),('view_warm_max_ms',300),('view_cold_max_ms',1500),('view_failures',0),('input_queue_overflow',0)]:
         if key not in record:return 'INCOMPLETE',[key]
         if int(record[key])>limit:return 'FAIL',[key]
+    render_status,render_details=evaluate_render(record)
+    if render_status!='READY_FOR_REVIEW':return render_status,render_details
     missing=[key for key in ('a_auto','b_auto','c_auto') if record.get(key)!='COVERED']
     if missing:return 'INCOMPLETE',missing
     for key in ('playlist_frames','library_frames','different_track_selections','tab_playing','tab_paused','warm_returns','view_warm_completed','view_cold_completed'):
@@ -127,6 +145,8 @@ if __name__=='__main__':
         if not display_reboot_evidence(groups):extra.append('display_settings_reboot_not_verified')
         if not any(int(r.get('no_lyrics_view_noop',0)) for r in current):extra.append('no_lyrics_View_not_observed')
         if not any(int(r.get('preference_track_transitions',0)) for r in current):extra.append('cross_track_preference_not_observed')
+        for scene in ('lyrics','cover','playlist'):
+            if max(int(r.get('wake_'+scene,0)) for r in current)<2:extra.append('two_wakes_'+scene+'_not_observed')
         if extra:
             if status!='FAIL':status='INCOMPLETE'
             details+=extra

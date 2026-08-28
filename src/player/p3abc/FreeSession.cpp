@@ -118,6 +118,7 @@ void FreeSession::observe(const UiCoordinator& ui,const PlayerRuntime& player){
         if(!failure_[0]){std::snprintf(resourcePath_,sizeof(resourcePath_),"%s",cover.path());resourceErrno_=cover.failure().systemError;
             std::snprintf(resourceOperation_,sizeof(resourceOperation_),"%s",cover.failure().operation);}
         fail("library_cover",cover.failure().reason);}
+    if(ui.nowPlaying().stats().frameRejects)fail("render",ui.nowPlaying().stats().frameFailure);
     if(ui.page()!=UiPage::Player||ui.screenPower().asleep()){loading_=false;return;}
     lyricFrames_=std::max(lyricFrames_,m.lyricsFrames);coverFrames_=std::max(coverFrames_,m.coverFrames);
     deadlineUpdates_=std::max(deadlineUpdates_,m.deadlineUpdates);
@@ -155,6 +156,16 @@ void FreeSession::prepare(const UiCoordinator& ui,const PlayerRuntime& player){
     const auto& ds=ui.settings();const auto& power=ui.screenPower();const auto& visual=ui.libraryVisual();
     const bool d=visual.coverFrames&&visual.frames&&ds.changes&&ds.store.writes&&power.sleeps&&power.wakes;
     append("BEGIN sequence=%lu\n",(unsigned long)sequence_);
+    append("render_contract=1\nrender_pixel_selfcheck=%s\nframe_starts=%lu\nframe_cancels=%lu\nframe_rejects=%lu\nframe_repairs=%lu\nframe_failure=%s\n",
+        u.displaySelfFailure?u.displaySelfFailure:"PASS",(unsigned long)r.frameStarts,(unsigned long)r.frameCancels,(unsigned long)r.frameRejects,(unsigned long)r.frameRepairs,r.frameFailure);
+    append("frame_id=%lu\nframe_generation=%lu\nframe_pending=%u\nframe_expected_rows=%u\nframe_submitted_rows=%u\nfull_frames=%lu\npatch_frames=%lu\nfallback_frames=%lu\n",
+        (unsigned long)m.frameId,(unsigned long)m.generation,ui.nowPlaying().framePending(),ui.nowPlaying().expectedRows(),ui.nowPlaying().submittedRows(),
+        (unsigned long)m.frames,(unsigned long)m.patchFrames,(unsigned long)m.fallbackFrames);
+    append("frame_start_ms=%lu\nframe_first_ms=%lu\nframe_complete_ms=%lu\nstripe_submit_max_us=%lu\nstripe_draw_max_us=%lu\nstripe_wait_wall_max_us=%lu\nstripe_waits=%lu\n",
+        (unsigned long)r.frameStartedAt,(unsigned long)r.frameFirstAt,(unsigned long)r.frameCompletedAt,(unsigned long)r.submitMaxUs,
+        (unsigned long)r.drawMaxUs,(unsigned long)r.bandWaitWallMaxUs,(unsigned long)r.bandWaits);
+    const char* scenes[]={"lyrics","cover","playlist","library","settings"};
+    for(unsigned i=0;i<5;++i)append("sleep_%s=%u\nwake_%s=%u\n",scenes[i],ui.sleepsOn(i),scenes[i],ui.wakesOn(i));
     append("pcm_peak_track=%s\nlyric_peak_track=%s\nlyric_peak_generation=%lu\nlyric_peak_due_ms=%lu\nlyric_peak_prepared_ms=%lu\nlyric_peak_submitted_ms=%lu\nmedia_peak_work=%u\n",pcmPeakTrack_,lyricPeakTrack_,(unsigned long)lyricPeakGeneration_,(unsigned long)lyricPeakDue_,(unsigned long)lyricPeakPrepared_,(unsigned long)lyricPeakSubmitted_,m.peakWork);
     append("warm_returns=%lu\nwarm_return_max_ms=%lu\nselection_feedback_max_ms=%lu\n",(unsigned long)u.warmReturns,(unsigned long)u.warmReturnMaxMs,(unsigned long)u.selectionFeedbackMaxMs);
     append("input_accept_max_ms=%lu\ninput_queue_overflow=%lu\ninput_stale_events=%lu\nview_pending=%u\nview_coalesced=%lu\nview_warm_max_ms=%lu\nview_cold_max_ms=%lu\nview_failures=%lu\nlibrary_text_evidence=synthetic_layout_not_real_library\n",
@@ -215,7 +226,9 @@ void FreeSession::prepare(const UiCoordinator& ui,const PlayerRuntime& player){
     // Independent evidence survives a prior self-check/navigation failure.
     append("audio_limits_ok=%u\nmedia_limits_ok=%u\n",!audioErrors_&&!backpressure_&&pcmGapMaxUs_<=70000,presentMaxUs_<=100000&&lateMaxMs_<=200);
     append("navigation_work_max_us=%lu\n",(unsigned long)u.navigationMaxUs);
-    append("media_track=%s\nmedia_generation=%lu\nmedia_active=%u\nfont_io_errors=%lu\nfont_draw_misses=%lu\n",ui.nowPlaying().model().path,(unsigned long)m.generation,ui.nowPlaying().model().active,(unsigned long)ui.fonts().stats().ioErrors,(unsigned long)ui.fonts().stats().drawMisses);
+    // track is already the media model's path; do not duplicate up to 511
+    // bytes per checkpoint. Keep the explicit reference and generation.
+    append("media_track_ref=track\nmedia_generation=%lu\nmedia_active=%u\nfont_io_errors=%lu\nfont_draw_misses=%lu\n",(unsigned long)m.generation,ui.nowPlaying().model().active,(unsigned long)ui.fonts().stats().ioErrors,(unsigned long)ui.fonts().stats().drawMisses);
     append("coverage_scope=free_main_path\nnot_exercised=playing_seek;manual_reboot_requires_host_comparison\ndisplay_selfchecks=%u\ndisplay_self_failure=%s\n",ui.stats().displaySelfChecks,ui.stats().displaySelfFailure?ui.stats().displaySelfFailure:"none");
     append("resource_expected=%ld\nresource_actual=%ld\nrepeat_raw=%u\nshuffle_raw=%u\n",(long)resourceExpected_,(long)resourceActual_,unsigned(s.repeatMode),s.shuffleEnabled);
     append("speaker_volume_raw=%u\nspeaker_volume_cap=%u\nheap_free=%lu\n",player.rawSpeakerVolume(),VolumePolicy::maximumRaw,(unsigned long)ESP.getFreeHeap());

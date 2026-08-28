@@ -14,7 +14,7 @@ void LibraryCoverReader::select(const char* directory){
     if(state_==MediaState::Loading)++cancels;release();failure_=ResourceFailure{};
     std::strcpy(path_,target);state_=MediaState::Loading;phase_=1;
 }
-void LibraryCoverReader::fail(const char* reason){failure_.set(reason,"library_cover",errno);file_.close();phase_=0;state_=MediaState::Error;++errors;}
+void LibraryCoverReader::fail(const char* reason){band_.cancel();failure_.set(reason,"library_cover",errno);file_.close();phase_=0;state_=MediaState::Error;++errors;}
 void LibraryCoverReader::service(){
     const uint32_t at=micros();
     if(phase_==1){state_=openResource(file_,path_,512,failure_);phase_=state_==MediaState::Loading?2:0;if(state_==MediaState::Error)++errors;}
@@ -31,7 +31,7 @@ void LibraryCoverReader::service(){
         else{const unsigned length=band_.request();const auto offset=band_.offset(24);
             if(file_.position()!=offset){if(!file_.seek(offset))fail("library_cover_seek");}
             else if(file_.read(bytes_,length)!=int(length))fail("library_cover_read");
-            else{band_.append(bytes_,length);++reads;}}}
+            else{if(!band_.append(bytes_,length))fail("library_band_canvas");++reads;}}}
     serviceMaxUs=std::max<uint32_t>(serviceMaxUs,micros()-at);
 }
 void LibraryCoverReader::drawRow(lgfx::LGFXBase& canvas,int y)const{

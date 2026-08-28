@@ -4,6 +4,7 @@
 #include "NowPlayingModel.h"
 #include "player/app/LibraryRuntime.h"
 #include "media/NowPlayingMedia.h"
+#include "RenderContract.h"
 
 namespace adv_walkman {
 namespace player {
@@ -22,6 +23,11 @@ struct NowPlayingRenderStats {
     uint32_t overlayPatches = 0;
     uint32_t renderMaxUs = 0;
     uint32_t minimumHeap = UINT32_MAX;
+    uint32_t frameStarts=0,frameCancels=0,frameRejects=0,frameRepairs=0;
+    uint32_t submitMaxUs=0,bandWaits=0;
+    const char* frameFailure="none";
+    uint32_t frameStartedAt=0,frameFirstAt=0,frameCompletedAt=0;
+    uint32_t bandWaitWallMaxUs=0,drawMaxUs=0;
 };
 
 class NowPlayingPresenter final {
@@ -39,10 +45,17 @@ class NowPlayingPresenter final {
     const LyricsTimeline& lyrics() const { return media_.timeline(); }
     const CoverRenderer& cover() const { return media_.cover(); }
     bool presentingLyrics() const {return media_.presentingLyrics();}
+    bool waitingForBand()const{return media_.bandActive()&&!media_.bandReady();}
+    uint16_t submittedRows()const{return commit_.next-commit_.first;}
+    uint16_t expectedRows()const{return commit_.end-commit_.first;}
+    bool framePending()const{return commit_.active;}
+    bool displayComplete()const{return !commit_.active&&expectedRows()&&commit_.next==commit_.end&&
+        !(model_.dirty&(DirtyTitle|DirtyArtist|DirtyTime|DirtyStatus|DirtyProgress|DirtyContent));}
+    const char* bootRenderSelfCheck();
     void preloadTrack(const char* path) {media_.selectTrack(path);}
     void releasePreload() {media_.release();}
     void resetMediaDiagnostics() {media_.resetDiagnostics();}
-    void invalidateDisplay() {clearPage_=true;model_.dirty=DirtyAll;media_.requestRedraw();}
+    void invalidateDisplay() {cancelFrame();clearPage_=true;model_.dirty=DirtyAll;media_.requestRedraw();}
     void setActive(bool active, uint32_t nowMs);
     void update(const PlayerSnapshot& snapshot, const char* path,
                 LibraryRuntime& library, uint32_t nowMs);
@@ -54,7 +67,7 @@ class NowPlayingPresenter final {
     const NowPlayingModel& model() const { return model_; }
     const NowPlayingRenderStats& stats() const { return stats_; }
     // Browser/settings borrow the existing stripe only while Player is inactive.
-    M5Canvas& sharedRow() { row_.setBuffer(pixels_,135,18,16);row_.setTextWrap(false);return row_; }
+    M5Canvas* sharedRow() { return model_.active||media_.bandActive()||commit_.active?nullptr:&row_; }
 
   private:
     friend P3BCheckResult checkP3BOverlayRestoration(NowPlayingPresenter& presenter);
@@ -64,7 +77,13 @@ class NowPlayingPresenter final {
     void drawContentSlice(int screenY, int height);
     void pushRow(M5GFX& display, int y);
     void drawStateIcon(PlayerState state);
-    bool renderContentOne(M5GFX& display);
+    RenderStep renderContentOne(M5GFX& display);
+    void cancelFrame();
+    RenderStep rejectFrame(const char* reason);
+    FrameCommit commit_;
+    uint32_t bandWaitAt_=0;
+    uint8_t rowHeight_=18,repairAttempts_=0;
+    bool renderHalted_=false,titleMeasured_=false;
     FontCache* fonts_=nullptr;
     NowPlayingMedia media_;
     bool preferContent_=false;

@@ -9,6 +9,7 @@ struct NowPlayingMediaStatus {
     int current=-1;
     uint32_t frames=0,viewChanges=0,cancellations=0,reads=0,serviceMaxUs=0;
     uint32_t lyricsFrames=0,coverFrames=0;
+    uint32_t patchFrames=0,fallbackFrames=0;
     uint32_t generation=0,prepareMaxUs=0,presentMaxUs=0,lyricLateMaxMs=0,presentIoViolations=0;
     uint32_t frameId=0,deadlineUpdates=0,missedDeadlines=0;
     uint32_t lyricDueMs=0,lyricPreparedMs=0,lyricSubmittedMs=0,coverOpens=0;
@@ -33,7 +34,13 @@ class NowPlayingMedia final {
     void resetDiagnostics();
     void setPreferred(uint8_t value);bool toggleView();void requestRedraw();
     bool wantsFrame(uint32_t nowMs)const;bool beginFrame(uint32_t nowMs);
-    bool prepareStripe(lgfx::LGFXBase& canvas,int y,int height);void drawStripe(lgfx::LGFXBase& canvas,int y,int height);void endFrame();
+    bool prepareStripe(lgfx::LGFXBase& canvas,int y,int height);void drawStripe(lgfx::LGFXBase& canvas,int y,int height);void endFrame(bool partial=false);
+    void abortFrame();
+    uint32_t generation()const{return generation_;}
+    uint32_t frameId()const{return frameId_;}
+    bool frameResourceValid()const{return !frameCoverReady_||cover_.state()==MediaState::Ready;}
+    bool bandMatches(const lgfx::LGFXBase& row,int y,int h)const{return cover_.bandMatches(row,y,h);}
+    bool bandReady()const{return cover_.bandReady();}
     bool bandActive()const{return cover_.bandActive();}
     void finishStripe(){cover_.finishBand();}
     void stripeSubmitted(){if(transition_.pending&&frameView_==transition_.requested&&!viewFirstStripeMs_)viewFirstStripeMs_=millis();}
@@ -51,7 +58,7 @@ class NowPlayingMedia final {
     FontCache* fonts_=nullptr;LyricsTimeline timeline_;CoverRenderer cover_;LyricsRenderer renderer_;
     LyricsRenderer displayedRenderer_;
     char track_[512]{};
-    bool frameFromPrepared_=false;
+    bool frameFromPrepared_=false,frameCoverReady_=false;
     bool preparationTurn_=false;
     uint8_t suspendStep_=0;
     uint32_t preparedReadyAt_=0,lastDue_=0,lastPrepared_=0,lastSubmitted_=0;
@@ -68,6 +75,7 @@ class NowPlayingMedia final {
     uint8_t peakWork_=0;
     uint32_t frames_=0,viewChanges_=0,cancellations_=0,serviceMaxUs_=0;
     uint32_t lyricsFrames_=0,coverFrames_=0;
+    uint32_t patchFrames_=0,fallbackFrames_=0;
     uint32_t prepareAt_=0,presentAt_=0,prepareMaxUs_=0,presentMaxUs_=0,lyricLateMaxMs_=0,ioAt_=0,presentIoViolations_=0;
     uint32_t preparedPosition_=0,preparedDue_=0,preparedUntil_=0;
     uint32_t frameId_=0,deadlineUpdates_=0,missedDeadlines_=0;
@@ -81,6 +89,8 @@ class NowPlayingMedia final {
 };
 // Media-owned stdio buffers, File wrappers and transient path/I/O overhead.
 // The SDK's fixed global FatFs mount table is reported separately by the Gate.
+// The pre-existing P3B 4860-byte UI stripe is in static RAM, reported separately
+// by MemoryReport. It is not part of this media/additional-state budget.
 constexpr size_t kMediaFsReserve=7*1024;
 constexpr size_t kMediaBudgetBytes=FontCache::workBytes()+LyricsTimeline::workBytes()+sizeof(NowPlayingMedia)+sizeof(FontCache)+kMediaFsReserve;
 static_assert(kMediaBudgetBytes<=48*1024,"P3C media memory exceeds 48 KiB; do not enlarge the budget");

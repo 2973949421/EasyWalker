@@ -19,7 +19,9 @@ class CoverRenderer final {
     int height()const{return height_;}
     int stripeHeight()const{return 18;}
     bool bandActive()const{return band_.active();}
-    bool prepareBand(lgfx::LGFXBase& row,int y,int h){band_.begin(row,y,h,top(),width_,height_);return band_.ready();}
+    bool prepareBand(lgfx::LGFXBase& row,int y,int h){return band_.begin(row,y,h,top(),width_,height_)&&band_.ready();}
+    bool bandReady()const{return band_.ready();}
+    bool bandMatches(const lgfx::LGFXBase& row,int y,int h)const{return band_.matches(row,y,h);}
     void finishBand(){band_.cancel();}
     uint32_t opens()const{return opens_;}
     void service();

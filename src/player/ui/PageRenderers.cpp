@@ -54,6 +54,13 @@ void footer(M5GFX& display, const char* hint) {
 
 }  // namespace
 
+void PlaylistRenderRow::displayText(char (&output)[128])const{
+    const size_t length=std::min<size_t>(displayLength,124);
+    std::memcpy(output,label,length);
+    for(size_t i=0;i<length;++i)if(static_cast<unsigned char>(output[i])<32)output[i]=output[i]=='\t'?' ':'?';
+    output[length]=0;if(displayFlags&2)std::memcpy(output+length,"...",4);
+}
+
 UiTextLayoutResult LibraryPageRenderer::render(
     M5GFX& display, const UiRenderContext& context) {
     beginPage(display, "LIBRARY");
@@ -140,10 +147,13 @@ void PlaylistPageRenderer::renderRegion(M5GFX& display,
             row.playing ? '>' : ' ',
             row.type == LibraryEntryType::Directory ? '/' : ' ', ' ', '\0'};
         display.setCursor(7, y + 7);
-        const int markerWidth = display.textWidth(marker);
+        const int markerWidth = row.displayFlags&1?row.markerWidth:display.textWidth(marker);
         display.setCursor(7, y + 7);
         display.print(marker);
-        UiTextLayout::draw(display, row.label,
+        if(row.displayFlags&1){char finalText[128];row.displayText(finalText);
+            display.setClipRect(7+markerWidth,y+7,display.width()-14-markerWidth,15);
+            display.setCursor(7+markerWidth,y+7);display.print(finalText);display.clearClipRect();}
+        else UiTextLayout::draw(display, row.label,
                            textBox(7 + markerWidth, y + 7,
                                    display.width() - 14 - markerWidth, 15));
     }

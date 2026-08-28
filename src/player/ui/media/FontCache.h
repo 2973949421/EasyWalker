@@ -30,6 +30,7 @@ class FontCache final {
     enum Pin : uint8_t { Next=1, Current=2, Ui=4, All=7 };
     bool request(uint32_t cp,uint8_t font,uint8_t pin=0);
     bool requestMetric(uint32_t cp,uint8_t font);
+    bool requestUiMetrics(const char* text,uint8_t pixels,bool library=false);
     uint8_t latinAdvance(uint32_t cp,uint8_t face=Latin14)const{return work_&&cp<256&&face>=Latin10&&face<=Latin14?(work_->latinAdvance[face-Latin10][cp]&15):8;}
     uint8_t verticalAdvance(uint32_t cp)const{const uint8_t v=work_&&cp<256?work_->latinAdvance[Latin14-Latin10][cp]:0x88;return std::max<uint8_t>(v>>4,v&15);}
     int textWidth(const char* text,uint8_t pixels)const;

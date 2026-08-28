@@ -30,13 +30,14 @@ const char* NowPlayingMedia::bootSelfCheck(const char* track){
     resetDiagnostics();return failure;
 }
 void NowPlayingMedia::cancelPreparation(){preparing_=layoutReady_=glyphsReady_=false;if(fonts_)fonts_->clearPins(FontCache::Next);++cancellations_;}
+void NowPlayingMedia::abortFrame(){cover_.cancelBand();if(fonts_)fonts_->setPresenting(false);frameInProgress_=false;}
 void NowPlayingMedia::selectTrack(const char* path){
     if(path&&!std::strcmp(track_,path)){
         if(timeline_.state()==MediaState::Loading)timeline_.selectTrack(path);
         active_=true;dirty_=true;seek_=true;shownGeneration_=UINT32_MAX;return;
     }
     std::snprintf(track_,sizeof(track_),"%s",path?path:"");
-    cancelPreparation();frameInProgress_=false;active_=true;++generation_;timeline_.selectTrack(path);cover_.selectTrack(path);
+    cancelPreparation();abortFrame();active_=true;++generation_;timeline_.selectTrack(path);cover_.selectTrack(path);
     if(fonts_)fonts_->clearPins();
     shownCoverRevision_=UINT32_MAX;shownCurrent_=-2;shownPage_=255;shownPages_=1;dirty_=true;seek_=true;
     transition_.pending=false;transition_.requested=preferred_;transition_.displayed=MediaView::Cover;
@@ -75,7 +76,7 @@ bool NowPlayingMedia::toggleView(){
     requestRedraw();return true;
 }
 void NowPlayingMedia::updatePosition(uint32_t position,uint32_t duration,bool paused){
-    if(position+1000<positionMs_ || position>positionMs_+1500){seek_=true;++generation_;frameInProgress_=false;cancelPreparation();if(fonts_)fonts_->setPresenting(false);requestRedraw();}
+    if(position+1000<positionMs_ || position>positionMs_+1500){seek_=true;++generation_;abortFrame();cancelPreparation();requestRedraw();}
     positionMs_=position;durationMs_=duration;paused_=paused;
     if(active_&&!presentingLyrics())timeline_.updatePosition(position,duration);
 }
@@ -132,7 +133,8 @@ void NowPlayingMedia::service(){
     preparationTurn_=!preparationTurn_;
     // An owned picture stripe must finish before hidden lyric prefetch can
     // consume another turn. Its buffer cannot be borrowed by chrome either.
-    if(cover_.bandActive()){cover_.service();return;}
+    if(cover_.bandActive()){cover_.service();const auto elapsed=micros()-start;
+        if(elapsed>serviceMaxUs_){serviceMaxUs_=elapsed;peakWork_=static_cast<uint8_t>(MediaWork::Cover);}return;}
     if(preparationTurn_&&!frameInProgress_&&timeline_.windowReady()&&!fonts_->busy()&&
        !(transition_.pending&&transition_.requested==MediaView::Cover)){
         prepareUpcoming();const auto elapsed=micros()-start;
@@ -156,6 +158,7 @@ bool NowPlayingMedia::wantsFrame(uint32_t)const{
 }
 bool NowPlayingMedia::beginFrame(uint32_t){
     if(frameInProgress_)return true;frameView_=effectiveView();
+    frameCoverReady_=frameView_==MediaView::Cover&&cover_.state()==MediaState::Ready;
     if(frameView_==MediaView::Cover&&transition_.pending&&cover_.state()==MediaState::Loading)return false;
     if(frameView_==MediaView::Lyrics){
         frameFromPrepared_=glyphsReady_&&preparedCue_==timeline_.current()&&positionMs_>=preparedDue_&&positionMs_<preparedUntil_;
@@ -176,16 +179,17 @@ bool NowPlayingMedia::canPatchOverlay()const{
 }
 bool NowPlayingMedia::prepareStripe(lgfx::LGFXBase& canvas,int y,int height){
     if(frameView_==MediaView::Lyrics)return true;
-    if(cover_.state()!=MediaState::Ready)return true;
+    if(!frameCoverReady_)return true;
     return cover_.prepareBand(canvas,y,height);
 }
 void NowPlayingMedia::drawStripe(lgfx::LGFXBase& canvas,int y,int height){
     if(frameView_==MediaView::Lyrics)displayedRenderer_.drawStripe(canvas,*fonts_,y,height,0);else cover_.drawRow(canvas,y,0x0861);
 }
-void NowPlayingMedia::endFrame(){
+void NowPlayingMedia::endFrame(bool partial){
+    const bool complete=!partial&&(frameView_==MediaView::Lyrics||frameCoverReady_||cover_.state()==MediaState::Missing);
     if(frameView_==MediaView::Lyrics){
-        ++lyricsFrames_;
-        presentMaxUs_=std::max<uint32_t>(presentMaxUs_,micros()-presentAt_);
+        if(!partial)++lyricsFrames_;
+        if(!partial)presentMaxUs_=std::max<uint32_t>(presentMaxUs_,micros()-presentAt_);
         if(ioAt_!=fonts_->stats().reads+timeline_.bytesRead()+cover_.bytesRead())++presentIoViolations_;
         if(frameFromPrepared_){
             if(deadline_){++deadlineUpdates_;if(positionMs_>preparedDue_)lyricLateMaxMs_=std::max<uint32_t>(lyricLateMaxMs_,positionMs_-preparedDue_);}
@@ -195,16 +199,16 @@ void NowPlayingMedia::endFrame(){
         }
         fonts_->setPresenting(false);fonts_->clearPins(FontCache::Ui);seek_=false;
     }
-    if(frameView_==MediaView::Cover){++coverFrames_;cover_.finishFrame();}
-    if(transition_.pending&&frameView_==transition_.requested){
+    if(frameView_==MediaView::Cover){if(!partial){if(frameCoverReady_)++coverFrames_;else ++fallbackFrames_;}cover_.finishFrame();}
+    if(complete&&transition_.pending&&frameView_==transition_.requested){
         auto& maximum=transitionWarm_?viewWarmMaxMs_:viewColdMaxMs_;
         maximum=std::max<uint32_t>(maximum,millis()-transitionAt_);preferred_=frameView_;
         viewCompletedMs_=millis();
         if(transitionWarm_)++viewWarmCompleted_;else ++viewColdCompleted_;
     }
-    transition_.commit(frameView_);
+    if(complete)transition_.commit(frameView_);
     shownGeneration_=generation_;seek_=false;
-    frameInProgress_=false;++frames_;if(redrawAfterFrame_)requestRedraw();
+    frameInProgress_=false;if(partial)++patchFrames_;else if(complete)++frames_;if(redrawAfterFrame_)requestRedraw();
 }
 NowPlayingMediaStatus NowPlayingMedia::status()const{
     NowPlayingMediaStatus s;s.lyrics=timeline_.state();s.cover=cover_.state();s.preferred=preferred_;s.view=transition_.displayed;s.current=timeline_.current();
@@ -212,11 +216,12 @@ NowPlayingMediaStatus NowPlayingMedia::status()const{
     s.viewWarmCompleted=viewWarmCompleted_;s.viewColdCompleted=viewColdCompleted_;s.viewFailure=viewFailure_;
     s.viewRequestedMs=transitionAt_;s.viewReadyMs=viewReadyMs_;s.viewFirstStripeMs=viewFirstStripeMs_;s.viewCompletedMs=viewCompletedMs_;
     s.frames=frames_;s.lyricsFrames=lyricsFrames_;s.coverFrames=coverFrames_;s.viewChanges=viewChanges_;s.cancellations=cancellations_;s.reads=timeline_.bytesRead()+cover_.bytesRead();s.serviceMaxUs=serviceMaxUs_;
+    s.patchFrames=patchFrames_;s.fallbackFrames=fallbackFrames_;
     s.page=shownPage_==255?0:shownPage_;s.pages=shownPages_;s.layoutError=renderer_.stats().layoutError;s.invalidUtf8=renderer_.stats().invalidUtf8;
     s.generation=generation_;s.peakWork=peakWork_;s.prepareMaxUs=prepareMaxUs_;s.presentMaxUs=presentMaxUs_;s.lyricLateMaxMs=lyricLateMaxMs_;s.presentIoViolations=presentIoViolations_;
     s.frameId=frameId_;s.deadlineUpdates=deadlineUpdates_;s.missedDeadlines=missedDeadlines_;
     s.lyricDueMs=lastDue_;s.lyricPreparedMs=lastPrepared_;s.lyricSubmittedMs=lastSubmitted_;s.coverOpens=cover_.opens();
     s.error=timeline_.state()==MediaState::Error?timeline_.error():cover_.error();return s;
 }
-void NowPlayingMedia::resetDiagnostics(){frames_=lyricsFrames_=coverFrames_=viewChanges_=cancellations_=serviceMaxUs_=0;prepareMaxUs_=presentMaxUs_=lyricLateMaxMs_=presentIoViolations_=0;deadlineUpdates_=missedDeadlines_=0;viewWarmMaxMs_=viewColdMaxMs_=viewFailures_=viewWarmCompleted_=viewColdCompleted_=transition_.coalesced=0;viewFailure_="none";}
+void NowPlayingMedia::resetDiagnostics(){frames_=lyricsFrames_=coverFrames_=patchFrames_=fallbackFrames_=viewChanges_=cancellations_=serviceMaxUs_=0;prepareMaxUs_=presentMaxUs_=lyricLateMaxMs_=presentIoViolations_=0;deadlineUpdates_=missedDeadlines_=0;viewWarmMaxMs_=viewColdMaxMs_=viewFailures_=viewWarmCompleted_=viewColdCompleted_=transition_.coalesced=0;viewFailure_="none";}
 } }

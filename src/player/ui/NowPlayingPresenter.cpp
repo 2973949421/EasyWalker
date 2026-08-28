@@ -52,6 +52,7 @@ const char* NowPlayingPresenter::bootFontSelfCheck(M5GFX& display){
 void NowPlayingPresenter::setActive(bool active, uint32_t nowMs) {
     if(active&&media_.suspending())return;
     if (model_.active == active) return;
+    cancelFrame();repairAttempts_=0;renderHalted_=false;
     model_.setActive(active, nowMs);
     if (active) {
         clearPage_ = true;
@@ -73,6 +74,7 @@ void NowPlayingPresenter::update(const PlayerSnapshot& snapshot,
                                   const char* path, LibraryRuntime& library,
                                   uint32_t nowMs) {
     if (model_.setTrack(path, nowMs)) {
+        cancelFrame();repairAttempts_=0;renderHalted_=false;titleMeasured_=false;
         measureTitle(nowMs);
         if (fonts_ && model_.path[0] && model_.active) {media_.selectTrack(model_.path);contentRow_=0;}
     }
@@ -101,6 +103,7 @@ void NowPlayingPresenter::update(const PlayerSnapshot& snapshot,
                                       ? metadata.title.value : nullptr,
                                   validTags && metadata.artist.present ? metadata.artist.value : "", nowMs);
             model_.metadataWarning = static_cast<uint8_t>(status.error);
+            titleMeasured_=false;
             measureTitle(nowMs);
         } else if (status.state == Mp3MetadataState::Error) {
             model_.metadataState = DisplayMetadataState::Error;
@@ -109,7 +112,7 @@ void NowPlayingPresenter::update(const PlayerSnapshot& snapshot,
     }
     const bool header= !fonts_ || media_.status().view==MediaView::Cover;
     if(model_.headerVisible!=header&&!media_.frameInProgress()){model_.headerVisible=header;overlayPending_=false;
-        model_.dirty|=DirtyTitle|DirtyArtist;measureTitle(nowMs);}
+        model_.dirty|=DirtyTitle|DirtyArtist;if(!titleMeasured_)measureTitle(nowMs);}
     model_.tick(nowMs);
     if(!header)model_.clearDirty(DirtyTitle|DirtyArtist);
     if(logNote_ && nowMs-logNoteAt_>=1500){logNote_=0;model_.dirty|=DirtyStatus;}
@@ -134,8 +137,12 @@ void NowPlayingPresenter::notifyVolumeAdjusted(uint8_t volume, uint32_t nowMs) {
 
 void NowPlayingPresenter::prepareRow(int height, uint16_t background,
                                      float textSize) {
-    row_.setBuffer(pixels_, G::width, height, 16);
+    // The pixel allocation AND canvas dimensions stay fixed for its lifetime.
+    // ImageBand retains this canvas across cooperative reads.
+    if(media_.bandActive())return;
+    rowHeight_=height;
     row_.clearClipRect();
+    row_.setClipRect(0,0,G::width,height);
     row_.fillScreen(background);
     row_.setTextSize(textSize);
     row_.setTextColor(kText, background);
@@ -143,7 +150,11 @@ void NowPlayingPresenter::prepareRow(int height, uint16_t background,
 }
 
 void NowPlayingPresenter::pushRow(M5GFX& display, int y) {
+    int x,top,w,h;display.getClipRect(&x,&top,&w,&h);
+    const int first=std::max(top,y),last=std::min(top+h,y+int(rowHeight_));
+    display.setClipRect(x,first,w,std::max(0,last-first));
     row_.pushSprite(&display, 0, y);
+    display.setClipRect(x,top,w,h);
 }
 
 void NowPlayingPresenter::drawContentSlice(int screenY, int height) {
@@ -164,7 +175,7 @@ void NowPlayingPresenter::drawContentSlice(int screenY, int height) {
         UiTextLayout::drawClippedLabel(row_, text, G::margin, baseline - screenY,
                                         G::textWidth, bytes);
     };
-    line(hint, newline ? static_cast<size_t>(newline - hint) : std::strlen(hint),
+    if(*hint)line(hint, newline ? static_cast<size_t>(newline - hint) : std::strlen(hint),
           135, kAccent);
     if (newline) line(newline + 1, std::strlen(newline + 1), 153, kText);
     if(card){
@@ -210,17 +221,14 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
     if (!model_.active) return false;
     const uint32_t started = micros();
     stats_.minimumHeap = std::min(stats_.minimumHeap, ESP.getFreeHeap());
-    if(fonts_ && (media_.presentingLyrics()||media_.bandActive())) {
-        const bool rendered=renderContentOne(display);
-        stats_.renderMaxUs=std::max<uint32_t>(stats_.renderMaxUs,micros()-started);
-        return rendered;
-    }
-    if(fonts_ && !clearPage_) {
-        // Alternate a content stripe with a chrome job. A logical media frame
-        // is frozen until its last stripe, rather than restarting at y=0.
+    if(fonts_ && !renderHalted_) {
         preferContent_=!preferContent_;
-        if(preferContent_ && (model_.dirty&DirtyContent) && renderContentOne(display)) {
-            stats_.renderMaxUs=std::max<uint32_t>(stats_.renderMaxUs,micros()-started);return true;
+        const auto step=dispatchContent(media_.presentingLyrics()||media_.bandActive(),
+            !clearPage_&&preferContent_,bool(model_.dirty&DirtyContent),
+            [&](){return renderContentOne(display);},[&](){return media_.bandActive();});
+        if(step!=RenderStep::Idle){
+            stats_.renderMaxUs=std::max<uint32_t>(stats_.renderMaxUs,micros()-started);
+            return step==RenderStep::Submitted;
         }
     }
     if (clearPage_) {
@@ -231,8 +239,8 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
     } else if (model_.dirty & DirtyTitle) {
         if(fonts_&&!model_.title[0]&&!fonts_->requestUiWindow("暂无歌曲",14,0,123,1))return false;
         // Measure the whole title before drawing a clipped visible window.
-        if(fonts_){bool invalid=false;const char* p=model_.title;while(*p){auto cp=mediaCodepoint(p,invalid);if(!fonts_->requestMetric(cp,FontCache::faceFor(cp,14)))return false;}
-            measureTitle(millis());if(!fonts_->requestUiWindow(model_.title,14,model_.titleOffsetPx,123,1))return false;}
+        if(fonts_){if(!titleMeasured_){if(!fonts_->requestUiMetrics(model_.title,14))return false;measureTitle(millis());titleMeasured_=true;}
+            if(!fonts_->requestUiWindow(model_.title,14,model_.titleOffsetPx,123,1))return false;}
         prepareRow(16, kBackground, kTitleSize);
         CachedUiFont font(fonts_,14); if(fonts_)row_.setFont(&font);
         row_.setTextColor(kAccent, kBackground);
@@ -293,7 +301,7 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
         model_.clearDirty(DirtyProgress);
         ++stats_.progressDraws;
     } else if (model_.dirty & DirtyContent) {
-        if(fonts_) {if(!renderContentOne(display))return false;}
+        if(fonts_) {if(renderHalted_||renderContentOne(display)!=RenderStep::Submitted)return false;}
         else {
         if (contentRevision_ != model_.contentRevision) {
             contentRevision_ = model_.contentRevision;
@@ -333,23 +341,37 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
     return true;
 }
 
-bool NowPlayingPresenter::renderContentOne(M5GFX& display) {
+void NowPlayingPresenter::cancelFrame(){
+    if(commit_.active)++stats_.frameCancels;
+    commit_.cancel();media_.abortFrame();contentRow_=0;overlayPending_=false;bandWaitAt_=0;
+}
+RenderStep NowPlayingPresenter::rejectFrame(const char* reason){
+    if(!stats_.frameRejects)stats_.frameFailure=reason;
+    ++stats_.frameRejects;cancelFrame();
+    if(!repairAttempts_++){++stats_.frameRepairs;media_.requestRedraw();model_.dirty|=DirtyContent;}
+    else{renderHalted_=true;model_.clearDirty(DirtyContent);logNote_=3;logNoteAt_=millis();model_.dirty|=DirtyStatus;}
+    return RenderStep::Failed;
+}
+RenderStep NowPlayingPresenter::renderContentOne(M5GFX& display) {
+    if(!media_.frameInProgress()&&commit_.active)cancelFrame();
     if(!media_.frameInProgress() && (model_.hint[0]||model_.error[0])) {
         if(contentRevision_!=model_.contentRevision){contentRevision_=model_.contentRevision;contentRow_=0;}
         const int height=std::min(G::rowHeight,G::contentHeight-contentRow_);
         drawContentSlice(G::contentY+contentRow_,height);pushRow(display,G::contentY+contentRow_);
         contentRow_+=height;++stats_.contentSlices;
         if(contentRow_==G::contentHeight){contentRow_=0;model_.clearDirty(DirtyContent);}
-        return true;
+        return RenderStep::Submitted;
     }
     if(!media_.frameInProgress()) {
-        const bool newHeader=media_.requestedView()==MediaView::Cover&&!model_.headerVisible;
+        const bool newHeader=media_.requestedView()==MediaView::Cover&&
+            (!model_.headerVisible||(model_.dirty&(DirtyTitle|DirtyArtist)));
         if(newHeader&&fonts_){
-            if(!fonts_->requestUiWindow(model_.title,14,0,123,1)||!fonts_->requestUiWindow(model_.artist,12,0,123,1)||!fonts_->requestUiWindow("...",12,0,20,1))return false;
+            if(!titleMeasured_){if(!fonts_->requestUiMetrics(model_.title,14))return RenderStep::Waiting;measureTitle(millis());titleMeasured_=true;}
+            if(!fonts_->requestUiWindow(model_.title,14,0,123,1)||!fonts_->requestUiWindow(model_.artist,12,0,123,1)||!fonts_->requestUiWindow("...",12,0,20,1))return RenderStep::Waiting;
         }
-        if(model_.volumeVisible && fonts_&&!fonts_->requestUiWindow("0123456789%",10,0,100,1))return false;
+        if(model_.volumeVisible && fonts_&&!fonts_->requestUiWindow("0123456789%",10,0,100,1))return RenderStep::Waiting;
         const bool patch=overlayPending_ && !media_.status().viewPending && media_.canPatchOverlay();
-        if(!media_.beginFrame(millis()))return false;
+        if(!media_.beginFrame(millis()))return RenderStep::Waiting;
         if(newHeader){
             prepareRow(16,kBackground,1);CachedUiFont titleFont(fonts_,14);row_.setFont(&titleFont);row_.setTextColor(kAccent,kBackground);
             const int width=UiTextLayout::singleLineWidth(row_,model_.title);
@@ -358,34 +380,49 @@ bool NowPlayingPresenter::renderContentOne(M5GFX& display) {
             prepareRow(12,kBackground,1);CachedUiFont artistFont(fonts_,12);row_.setFont(&artistFont);
             const int artistWidth=UiTextLayout::singleLineWidth(row_,model_.artist),artistX=artistWidth<=123?(135-artistWidth)/2:6;
             UiTextLayout::draw(row_,model_.artist,{int16_t(artistX),0,int16_t(129-artistX),12,1,0,true});pushRow(display,16);row_.setFont(&fonts::Font0);
+            model_.clearDirty(DirtyTitle|DirtyArtist);
+            ++stats_.titleDraws;++stats_.artistDraws;
         }
         frameContentY_=G::contentTop(media_.frameView()==MediaView::Lyrics);
         framePartial_=patch;overlayPending_=false;
         contentRow_=patch?G::overlayY-frameContentY_:0;
         contentEnd_=patch?contentRow_+G::overlayHeight:G::footerY-frameContentY_;
+        commit_.begin(media_.generation(),media_.frameId(),contentRow_,contentEnd_,patch);++stats_.frameStarts;
+        stats_.frameStartedAt=millis();stats_.frameFirstAt=stats_.frameCompletedAt=0;
         if(patch)++stats_.overlayPatches;
         frameOverlayRevision_=model_.overlayRevision;frameContentRevision_=model_.contentRevision;
         frameVolumeVisible_=model_.volumeVisible;frameVolume_=model_.volume;
     }
     const int height=std::min(media_.stripeHeight(),contentEnd_-contentRow_);
+    if(!commit_.accepts(media_.generation(),media_.frameId(),contentRow_,height))return rejectFrame("frame_generation_or_range");
+    if(!media_.frameResourceValid())return rejectFrame("frame_resource_failed");
     if(!media_.bandActive())prepareRow(height,kBackground,kSmallSize);
-    if(!media_.prepareStripe(row_,contentRow_,height))return false;
-    drawContentSlice(frameContentY_+contentRow_,height);
+    if(row_.width()!=G::width||row_.height()!=G::rowHeight||!validStripeDestination(frameContentY_+contentRow_,height))return rejectFrame("frame_canvas_dimensions");
+    if(media_.bandActive()&&!media_.bandMatches(row_,contentRow_,height))return rejectFrame("frame_band_canvas");
+    if(!media_.prepareStripe(row_,contentRow_,height)){if(!bandWaitAt_)bandWaitAt_=micros();++stats_.bandWaits;return RenderStep::Waiting;}
+    if(bandWaitAt_){stats_.bandWaitWallMaxUs=std::max<uint32_t>(stats_.bandWaitWallMaxUs,micros()-bandWaitAt_);bandWaitAt_=0;}
+    if(media_.bandActive()&&!media_.bandMatches(row_,contentRow_,height))return rejectFrame("frame_band_owner");
+    const uint32_t drawAt=micros();drawContentSlice(frameContentY_+contentRow_,height);
+    stats_.drawMaxUs=std::max<uint32_t>(stats_.drawMaxUs,micros()-drawAt);
     if(framePartial_)display.setClipRect(G::overlayX,G::overlayY,G::overlayWidth,G::overlayHeight);
-    pushRow(display,frameContentY_+contentRow_);
+    const uint32_t submitAt=micros();pushRow(display,frameContentY_+contentRow_);
+    stats_.submitMaxUs=std::max<uint32_t>(stats_.submitMaxUs,micros()-submitAt);
+    if(!commit_.submit(media_.generation(),media_.frameId(),contentRow_,height))return rejectFrame("frame_submit_rejected");
     media_.stripeSubmitted();
+    if(!stats_.frameFirstAt)stats_.frameFirstAt=millis();
     media_.finishStripe();
     if(framePartial_)display.clearClipRect();
     contentRow_+=height;++stats_.contentSlices;
-    if(contentRow_==contentEnd_){
-        contentRow_=0;media_.endFrame();
+    if(commit_.complete()){
+        stats_.frameCompletedAt=millis();
+        contentRow_=0;media_.endFrame(commit_.partial);commit_.cancel();
         // Publish chrome visibility with the completed frame, before observers
         // run; the next update must not report the previous view's header.
         model_.headerVisible=media_.status().view==MediaView::Cover;
         if(!model_.headerVisible)model_.clearDirty(DirtyTitle|DirtyArtist);
         if(frameOverlayRevision_==model_.overlayRevision && frameContentRevision_==model_.contentRevision)model_.clearDirty(DirtyContent);
     }
-    return true;
+    return RenderStep::Submitted;
 }
 
 }  // namespace player

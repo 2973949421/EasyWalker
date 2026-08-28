@@ -26,6 +26,7 @@ class LibraryCatalog final {
     void move(int delta);
     LibraryResult selected(MusicLibrary& library,
                            LibraryDescriptor& output) const;
+    LibraryResult at(size_t index, MusicLibrary& library, LibraryDescriptor& output) const;
 
   private:
     size_t directoryCount_ = 0;

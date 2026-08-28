@@ -38,7 +38,7 @@ bool FontCache::request(uint32_t cp,uint8_t font,uint8_t pin){
         if(busy() || presenting_)return false;pending_=int(old-work_->metrics);metricOnly_=false;
         // A metric can outlive its evicted bitmap. Its offset belongs to its
         // own VLW file, never whichever font was opened most recently.
-        phase_=currentFont_==font&&index_&&fontFile_?(old->offset?4:3):1;lo_=0;hi_=count_;return false;
+        phase_=currentFont_==font&&fontFile_&&(old->offset||index_)?(old->offset?4:3):1;lo_=0;hi_=count_;return false;
     }
     if(busy() || presenting_)return false;int candidate=-1;
     for(unsigned i=0;i<kMetrics;++i){const auto& g=work_->metrics[i];if(!g.state){candidate=i;break;}
@@ -53,14 +53,32 @@ bool FontCache::requestMetric(uint32_t cp,uint8_t font){
     if(busy() || presenting_)return false;const bool ready=request(cp,font);if(!ready&&busy())metricOnly_=true;return ready;
 }
 bool FontCache::requestText(const char* text,uint8_t font){if(!text)return true;bool invalid=false;while(*text){const auto cp=mediaCodepoint(text,invalid);if(!request(cp,font))return false;}return true;}
+bool FontCache::requestUiMetrics(const char* text,uint8_t pixels,bool library){
+    if(!text)return true;
+    const uint8_t faces[]={library?libraryFace(0x4E00,pixels):faceFor(0x4E00,pixels),library?libraryFace('A',pixels):faceFor('A',pixels)};
+    for(auto face:faces){bool invalid=false;const char* p=text;while(*p){const auto cp=mediaCodepoint(p,invalid);
+        if(cp=='\n')continue;
+        if((library?libraryFace(cp,pixels):faceFor(cp,pixels))==face&&!requestMetric(cp,face))return false;}}
+    return true;
+}
 bool FontCache::requestUiWindow(const char* text,uint8_t font,int startPx,int widthPx,float size,bool library){
     // pixels, not a Font0 scale. Metrics and drawing use the very same face.
     (void)size;if(!text)return true;bool invalid=false;int x=0;
+    const char* source=text;
+    // First establish only the visible window's advances. Bitmap requests are
+    // then grouped by face, avoiding an open/close chain for every CJK/Latin
+    // alternation. No extra glyph queue or whole-title bitmap allocation.
     while(*text){const auto cp=mediaCodepoint(text,invalid);if(cp=='\n'){x=0;continue;}
         const auto face=library?libraryFace(cp,font):faceFor(cp,font);if(!requestMetric(cp,face))return false;
         const auto* g=find(cp,face);const int advance=packedLatin(face)?latinAdvance(cp,face):(g?g->advance:font);
-        if(x+advance>=startPx&&x<=startPx+widthPx&&!request(cp,face,Ui))return false;
-        x+=advance;if(x>startPx+widthPx)break;}return true;
+        x+=advance;if(x>startPx+widthPx)break;}
+    const char* end=text;
+    const uint8_t faces[]={library?libraryFace(0x4E00,font):faceFor(0x4E00,font),library?libraryFace('A',font):faceFor('A',font)};
+    for(auto loadFace:faces){x=0;text=source;while(text<end){const auto cp=mediaCodepoint(text,invalid);if(cp=='\n'){x=0;continue;}
+        const auto face=library?libraryFace(cp,font):faceFor(cp,font);const auto* g=find(cp,face);
+        const int advance=packedLatin(face)?latinAdvance(cp,face):(g?g->advance:font);
+        if(face==loadFace&&x+advance>=startPx&&x<=startPx+widthPx&&!request(cp,face,Ui))return false;x+=advance;}}
+    return true;
 }
 int FontCache::textWidth(const char* text,uint8_t pixels)const{
     if(!text)return 0;int width=0;bool invalid=false;
@@ -98,6 +116,10 @@ void FontCache::service(){
         if(fontFile_){fontFile_.close();return;}
         indexPageAt_=UINT32_MAX;++stats_.opens;currentFont_=g.font;
         indexFormat_=indexes_[g.font].format==1?1:2;
+        // A retained metric already has a validated bitmap address. After
+        // leaving Player, reopening its VLW must not re-query that index.
+        if(g.offset&&!metricOnly_&&indexes_[g.font].paired){
+            count_=indexes_[g.font].count;vlwSize_=indexes_[g.font].vlwSize;phase_=5;--stats_.opens;return;}
         std::snprintf(path,sizeof(path),"/ADVWalkman/fonts/%s.%s",names[g.font],indexFormat_==2?"idx2":"idx");
         const auto opened=openResource(index_,path,512,failure_);
         if(opened==MediaState::Missing&&indexFormat_==2){indexes_[g.font].format=1;phase_=1;failure_=ResourceFailure{};}
@@ -111,7 +133,7 @@ void FontCache::service(){
             if(count_>65536||index_.size()!=(indexFormat_==2?512+count_*16:16+count_*24))fail(true,"font_index_length","validate");
             else{auto& cached=indexes_[g.font];cached.count=count_;cached.vlwSize=vlwSize_;cached.headerCrc=indexFormat_==2?mediaU32(b+16):0;cached.format=indexFormat_;cached.checked=true;phase_=5;}}
     }else if(phase_==5){++stats_.opens;std::snprintf(path,sizeof(path),"/ADVWalkman/fonts/%s.vlw",names[g.font]);const auto opened=openResource(fontFile_,path,256,failure_);
-        if(opened!=MediaState::Loading)fail(true,"font_bitmap_open","open");else if(fontFile_.size()!=vlwSize_)fail(true,"font_bitmap_length","validate");else phase_=indexFormat_==2&&!indexes_[g.font].paired?7:3;
+        if(opened!=MediaState::Loading)fail(true,"font_bitmap_open","open");else if(fontFile_.size()!=vlwSize_)fail(true,"font_bitmap_length","validate");else phase_=indexFormat_==2&&!indexes_[g.font].paired?7:g.offset&&!metricOnly_?4:3;
     }else if(phase_==7){++stats_.reads;const int n=fontFile_.read(b,24);stats_.bytes+=n>0?n:0;
         if(n!=24||(mediaCrc(~0U,b,24)^~0U)!=indexes_[g.font].headerCrc)fail(true,"font_index_pair","validate",24,n);
         else{indexes_[g.font].paired=true;phase_=3;}

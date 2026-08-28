@@ -345,9 +345,11 @@ void UiTextLayout::drawScrolledLine(lgfx::LovyanGFX& display, const char* text,
     if (box.x < 0 || box.y < 0 || box.width <= 0 || box.height <= 0 ||
         box.x + box.width > display.width() ||
         box.y + box.height > display.height()) return;
-    display.setClipRect(box.x, box.y, box.width, box.height);
+    int cx,cy,cw,ch;display.getClipRect(&cx,&cy,&cw,&ch);
+    const int x=std::max<int>(cx,box.x),y=std::max<int>(cy,box.y);
+    display.setClipRect(x,y,std::max(0,std::min<int>(cx+cw,box.x+box.width)-x),std::max(0,std::min<int>(cy+ch,box.y+box.height)-y));
     singleLine(display, text, box.x - std::max<int32_t>(0, offsetPx), box.y, true);
-    display.clearClipRect();
+    display.setClipRect(cx,cy,cw,ch);
 }
 
 void UiTextLayout::drawClippedLabel(lgfx::LovyanGFX& display, const char* text,
@@ -377,9 +379,11 @@ void UiTextLayout::drawClippedLabel(lgfx::LovyanGFX& display, const char* text,
         UiTextLayoutResult result;
         appendEllipsis(display, line, bytes, width, result);
     }
-    display.setClipRect(x, 0, width, display.height());
+    int cx,cy,cw,ch;display.getClipRect(&cx,&cy,&cw,&ch);
+    const int left=std::max<int>(x,cx),right=std::min<int>(x+width,cx+cw);
+    display.setClipRect(left,cy,std::max(0,right-left),ch);
     display.drawString(line, x, y);
-    display.clearClipRect();
+    display.setClipRect(cx,cy,cw,ch);
     display.setTextStyle(savedStyle);
     display.setCursor(savedX, savedY);
 }
