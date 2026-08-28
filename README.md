@@ -1,7 +1,7 @@
 # ADV Walkman
 
 > 工作名：ADV Walkman  
-> 当前阶段：P3C `0.7.6-p3c.navfix` 列表返回 / 选歌 / 时间字号修复，仅本地；A/B/C 仍为 `DEVICE TEST`
+> 当前阶段：P3D `0.8.0-p3d.ui` 黑胶曲库 / 设置 / 息屏，与P3C修复合并验收；未真机收口
 > 平台：M5Stack Cardputer ADV
 
 ## 1. 项目是什么
@@ -71,18 +71,19 @@ V1 不以以下内容为目标：
 
 ## 5. 当前最重要的技术任务
 
-### P3C 当前交付入口 — 0.7.6 导航修复（仅本地）
+### 当前交付入口 — 0.8.0 P3D + P3C导航修复
 
-本轮不复制 SD、不安装。顺序为 **P3C 修复与自动验证 → 单独规划并实施 P3D →
-一次安装、合并真机验收**；P3D 当前仍为 TODO，不自动开工。
-修复详情与证据见 [`P3C_NAVIGATION_FIX.md`](docs/P3C_NAVIGATION_FIX.md)。
+顺序为 **P3C 修复与自动验证 → 独立P3D实施 → 同一BIN一次安装、合并自由验收**。
+P3D新增普通彩色曲库封面、黑胶选择带、四项中文设置、独立显示存档及息屏吞键。
+实施、构建和SD交付见 [`P3D_IMPLEMENTATION.md`](docs/P3D_IMPLEMENTATION.md)，
+P3C前置修复见 [`P3C_NAVIGATION_FIX.md`](docs/P3C_NAVIGATION_FIX.md)。
 
 Esc 先退出歌词/封面并清屏，再异步打开播放列表；加载时仍可返回，错误显示原因，
 Enter 重试、Esc 返回。可从曲库进入 AveMujica，选中歌曲后才切换为该文件夹队列。
 浏览本身不换歌；不会把 benchmark 的单曲队列强行变成全 SD 队列。
 本轮没有提前接通实体上一首/下一首。时间改为14 px Times，音量、歌词和封面资源不改。
 
-以下为后续合并固件的自由试用方式，不要求现在安装 0.7.6：
+合并固件自由试用，不再单独安装0.7.6：
 
 仍安装同一个 `/firmware/ADV-Walkman-P3ABC-Gate.bin`，名称保留以免增加 SD 安装项。
 启动直接进入普通界面；恢复歌曲保持 Paused。没有必须按顺序完成的提示卡、自动
@@ -98,13 +99,14 @@ Seek / 切 View / 暂停 / 重启，也不再盯着封面等 60 秒后被测试�
 | `] }` | Lyrics / Cover |
 | Esc | 返回播放列表；列表内继续返回曲库 |
 | 方向位置、Enter | 曲库 / 播放列表导航、选歌 |
-| T | 请求状态及诊断保存；等现有状态保存完成后显示 LOG SAVED |
+| S（曲库页） | 进入设置；上下选择、左右调整、Enter打开内部子面板、Esc返回 |
+| T | 请求状态及诊断保存；等现有状态保存完成后显示“已保存” |
 
 可以按自己的顺序听歌、看歌词、切封面、调音量和浏览。日志每 15 秒自动分块保存；
-日志按启动编号追加，不覆盖上次启动。结束前按 T，等 LOG SAVED 后再关机取 SD。
+日志按启动编号追加，不覆盖上次启动。结束前在播放器按 T，等“已保存”后再关机取 SD。
 日志保留同版本每次启动的第一项错误，不会为了测试主动停播。
 自然连续播放满 60 秒只是后台覆盖项；没测到的操作写 INCOMPLETE，不是假 PASS。
-本次只需最后手动重启一次，先等待至少3秒不要按键，确认恢复暂停、歌曲和视图正确；
+本次最后在设置里确认“返回Launcher”，由固件保存并返回；重新启动后等至少3秒不要按键，确认恢复暂停、歌曲、视图和显示设置正确；
 不自动重启，也不要求每首完整听完。播放中的 Seek 仍单列未验，不以无声启动自检冒充。
 
 Cover 保留28 / 188 / 24 px；Lyrics 隐藏歌名/歌手，将上方216 px全部留给歌词。
@@ -118,6 +120,18 @@ ASCII 默认40×32，提供34×26 / 40×32 / 48×40预览，输出仍120×144真
 暗黑天国故意无歌词，用于Cover-only验证。原文件、benchmark及日文原稿不改。
 只提前接通已冻结的播放暂停和音量，其他 P4 按键 / DSP 仍未实施。
 
+本轮自由验收要点（不锁顺序）：
+
+- 从歌词及封面退回列表，去AveMujica选择至少两首不同歌曲，包含无歌词的暗黑天国。
+- 看曲库五人合图、黑胶切换和两行长名称；浏览时音乐持续。
+- 曲库按S进入设置，试调亮度；播放器默认3分钟、其他页面默认30秒，可先改成15秒测试。
+- 息屏后第一次按View或音量只亮屏，全部松开再按才执行；组合键也仅唤醒。
+- 自然操作累计至少60秒连续播放；最后恢复希望保留的设置，返回Launcher再启动。
+- 返回后先静置至少3秒，再等待一次15秒日志保存（或按T保存），才关机把SD交回PC读取。
+
+设置保存停止调整约1秒后自动进行；显示未保存时不要靠重启解决，保留日志。
+Launcher若出现其原有自动启动倒计时，按它的Enter提示进入菜单；本固件不改其配置。
+
 检查与构建：
 
 ```powershell
@@ -126,18 +140,19 @@ ASCII 默认40×32，提供34×26 / 40×32 / 48×40预览，输出仍120×144真
 & '.\.venv-media\Scripts\python.exe' tools/check_p3_free.py
 & '.\.venv-media\Scripts\python.exe' tools/check_p3_navigation.py
 & '.\.venv-media\Scripts\python.exe' tools/check_p3_closure.py
+& '.\.venv-media\Scripts\python.exe' tools/check_p3d.py
 & '.\.venv-media\Scripts\python.exe' tools/preview_p3_lyrics.py
 & 'B:\PlatformIO\penv\Scripts\python.exe' tools/validate_p3_free.py D:\ADVWalkman\logs\p3-free-last.txt
 ```
 
 媒体 package / 预览仍在 `test-data/local/p3-media/`，Git 忽略；只用现有独立媒体环境。
-后续获得合并交付授权、SD 在 PC 时才使用 `tools/sync_p3_media.py --sd-root D:\`，按旧清单校验归属后仅复制变化
-资源与同名 BIN，不改其他音乐、状态或日志。资源格式见 `docs/P3C_IMPLEMENTATION.md`，
-本次自动验证、构建和 SD 交付结果见 `docs/P3C_VALIDATION.md`。
+P3D使用`tools/prepare_p3d.py`生成独立LCOV和像素预览；本轮只同步新增曲库封面与同名BIN，
+已有字体覆盖全部新增菜单，无需重复复制；音乐、歌词、歌曲ASCII、存档与旧日志不动。
+资源格式见 `docs/TECH_DESIGN.md`；本次交付结果见 `docs/P3D_IMPLEMENTATION.md`。
 音频 70 ms PCM / 零 Error / 零 Backpressure、歌词 100 ms 呈现 / 200 ms 到期延迟
 阈值不变；本地检查不代表实际听感、刷新或按键已通过。
 
-历史0.7.5六环境构建、48项PC检查及D盘同名BIN/受管资源同步已完成；本轮0.7.6仅本地。
+历史0.7.5六环境构建、48项PC检查及D盘同步已完成；0.7.6仅本地，本轮由0.8.0统一交付。
 前版收尾内容见 `docs/P3ABC_CLOSURE.md`。历史0.7.4约10分钟日志
 Audio Error / Backpressure为0，但PCM峰值70.494 ms仍超70 ms；不能据此宣称收口。
 新版仍须实际显示、音频和手动重启日志通过，才将对应任务标记DONE。
@@ -477,7 +492,7 @@ Color ASCII Cover：
 - PC 端按每首歌曲批量生成彩色 ASCII Cover；
 - ADV 不实时转换图片；
 - PC 端预渲染 RGB565，ADV 直接读取；
-- 当前目标网格34×26，保持彩色字符画，真机确认精细度。
+- 当前默认网格40×32，保持彩色字符画，真机确认精细度。
 
 曲库页面采用上方独立曲库封面、下方黑胶唱片堆叠选择带；播放列表先采用清晰的标准歌曲列表。媒体资源按相同相对路径和 basename 机械匹配：
 
@@ -487,13 +502,15 @@ Color ASCII Cover：
 /ADVWalkman/covers/<relative>/<song>.cover.adv
 ```
 
-每首歌保存独立设备封面，不使用专辑公共封面、模糊匹配、Hash 数据库或 JSON Manifest。曲库封面与歌曲封面相互独立；曲库封面的最终文件命名和具体动画参数留到 P3 真机原型冻结。
+每首歌保存独立设备封面，不使用专辑公共封面、模糊匹配、Hash 数据库或 JSON Manifest。
+曲库普通彩色封面独立存放在`/ADVWalkman/library-covers/folders/<一级目录名>/cover.adv`，
+未分类为`/ADVWalkman/library-covers/root.cover.adv`；黑胶切换约160ms/最多4帧，平时静止。
 
 息屏：
 
 - 息屏后所有按键原功能失效；
-- 第一次任意键只唤醒并吞掉该按键；
-- 第二次按键才执行；
+- 第一次任意键只唤醒并吞掉整组按键，直到全部松开；
+- 全部松开后再按才执行；
 - 因此息屏时第一次按 3×4 区的 `View` 只唤醒，不切换 View；
-- 唤醒后约 5 秒无操作重新息屏；
-- 正常播放时默认约 15 秒无 UI 操作自动息屏。
+- 唤醒后重用所在页面的正常时限；
+- Player播放/暂停默认3分钟，其他页面30秒；设置中分别可选15/30/60/180/300/600秒/永不。

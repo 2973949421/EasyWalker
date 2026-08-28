@@ -1001,20 +1001,44 @@ V1 只有四个实际页面：播放器、播放列表、曲库、设置；不�
 
 播放列表采用低复杂度标准列表：Up / Down 选择、Enter 播放并进入播放器、Esc 返回曲库；至少显示序号、Title、选择高亮和可选的正在播放标识。底层可以复用 P1 Queue，但 UI 不改变 Queue / Session 语义。
 
-设置仅包含 Brightness、Screen Timeout、About / Version 和 Return to Launcher，不为填充页面增加项目。
+P3D（0.8.0）将Library绘制交给`LibraryVisual`：120×120独立封面、两行名称和最多三张唱片；160ms/最多4帧选择动画，不常驻旋转。弧形短名按实际advance计算角度与容量，完整标题仍使用`UiTextLayout`。只复用`NowPlayingPresenter::sharedRow()`的135×18缓冲，每次借用重设其高度；按目标条带裁剪后`pushSprite`，不分配全屏图像。退出Library或息屏释放封面文件，新的选择取消旧请求。
+
+独立`LibraryCoverReader`按下列入口取普通彩色图，绝不从歌曲封面推断：
+
+```text
+/ADVWalkman/library-covers/folders/<一级目录名>/cover.adv
+/ADVWalkman/library-covers/root.cover.adv   # 未分类
+```
+
+LCOV v1头24bytes，小端：magic[4]、version/headerLength/width/height/format/reserved各u16、payloadLength/CRC32各u32；固定120×120、RGB565、payload28800bytes。先分块校验CRC，准备阶段每次最多512bytes，绘制只消费RAM中的2行480bytes；只保留当前图片句柄。缺失/损坏显示占位并记录原因。合计媒体预算用`kP3DMediaBudgetBytes`编译断言≤48KiB（包含原工作集、文件系统预留与新增LibraryVisual）。
+
+设置仅包含屏幕亮度、息屏时间、关于、返回Launcher。SettingsPanel内部子面板不是第五个页面。独立`DisplaySettingsStore`保存显示偏好，不改Player Session：
+
+```text
+/ADVWalkman/state/display-a.bin
+/ADVWalkman/state/display-b.bin
+```
+
+DSPL v1固定24bytes：magic[4]、version(u16)、recordLength(u16)、generation(u32)、payloadLength(u32=4)、brightness/playerTimeoutIndex/otherTimeoutIndex/reserved各u8、前20bytes CRC32(u32)。亮度10..100步长10默认70；时限索引0..6对应15/30/60/180/300/600秒及永不，默认3/1。启动选择有效最新槽，坏槽/打开失败单列诊断；无有效槽采用默认值。调整停止1秒或离开设置后安排保存，按open/write/flush/close/reopen/verify分轮推进，与Player persistence及日志错开。回读校验后才切换generation；写入期间再次调整通过revision继续安排下一次保存。失败保持RAM值，显示未保存，不同步阻塞按键。
+
+返回Launcher借鉴Cardio的APP_TEST路线：运行时找非当前TEST分区，检查app描述；用户确认后Pause并请求Player checkpoint及显示保存，再保存诊断。只有存档成功才调用`esp_ota_set_boot_partition`（由IDF验证image）和`esp_restart`；任何一步失败留在设置。没有地址常量、Factory fallback、分区表写入或Stop归零。保存10秒、日志15秒超时返回具体错误；不更改Launcher的自动启动设置。
 
 ### 9.9 Screen-off
 
-Screen Off 等同 V1 Soft Lock：所有按键原功能暂时失效；首次任意键只唤醒且事件不向 Player / UI Action 派发；亮屏后第二次按键才正常派发。
+Screen Off 等同 V1 Soft Lock：`ScreenPowerController`在InputRouter动作派发之前检查56键完整物理位图，25ms稳定后处理。首次任意键只唤醒并吞掉整组，直到全部松开；无绑定键、修饰键、组合键也如此。InputRouter继续更新去抖状态，但不派发被吞掉的动作，避免按住后漏出新事件。
 
 该规则同样覆盖 `View`：息屏状态第一次按对应物理键只唤醒，不能同时切换 View。
 
-建议 Timer：
+冻结 Timer：
 
 ```text
-normal idle timeout: ~15s
-wake-only timeout:   ~5s
+Player (Playing or Paused): 180s default
+Other pages:                30s default
+Options per context:        15/30/60/180/300/600s/never
+After waking:               normal timeout for the current page
 ```
+
+使用uint32差值支持millis回绕；只有物理操作和页面切换重置时限。息屏仅backlight=0，释放不可见媒体准备、不再绘制；Player和必要存档照常服务。唤醒恢复用户亮度、根据当前播放位置重新准备/清屏，无旧歌词补画。记录睡眠/唤醒次数、唤醒位图和实际被抑制动作数；不是硬件睡眠，不引入长按锁屏。
 
 
 ---

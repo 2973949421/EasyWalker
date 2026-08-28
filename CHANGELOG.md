@@ -1,5 +1,22 @@
 # Changelog
 
+## V0.8.0 — P3D library records, settings and screen-off
+
+Date: 2026-08-28
+
+- 独立普通彩色LCOV曲库封面、两行名称、按字宽的弧形短名和最多三张黑胶；静止为主，
+  选择时约160ms/最多4帧。AveMujica采用官方动画五人合图，不改变歌曲ASCII资源。
+- 四项中文设置，默认亮度70%，两类时限默认Player180秒/其他30秒；独立DSPL A/B+CRC
+  保存与回读，未改Player Session。已有字体完整覆盖新菜单，无需重新制作资源。
+- 完整物理位图在动作层之前处理息屏/唤醒，首组键吞到全部松开；取消旧5秒时限，
+  背光关闭仍服务音频与存档。返回Launcher动态查询TEST App，先Pause保存，错误不重启。
+- 保留P3C列表返回、目录选歌、14px时间修复；共享行缓冲重设尺寸、页面生命周期释放，
+  输入/保存长工作后返回音频服务。未改变PCM70ms/歌词100ms/延迟200ms标准。
+- 自由日志新增D覆盖、显示恢复、唤醒位图/抑制动作、封面/设置耗时及返回错误；
+  日志写失败结束手动保存等待，避免返回Launcher卡在等待状态。
+- 本地检查、预览和构建见`docs/P3D_IMPLEMENTATION.md`。A/B/C/D仍待真机与人工确认；
+  同一个P3ABC BIN合并验收，不进入P4、不push、不烧录或改Flash布局。
+
 ## V0.7.6 — P3C navigation, clean page lifecycle and readable time
 
 Date: 2026-08-28

@@ -324,7 +324,7 @@ AC：
 | P3A UI Foundation | DEVICE TEST | P3-01、P3-08、P3-09；P3-07 功能骨架 | `0.5.1` 功能 Gate PASS；`0.5.2` 文本修复及本地构建完成，待 Gate A-fix+B+C 回归 |
 | P3B Now Playing Chrome | DEVICE TEST | P3-02 | `0.6.0` 代码、自动检查及三环境构建完成；待联合 Gate 验收 |
 | P3C Media Resources | DEVICE TEST | P3-03～06、P3-12 | `0.7.6` 导航、分区绘制、自检及14px时间修复；仅本地，待与P3D合并真机确认 |
-| P3D Product UI Completion | TODO | P3-07、P3-10、P3-11 | 黑胶曲库、设置、息屏与最终校准 |
+| P3D Product UI Completion | DEVICE TEST | P3-07、P3-10、P3-11 | `0.8.0` 本地实现、62项检查与三环境构建通过；与P3C导航修复合并真机验收 |
 
 P3A 编译成功后进入 `DEVICE TEST`，不能提前把 P3-01 / 08 / 09 标为 `DONE`。
 P3-07 在 P3A 只完成可用骨架，最终视觉仍由 P3D 验收。
@@ -338,7 +338,20 @@ P3-07 在 P3A 只完成可用骨架，最终视觉仍由 P3D 验收。
 
 证据与实现：`docs/P3C_NAVIGATION_FIX.md`。不以存在10首MP3或接受Esc代替选歌成功。
 实施顺序：**P3C 修复与自动验证 → 单独规划并实施 P3D → 一次安装、合并真机验收**。
-本轮没有写 SD、没有安装，P3D 保持 TODO；不添加实体上一首/下一首。
+`0.7.6` 没有单独写SD或安装；现推进 `0.8.0` P3D，本轮仍不添加实体上一首/下一首。
+
+### P3D 合并交付 — 0.8.0
+
+详见 `docs/P3D_IMPLEMENTATION.md`。
+
+- [x] 独立LCOV曲库封面、黑胶短动画、两行名称/弧形短名和中文菜单本地完成
+- [x] DSPL A/B显示存档、两类超时、完整物理位图吞键、正常Launcher返回路径本地完成
+- [x] 62项PC/生产C++编译期检查；Dev/P3ABC/P3A构建及0x140000/48KiB检查通过
+- [x] SD仅覆盖同名联合BIN并新增AveMujica独立封面，核对复制结果；字体未变
+- [ ] Lyrics/Cover退列表无残留，能选择至少两首（含暗黑天国），实际目录队列正确
+- [ ] 黑胶/中文设置/亮度/15秒临时时限清晰可用，首组View/音量/组合键仅唤醒
+- [ ] ≥60秒真实跨页播放，PCM≤70ms、歌词呈现≤100ms/正常预取更新≤200ms，无异常声音
+- [ ] 保存并返回Launcher，再启动恢复暂停、歌曲/视图/亮度/时限正确；Host日志与人工确认通过
 
 Automatic Validation：
 
@@ -584,7 +597,7 @@ AC：
 
 ## P3-07 Library UI
 
-Status: DOING — FOUNDATION / TEXT FIX BUILT, COMBINED DEVICE TEST PENDING
+Status: DEVICE TEST — P3D VISUAL BUILT, COMBINED DEVICE TEST PENDING
 
 AC：
 
@@ -633,29 +646,30 @@ AC：
 
 ## P3-10 Settings UI
 
-Status: TODO
+Status: DEVICE TEST
 
 AC：
 
-- [ ] Brightness
-- [ ] Screen Timeout
-- [ ] About / Version
-- [ ] Return to Launcher
+- [ ] 亮度默认70%，10%～100%每次10%，即时预览/后台保存，失败显示未保存
+- [ ] 两类息屏时间分别保存；默认Player3分钟、其他30秒，可选15/30/60/180/300/600秒/永不
+- [ ] 关于显示项目名、版本和设备型号；菜单楷体/Times，简体中文
+- [ ] 返回Launcher默认取消；确认后Pause保存位置/视图/显示设置再返回，失败不重启
+- [ ] Display A/B+CRC恢复，不改变Player Session或增加音量持久化
 - [ ] 不为了填充页面增加无实际用途的设置
 
 ---
 
 ## P3-11 Screen-off Soft Lock
 
-Status: TODO
+Status: DEVICE TEST
 
 AC：
 
-- [ ] 正常播放默认约 15 秒无 UI 操作息屏
+- [ ] Player播放/暂停默认3分钟，其他页面30秒；播放/刷新不重置计时
 - [ ] Screen Off 时所有按键原功能失效
-- [ ] 第一次任意键只唤醒并吞掉该事件
-- [ ] 第二次按键才执行正常功能
-- [ ] 唤醒后约 5 秒无操作再次息屏
+- [ ] 第一次任意键只唤醒，包含无绑定键/修饰键/组合键，吞掉直到全部松开
+- [ ] 全部松开后第二次按键才执行正常功能，不泄漏View/音量动作
+- [ ] 唤醒后重用当前页面正常时限；永不/页面切换/时钟回绕正确
 - [ ] 息屏 / 唤醒不打断音频
 - [ ] V1 不单独实现复杂 Lock 系统
 
