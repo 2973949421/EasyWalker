@@ -90,7 +90,7 @@ def font_sources(latin=False):
     return sources
 
 
-def make_font(name: str, size: int, codepoints, sources, target: Path):
+def make_font(name: str, size: int, codepoints, sources, target: Path, *, embolden=False):
     target.mkdir(parents=True, exist_ok=True)
     glyphs, missing, fallbacks = [], [], {}
     scale=4
@@ -108,6 +108,11 @@ def make_font(name: str, size: int, codepoints, sources, target: Path):
         width, height = max(0, right-left), max(0, bottom-top)
         bitmap = Image.new('L', (max(1, width), max(1, height)))
         ImageDraw.Draw(bitmap).text((-left, -top), char, font=font, fill=255, anchor='ls')
+        if embolden and width and height:
+            # Expand the high-resolution canvas before dilation: preserve
+            # italic overhangs instead of clipping the added outer stroke.
+            bitmap=ImageOps.expand(bitmap,border=1).filter(ImageFilter.MaxFilter(3))
+            left-=1;top-=1;width+=2;height+=2
         if name=='cjk-18':bitmap=bitmap.filter(ImageFilter.MaxFilter(3))
         if width and height:
             bitmap=bitmap.resize((max(1,math.ceil(width/scale)),max(1,math.ceil(height/scale))),Image.Resampling.LANCZOS)
@@ -145,7 +150,8 @@ def make_font(name: str, size: int, codepoints, sources, target: Path):
     stem.with_suffix('.idx').write_bytes(struct.pack('<4sHHII', b'FIDX', 1, 24, len(glyphs), len(vlw)) + index)
     from font_index_v2 import generate
     generate(stem.with_suffix('.idx'))
-    return {'name': name, 'glyphs': len(glyphs), 'bytes': len(vlw), 'missing': missing, 'fallbacks': fallbacks}
+    return {'name': name, 'glyphs': len(glyphs), 'bytes': len(vlw), 'missing': missing, 'fallbacks': fallbacks,
+            'embolden_high_res_radius':1 if embolden else 0,'raster_scale':scale}
 
 
 def cover_ascii(source: Path, columns: int, rows: int, canvas_size=(120,144)):
