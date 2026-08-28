@@ -24,12 +24,14 @@ class TrackedSdFileSource final : public AudioFileSource {
     bool eofObserved() const;
     bool readError() const;
     uint64_t bytesRead() const;
+    uint32_t readMaxUs()const{return readMaxUs_;}
 
   private:
     File file_;
     uint32_t physicalSize_ = 0;
     uint32_t readLimit_ = 0;
     uint64_t bytesRead_ = 0;
+    uint32_t readMaxUs_=0;
     bool eofObserved_ = false;
     bool readError_ = false;
 };

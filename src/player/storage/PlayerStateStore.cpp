@@ -1,6 +1,8 @@
 #include "PlayerStateStore.h"
 
 #include <algorithm>
+#include <Arduino.h>
+#include <errno.h>
 #include <string.h>
 
 namespace adv_walkman {
@@ -12,7 +14,7 @@ constexpr uint32_t kQueueMagic = 0x31515741;    // "AWQ1" on disk.
 constexpr uint32_t kSessionMagic = 0x31535741;  // "AWS1" on disk.
 constexpr uint16_t kFormatVersion = 1;
 constexpr uint16_t kRecordHeaderSize = 20;
-constexpr size_t kStorageStepBytes = 1024;
+constexpr size_t kStorageStepBytes = 512;
 constexpr uint32_t kMaximumSessionPayload =
     24 + (kPersistedQueueMaxTracks * sizeof(uint16_t)) +
     (kPersistedHistoryMaxTracks * sizeof(uint16_t));
@@ -423,6 +425,7 @@ PersistenceResult PlayerStateStore::saveQueueAsync(const TrackSource& source) {
     queuePrepareIndex_ = 0;
     queueWriteIndex_ = 0;
     queueCountWritten_ = false;
+    queueBuffered_ = queueBufferOffset_ = 0;
     payloadWriteOffset_ = 0;
     preparedPayloadLength_ = sizeof(uint16_t);
     preparedPayloadCrcState_ = 0xFFFFFFFF;
@@ -479,6 +482,13 @@ PersistenceResult PlayerStateStore::saveSessionAsync(
 }
 
 void PlayerStateStore::service() {
+    const uint8_t measuredPhase = static_cast<uint8_t>(phase_);
+    const uint32_t started = micros();
+    // Destructor records even early returns; it never performs I/O.
+    struct Measure {
+        uint32_t& peak; uint32_t at;
+        ~Measure() { peak = std::max<uint32_t>(peak, micros() - at); }
+    } measure{phasePeaks_[measuredPhase], started};
     switch (phase_) {
         case JobPhase::Idle:
             return;
@@ -503,6 +513,27 @@ void PlayerStateStore::service() {
         case JobPhase::VerifyPayload:
             serviceVerifyPayload();
             return;
+        case JobPhase::CheckTarget:
+            phase_ = jobFile_.size() == kRecordHeaderSize + preparedPayloadLength_
+                         ? JobPhase::WriteHeader : JobPhase::CloseResize;
+            return;
+        case JobPhase::CloseResize:
+            jobFile_.close(); phase_ = JobPhase::CreateTarget; return;
+        case JobPhase::CreateTarget:
+            jobFile_ = fs_->open(targetPath_, FILE_WRITE);
+            if (!jobFile_) complete(PersistenceResult::IoError);
+            else phase_ = JobPhase::WriteHeader;
+            return;
+        case JobPhase::FlushTarget:
+            jobFile_.flush(); phase_ = JobPhase::CloseTarget; return;
+        case JobPhase::ReadVerifyHeader:
+            serviceReadVerifyHeader(); return;
+        case JobPhase::QueueFetch:
+            serviceQueueFetch(); return;
+        case JobPhase::Finish:
+            complete(completionResult_); return;
+        case JobPhase::Cleanup:
+            jobFile_.close(); phase_ = JobPhase::Finish; return;
     }
 }
 
@@ -711,10 +742,8 @@ bool PlayerStateStore::validateSessionPayload(
 }
 
 void PlayerStateStore::serviceQueuePrepare() {
-    size_t processedBytes = 0;
     char path[kPersistedPathMaxBytes + 1];
-    while (queuePrepareIndex_ < queueCount_ &&
-           processedBytes < kStorageStepBytes) {
+    if (queuePrepareIndex_ < queueCount_) {
         if (!queueSource_->pathAt(
                 queuePrepareIndex_, path, sizeof(path))) {
             complete(PersistenceResult::InvalidArgument);
@@ -739,7 +768,6 @@ void PlayerStateStore::serviceQueuePrepare() {
             reinterpret_cast<const uint8_t*>(path),
             pathLength);
         preparedPayloadLength_ += sizeof(uint16_t) + pathLength;
-        processedBytes += sizeof(uint16_t) + pathLength;
         ++queuePrepareIndex_;
     }
 
@@ -750,20 +778,14 @@ void PlayerStateStore::serviceQueuePrepare() {
 }
 
 void PlayerStateStore::serviceOpenTarget() {
-    if (!ensureStateDirectory()) {
-        complete(PersistenceResult::IoError);
-        return;
-    }
-    if (fs_->exists(targetPath_) && !fs_->remove(targetPath_)) {
-        complete(PersistenceResult::IoError);
-        return;
-    }
-    jobFile_ = fs_->open(targetPath_, FILE_WRITE);
+    errno = 0;
+    jobFile_ = fs_->open(targetPath_, "r+");
     if (!jobFile_) {
-        complete(PersistenceResult::IoError);
+        if (errno == ENOENT) phase_ = JobPhase::CreateTarget;
+        else complete(PersistenceResult::IoError);
         return;
     }
-    phase_ = JobPhase::WriteHeader;
+    phase_ = JobPhase::CheckTarget;
 }
 
 void PlayerStateStore::serviceWriteHeader() {
@@ -780,7 +802,7 @@ void PlayerStateStore::serviceWriteHeader() {
         complete(PersistenceResult::IoError);
         return;
     }
-    phase_ = JobPhase::WritePayload;
+    phase_ = jobKind_ == PersistenceRecordKind::Queue ? JobPhase::QueueFetch : JobPhase::WritePayload;
 }
 
 void PlayerStateStore::serviceWritePayload() {
@@ -793,11 +815,20 @@ void PlayerStateStore::serviceWritePayload() {
         }
         payloadWriteOffset_ += request;
         if (payloadWriteOffset_ == sessionPayloadLength_) {
-            phase_ = JobPhase::CloseTarget;
+            phase_ = JobPhase::FlushTarget;
         }
         return;
     }
 
+    const size_t request = std::min<size_t>(queueBuffered_ - queueBufferOffset_, kStorageStepBytes);
+    if (request && jobFile_.write(ioBuffer_ + queueBufferOffset_, request) != request) {
+        complete(PersistenceResult::IoError); return;
+    }
+    queueBufferOffset_ += request;
+    if (queueBufferOffset_ == queueBuffered_) phase_ = JobPhase::QueueFetch;
+}
+
+void PlayerStateStore::serviceQueueFetch() {
     size_t buffered = 0;
     if (!queueCountWritten_) {
         writeLe16(ioBuffer_, queueCount_);
@@ -806,21 +837,18 @@ void PlayerStateStore::serviceWritePayload() {
     }
 
     char path[kPersistedPathMaxBytes + 1];
-    while (queueWriteIndex_ < queueCount_) {
+    // Fetch at most ONE path: a TrackSource may itself access SD.
+    if (queueWriteIndex_ < queueCount_) {
         if (!queueSource_->pathAt(queueWriteIndex_, path, sizeof(path))) {
             complete(PersistenceResult::InvalidArgument);
             return;
         }
         const size_t pathLength = strnlen(path, sizeof(path));
-        const size_t recordLength = sizeof(uint16_t) + pathLength;
         if (pathLength == 0 || pathLength > kPersistedPathMaxBytes ||
             !validUtf8Path(
                 reinterpret_cast<const uint8_t*>(path), pathLength)) {
             complete(PersistenceResult::InvalidArgument);
             return;
-        }
-        if (buffered + recordLength > kStorageStepBytes) {
-            break;
         }
 
         writeLe16(ioBuffer_ + buffered, static_cast<uint16_t>(pathLength));
@@ -830,23 +858,22 @@ void PlayerStateStore::serviceWritePayload() {
         ++queueWriteIndex_;
     }
 
-    if (buffered > 0 && jobFile_.write(ioBuffer_, buffered) != buffered) {
-        complete(PersistenceResult::IoError);
-        return;
-    }
-    if (queueWriteIndex_ == queueCount_) {
-        phase_ = JobPhase::CloseTarget;
-    }
+    queueBuffered_ = buffered; queueBufferOffset_ = 0;
+    phase_ = buffered ? JobPhase::WritePayload : JobPhase::FlushTarget;
 }
 
 void PlayerStateStore::serviceCloseTarget() {
-    jobFile_.flush();
     jobFile_.close();
     phase_ = JobPhase::OpenVerify;
 }
 
 void PlayerStateStore::serviceOpenVerify() {
     jobFile_ = fs_->open(targetPath_, FILE_READ);
+    if (!jobFile_) { complete(PersistenceResult::IoError); return; }
+    phase_ = JobPhase::ReadVerifyHeader;
+}
+
+void PlayerStateStore::serviceReadVerifyHeader() {
     uint8_t header[kRecordHeaderSize] = {};
     const uint32_t expectedMagic =
         jobKind_ == PersistenceRecordKind::Queue ? kQueueMagic : kSessionMagic;
@@ -882,7 +909,6 @@ void PlayerStateStore::serviceVerifyPayload() {
         return;
     }
 
-    jobFile_.close();
     if ((verifyCrcState_ ^ 0xFFFFFFFF) != preparedPayloadCrc_) {
         complete(PersistenceResult::Corrupt);
         return;
@@ -892,7 +918,9 @@ void PlayerStateStore::serviceVerifyPayload() {
 
 void PlayerStateStore::complete(PersistenceResult result) {
     if (jobFile_) {
-        jobFile_.close();
+        completionResult_ = result;
+        phase_ = JobPhase::Cleanup;
+        return;
     }
 
     const PersistenceRecordKind completed = jobKind_;

@@ -39,8 +39,10 @@ uint32_t TrackedSdFileSource::read(void* data, uint32_t len) {
     }
 
     const uint32_t allowed = std::min(len, readLimit_ - position);
+    const uint32_t readAt=micros();
     const size_t received =
         file_.read(static_cast<uint8_t*>(data), static_cast<size_t>(allowed));
+    readMaxUs_=std::max<uint32_t>(readMaxUs_,micros()-readAt);
     if (received > allowed) {
         readError_ = true;
         return 0;

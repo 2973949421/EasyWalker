@@ -130,11 +130,15 @@ void PlayerRuntime::setPreferredNowPlayingView(uint8_t view) {
 }
 
 void PlayerRuntime::service() {
+    serviceAudio();
+    servicePersistence();
+}
+
+void PlayerRuntime::serviceAudio() {
     // Audio always receives service before a bounded storage step.
     const uint32_t transportAt=micros();
     controller_.service();
     transportServiceMaxUs_=std::max<uint32_t>(transportServiceMaxUs_,micros()-transportAt);
-    const uint32_t persistenceAt=micros();
     detectPlayerChanges();
 
     const PlayerSnapshot current = controller_.snapshot();
@@ -145,7 +149,12 @@ void PlayerRuntime::service() {
         lastCheckpointAtMs_ = now;
     }
 
-    if (stateStoreAvailable_ && stateStore_.pending()) {
+}
+
+void PlayerRuntime::servicePersistence() {
+    const uint32_t persistenceAt=micros();
+    const bool wasPending=stateStoreAvailable_ && stateStore_.pending();
+    if (wasPending) {
         stateStore_.service();
         if (!stateStore_.pending()) {
             lastPersistenceResult_ = stateStore_.lastResult();
@@ -174,7 +183,7 @@ void PlayerRuntime::service() {
             }
         }
     }
-    if (stateStoreAvailable_ && !persistenceSuspended_ &&
+    if (!wasPending && stateStoreAvailable_ && !persistenceSuspended_ &&
         !stateStore_.pending()) {
         startPendingSave();
     }

@@ -44,6 +44,7 @@ class Mp3PlaybackEngine final {
     bool pollEvent(AudioEvent& event);
     AudioStatus status() const;
     void resetDiagnostics();
+    uint32_t sourceReadMaxUs()const{return source_.readMaxUs();}
 
   private:
     static constexpr size_t kPathCapacity = 512;

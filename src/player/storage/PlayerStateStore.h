@@ -29,6 +29,9 @@ class PlayerStateStore {
     PersistenceResult saveQueueAsync(const TrackSource& source);
     PersistenceResult saveSessionAsync(const PersistedSession& session);
     void service();
+    // Actual duration of individual cooperative phases, including failed I/O.
+    uint32_t phasePeakUs(uint8_t phase) const { return phase < 16 ? phasePeaks_[phase] : 0; }
+    uint8_t phase() const { return static_cast<uint8_t>(phase_); }
 
     bool pending() const;
     PersistenceResult lastResult() const;
@@ -55,6 +58,14 @@ class PlayerStateStore {
         CloseTarget,
         OpenVerify,
         VerifyPayload,
+        CheckTarget,
+        CloseResize,
+        CreateTarget,
+        FlushTarget,
+        ReadVerifyHeader,
+        QueueFetch,
+        Finish,
+        Cleanup,
     };
 
     bool ensureStateDirectory();
@@ -74,6 +85,8 @@ class PlayerStateStore {
     void serviceWritePayload();
     void serviceCloseTarget();
     void serviceOpenVerify();
+    void serviceReadVerifyHeader();
+    void serviceQueueFetch();
     void serviceVerifyPayload();
     void complete(PersistenceResult result);
 
@@ -85,6 +98,9 @@ class PlayerStateStore {
     PersistenceRecordKind completedKind_ = PersistenceRecordKind::None;
     PersistenceResult lastResult_ = PersistenceResult::NotFound;
     JobPhase phase_ = JobPhase::Idle;
+    uint32_t phasePeaks_[16] = {};
+    PersistenceResult completionResult_ = PersistenceResult::Pending;
+    uint16_t queueBuffered_ = 0, queueBufferOffset_ = 0;
 
     const TrackSource* queueSource_ = nullptr;
     uint16_t queueCount_ = 0;

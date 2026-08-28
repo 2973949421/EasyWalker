@@ -33,6 +33,10 @@ class PlayerRuntime final {
     void setPreferredNowPlayingView(uint8_t view);
 
     void service();
+    void serviceAudio();
+    void servicePersistence();
+    uint32_t persistencePhasePeakUs(uint8_t phase)const{return stateStore_.phasePeakUs(phase);}
+    uint32_t sourceReadMaxUs()const{return engine_.sourceReadMaxUs();}
     PlayerSnapshot snapshot() const;
     bool currentPath(char* output, size_t outputCapacity) const;
     void resetDiagnostics();
