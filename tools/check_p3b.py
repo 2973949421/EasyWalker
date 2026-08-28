@@ -95,7 +95,7 @@ class P3BLocalChecks(unittest.TestCase):
         self.assertIn("metadataFromEntry_ = false", request)
         self.assertIn("metadataRequestActive_ && metadataFromEntry_", runtime)
         self.assertIn("metadataForPath(model_.path", read(UI / "NowPlayingPresenter.cpp"))
-        self.assertIn("metadataForPath(selectedMetadataPath_", read(UI / "UiCoordinator.cpp"))
+        self.assertIn("cachedMetadataForPath(path,metadata", read(UI / "UiCoordinator.cpp"))
 
     def test_renderer_has_no_sd_or_volume_write(self):
         source = read(UI / "NowPlayingPresenter.cpp")
@@ -119,7 +119,7 @@ class P3BLocalChecks(unittest.TestCase):
         ini.read(ROOT / "platformio.ini", encoding="utf-8-sig")
         for env in ["player-dev", "player-p3a-gate"]:
             section = ini[f"env:{env}"]
-            self.assertIn("0.8.2-p3d.perf", section["build_flags"])
+            self.assertIn("0.8.3-p3d.refine", section["build_flags"])
             self.assertEqual(int(section["custom_launcher_app_limit"], 0), 0x140000)
         for env in ["player-p1-gate-a", "player-p1-gate-b", "player-p2-gate"]:
             self.assertIn("-<player/ui/**>", ini[f"env:{env}"]["build_src_filter"])

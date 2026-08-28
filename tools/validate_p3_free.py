@@ -4,7 +4,21 @@ import re
 import zlib
 from pathlib import Path
 
-VERSION='0.8.2-p3d.perf'
+VERSION='0.8.3-p3d.refine'
+
+def evaluate_wake(record):
+    required=('reset_reason','previous_phase_valid','wake_complete','wake_unfinished_count',
+              'wake_captured_ms','wake_backlight_ms','wake_resume_ms','wake_first_frame_ms','wake_unlock_ms',
+              'wake_resume_pcm','pcm_buffers','wake_resume_position_ms','position_ms')
+    absent=[k for k in required if k not in record]
+    if absent:return 'INCOMPLETE',absent
+    if int(record['wake_unfinished_count']):return 'INCOMPLETE',['wake_interrupted_before_first_frame']
+    if record['wake_complete']!='YES':return 'INCOMPLETE',['wake_not_completed']
+    # No timestamp ordering across uint32 wrap; compare modular deltas.
+    start=int(record['wake_captured_ms'])
+    if any(((int(record[k])-start)&0xffffffff)>0x7fffffff for k in ('wake_backlight_ms','wake_resume_ms','wake_first_frame_ms','wake_unlock_ms')):
+        return 'FAIL',['wake_timestamp_order']
+    return 'READY_FOR_REVIEW',['wake observation present; human sound/input confirmation required']
 
 def evaluate_p3d(record):
     failures=[k for k in ('settings_errors','launcher_errors','library_cover_errors') if int(record.get(k,0))]
@@ -98,7 +112,7 @@ if __name__=='__main__':
     # No later checkpoint may hide a recorded error from this session.
     groups=current_boots(records)
     current=[r for group in groups.values() for r in group]
-    failed=[r for r in current if evaluate(r)[0]=='FAIL' or evaluate_p3d(r)[0]=='FAIL']
+    failed=[r for r in current if evaluate(r)[0]=='FAIL' or evaluate_p3d(r)[0]=='FAIL' or evaluate_wake(r)[0]=='FAIL']
     record=failed[0] if failed else max(current,key=lambda r:(sum(r.get(k)=='COVERED' for k in ('a_auto','b_auto','c_auto','d_auto')),int(r['boot_id']),int(r['sequence'])))
     status,details=evaluate(record)
     d_status,d_details=evaluate_p3d(record)
@@ -106,11 +120,16 @@ if __name__=='__main__':
     elif status=='READY_FOR_REVIEW' and d_status=='INCOMPLETE':status='INCOMPLETE';details+=d_details
     if status!='FAIL':
         extra=[]
+        wake_status,wake_details=evaluate_wake(record)
+        if wake_status=='FAIL':status='FAIL';details+=wake_details
+        elif wake_status=='INCOMPLETE':extra+=wake_details
         if not reboot_evidence(groups):extra.append('manual_reboot_not_verified')
         if not display_reboot_evidence(groups):extra.append('display_settings_reboot_not_verified')
         if not any(int(r.get('no_lyrics_view_noop',0)) for r in current):extra.append('no_lyrics_View_not_observed')
         if not any(int(r.get('preference_track_transitions',0)) for r in current):extra.append('cross_track_preference_not_observed')
-        if extra:status='INCOMPLETE';details+=extra
+        if extra:
+            if status!='FAIL':status='INCOMPLETE'
+            details+=extra
     print('boots='+','.join(map(str,groups)))
     print(f'{status}: {", ".join(details)}\ncheckpoint={record["sequence"]} version={record["version"]}')
     print(f'coverage_scope={record.get("coverage_scope","NA")}\nnot_exercised={record.get("not_exercised","NA")}')
