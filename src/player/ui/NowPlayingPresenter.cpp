@@ -107,11 +107,13 @@ void NowPlayingPresenter::update(const PlayerSnapshot& snapshot,
         }
     }
     const bool header= !fonts_ || media_.status().view==MediaView::Cover;
-    if(model_.headerVisible!=header){model_.headerVisible=header;contentRow_=0;overlayPending_=false;
-        media_.requestRedraw();model_.dirty=DirtyAll;measureTitle(nowMs);}
+    if(model_.headerVisible!=header&&!media_.frameInProgress()){model_.headerVisible=header;overlayPending_=false;
+        model_.dirty|=DirtyTitle|DirtyArtist;measureTitle(nowMs);}
     model_.tick(nowMs);
     if(!header)model_.clearDirty(DirtyTitle|DirtyArtist);
     if(logNote_ && nowMs-logNoteAt_>=1500){logNote_=0;model_.dirty|=DirtyStatus;}
+    if(fonts_&&media_.status().viewFailures>shownViewFailures_){
+        shownViewFailures_=media_.status().viewFailures;logNote_=3;logNoteAt_=nowMs;model_.dirty|=DirtyStatus;}
     if (fonts_) {
         media_.updatePosition(snapshot.positionMs,snapshot.durationMs,snapshot.state!=PlayerState::Playing);
         if(media_.wantsFrame(nowMs)) model_.dirty |= DirtyContent;
@@ -144,7 +146,7 @@ void NowPlayingPresenter::pushRow(M5GFX& display, int y) {
 }
 
 void NowPlayingPresenter::drawContentSlice(int screenY, int height) {
-    prepareRow(height, kBackground, kSmallSize);
+    if(!media_.bandActive())prepareRow(height, kBackground, kSmallSize);
     const bool card=fonts_ && !media_.frameInProgress() && (model_.hint[0]||model_.error[0]);
     if(fonts_ && !card) media_.drawStripe(row_,screenY-frameContentY_,height);
     // All coordinates refer to the Content Stage; row clipping handles its
@@ -207,7 +209,7 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
     if (!model_.active) return false;
     const uint32_t started = micros();
     stats_.minimumHeap = std::min(stats_.minimumHeap, ESP.getFreeHeap());
-    if(fonts_ && media_.presentingLyrics()) {
+    if(fonts_ && (media_.presentingLyrics()||media_.bandActive())) {
         const bool rendered=renderContentOne(display);
         stats_.renderMaxUs=std::max<uint32_t>(stats_.renderMaxUs,micros()-started);
         return rendered;
@@ -254,13 +256,19 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
         ++stats_.artistDraws;
         row_.setFont(&fonts::Font0);
     } else if (model_.dirty & (DirtyTime|DirtyStatus)) {
-        if(fonts_&&!fonts_->requestUiWindow("0123456789:/-?... 已保存 保存失败",14,0,1000,1))return false;
-        if(fonts_&&!fonts_->requestUiWindow("1AS?",10,0,100,1))return false;
+        char position[16], duration[16], text[40];
+        formatTime(position,sizeof(position),model_.positionMs);
+        if(model_.durationMs)formatTime(duration,sizeof(duration),model_.durationMs);else std::strcpy(duration,"--:--");
+        std::snprintf(text,sizeof(text),"%s/%s",position,duration);
+        const char* statusText=logNote_?(logNote_==1?"已保存":logNote_==3?"切换失败":"保存失败"):text;
+        if(fonts_&&!fonts_->requestUiWindow(statusText,14,0,84,1))return false;
+        const char* mode=model_.modeLabel();
+        const char* modeGlyph=std::strcmp(mode,"ONE")==0?"1":std::strcmp(mode,"ALL")==0?"A":std::strcmp(mode,"SHUF")==0?"S":std::strcmp(mode,"NORM")==0?"":"?";
+        if(fonts_&&!fonts_->requestUiWindow(modeGlyph,10,0,12,1))return false;
         prepareRow(18, kBackground, 1.0f);
         CachedUiFont font(fonts_,14);if(fonts_)row_.setFont(&font);
         drawStateIcon(model_.state);
         // Two compact, truthful marks: queue mode and unchanged Original path.
-        const char* mode=model_.modeLabel();
         CachedUiFont iconFont(fonts_,10);if(fonts_)row_.setFont(&iconFont);
         if(std::strcmp(mode,"NORM")==0){
             row_.drawFastHLine(103,8,9,kMuted);row_.drawLine(109,5,112,8,kMuted);row_.drawLine(109,11,112,8,kMuted);
@@ -270,12 +278,7 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
         }
         row_.drawCircle(123,8,5,kMuted);row_.drawFastHLine(120,8,7,kText);
         if(fonts_)row_.setFont(&font);
-        char position[16], duration[16], text[40];
-        formatTime(position, sizeof(position), model_.positionMs);
-        if (model_.durationMs) formatTime(duration, sizeof(duration), model_.durationMs);
-        else std::strcpy(duration, "--:--");
-        std::snprintf(text, sizeof(text), "%s/%s", position, duration);
-        UiTextLayout::draw(row_, logNote_?(logNote_==1?"已保存":"保存失败"):text, {17, 2, 84, 16, 1, 0, true});
+        UiTextLayout::draw(row_, statusText, {17, 2, 84, 16, 1, 0, true});
         pushRow(display, G::footerY);
         row_.setFont(&fonts::Font0);
         model_.clearDirty(DirtyTime|DirtyStatus);
@@ -339,10 +342,23 @@ bool NowPlayingPresenter::renderContentOne(M5GFX& display) {
         return true;
     }
     if(!media_.frameInProgress()) {
+        const bool newHeader=media_.requestedView()==MediaView::Cover&&!model_.headerVisible;
+        if(newHeader&&fonts_){
+            if(!fonts_->requestUiWindow(model_.title,14,0,123,1)||!fonts_->requestUiWindow(model_.artist,12,0,123,1)||!fonts_->requestUiWindow("...",12,0,20,1))return false;
+        }
         if(model_.volumeVisible && fonts_&&!fonts_->requestUiWindow("0123456789%",10,0,100,1))return false;
-        const bool patch=overlayPending_ && media_.canPatchOverlay();
+        const bool patch=overlayPending_ && !media_.status().viewPending && media_.canPatchOverlay();
         if(!media_.beginFrame(millis()))return false;
-        frameContentY_=G::contentTop(media_.status().view==MediaView::Lyrics);
+        if(newHeader){
+            prepareRow(16,kBackground,1);CachedUiFont titleFont(fonts_,14);row_.setFont(&titleFont);row_.setTextColor(kAccent,kBackground);
+            const int width=UiTextLayout::singleLineWidth(row_,model_.title);
+            const int x=width<=123?(135-width)/2:6;
+            UiTextLayout::drawScrolledLine(row_,model_.title,{int16_t(x),1,int16_t(129-x),15,1,0,false},0);pushRow(display,0);
+            prepareRow(12,kBackground,1);CachedUiFont artistFont(fonts_,12);row_.setFont(&artistFont);
+            const int artistWidth=UiTextLayout::singleLineWidth(row_,model_.artist),artistX=artistWidth<=123?(135-artistWidth)/2:6;
+            UiTextLayout::draw(row_,model_.artist,{int16_t(artistX),0,int16_t(129-artistX),12,1,0,true});pushRow(display,16);row_.setFont(&fonts::Font0);
+        }
+        frameContentY_=G::contentTop(media_.frameView()==MediaView::Lyrics);
         framePartial_=patch;overlayPending_=false;
         contentRow_=patch?G::overlayY-frameContentY_:0;
         contentEnd_=patch?contentRow_+G::overlayHeight:G::footerY-frameContentY_;
@@ -351,14 +367,21 @@ bool NowPlayingPresenter::renderContentOne(M5GFX& display) {
         frameVolumeVisible_=model_.volumeVisible;frameVolume_=model_.volume;
     }
     const int height=std::min(media_.stripeHeight(),contentEnd_-contentRow_);
-    if(!media_.prepareStripe(contentRow_,height))return false;
+    if(!media_.bandActive())prepareRow(height,kBackground,kSmallSize);
+    if(!media_.prepareStripe(row_,contentRow_,height))return false;
     drawContentSlice(frameContentY_+contentRow_,height);
     if(framePartial_)display.setClipRect(G::overlayX,G::overlayY,G::overlayWidth,G::overlayHeight);
     pushRow(display,frameContentY_+contentRow_);
+    media_.stripeSubmitted();
+    media_.finishStripe();
     if(framePartial_)display.clearClipRect();
     contentRow_+=height;++stats_.contentSlices;
     if(contentRow_==contentEnd_){
         contentRow_=0;media_.endFrame();
+        // Publish chrome visibility with the completed frame, before observers
+        // run; the next update must not report the previous view's header.
+        model_.headerVisible=media_.status().view==MediaView::Cover;
+        if(!model_.headerVisible)model_.clearDirty(DirtyTitle|DirtyArtist);
         if(frameOverlayRevision_==model_.overlayRevision && frameContentRevision_==model_.contentRevision)model_.clearDirty(DirtyContent);
     }
     return true;

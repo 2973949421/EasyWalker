@@ -28,7 +28,7 @@ class NowPlayingPresenter final {
   public:
     void begin();
     void bindMedia(FontCache& fonts) { fonts_=&fonts; media_.begin(fonts); }
-    const char* bootMediaSelfCheck(){return media_.bootSelfCheck();}
+    const char* bootMediaSelfCheck(const char* track){return media_.bootSelfCheck(track);}
     const char* bootFontSelfCheck(M5GFX& display);
     void serviceMedia() { media_.service(); }
     void setPreferredView(uint8_t view) { media_.setPreferred(view); }
@@ -74,6 +74,7 @@ class NowPlayingPresenter final {
     uint8_t frameVolume_=128;
     uint8_t logNote_=0;
     uint32_t logNoteAt_=0;
+    uint32_t shownViewFailures_=0;
     NowPlayingModel model_;
     NowPlayingRenderStats stats_;
     // Owned buffer must outlive the Sprite which borrows it.

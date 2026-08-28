@@ -34,6 +34,37 @@ P3AGate gate;
 FreeSession session;
 #endif
 
+void collectInput() {
+    const uint32_t started=micros();
+    uint64_t previous=input.physicalMask();
+    for(unsigned n=0;n<8;++n){
+        if(n)M5Cardputer.Keyboard.updateKeyList();
+        const auto mask=input.physicalMask();
+        const uint32_t now=millis();
+        const bool allowed=ui.physicalActivity(mask,now);
+        input.capture(mask,now,ui.inputEpoch(),!allowed);
+        if(n&&mask==previous)break;
+        previous=mask;
+        if(micros()-started>=2000)break;
+    }
+}
+
+void dispatchInput() {
+    ui.recordInputQueue(input.overflow(),input.stale());
+    UiAction action=UiAction::None;RawKeyEvent raw;
+    for(unsigned n=0;n<8&&input.pop(ui.inputEpoch(),action,raw,ui.page()==UiPage::Player);++n){
+        ui.recordInputLatency(millis()-raw.capturedAtMs);
+#if defined(P3A_DEVICE_GATE)
+        if(!gate.beforeAction(action,raw,ui.page()))ui.handleAction(action);
+#else
+        const auto page=ui.page();
+        const bool accepted=action==UiAction::SaveDiagnostics||ui.handleAction(action);
+        if(action==UiAction::SaveDiagnostics)player.requestCheckpoint();
+        session.action(action,raw,page,accepted);
+#endif
+    }
+}
+
 void renderBootFailure(const char* reason) {
     auto& display = M5Cardputer.Display;
     display.fillScreen(TFT_BLACK);
@@ -101,12 +132,13 @@ void loop() {
     if(!ready){delay(10);return;}
     // Audio remains first. Library, keyboard and a bounded UI burst
     // follow; title animation is capped at 20 fps, without a full framebuffer.
-    uint32_t workAt=micros();player.service();uint32_t audioUs=micros()-workAt;
+    uint32_t workAt=micros();player.serviceAudio();uint32_t audioUs=micros()-workAt;
+    M5Cardputer.update();collectInput();dispatchInput();
     workAt=micros();libraryRuntime.service();const uint32_t libraryUs=micros()-workAt;
     // A slow indivisible FS operation must not be followed by another whole
     // input/render burst before the decoder gets its next service.
-    if(libraryUs>=6000){workAt=micros();player.service();audioUs=std::max<uint32_t>(audioUs,micros()-workAt);}
-    workAt=micros();M5Cardputer.update();
+    if(libraryUs>=6000){workAt=micros();player.serviceAudio();audioUs=std::max<uint32_t>(audioUs,micros()-workAt);}
+    workAt=micros();collectInput();dispatchInput();
 
 #if defined(P3A_DEVICE_GATE)
     ui.serviceBackground(true);
@@ -114,34 +146,10 @@ void loop() {
     ui.serviceBackground(session.storageIdle());
 #endif
 
-    UiAction action = UiAction::None;
-    RawKeyEvent raw;
-    const uint32_t inputNow=millis();const uint64_t physical=input.physicalMask();
-    const bool dispatch=ui.physicalActivity(physical,inputNow);
-    // Always advance debouncing while swallowed; a held wake key must never
-    // become a fresh action on the next loop.
-    const bool hasAction=input.pollMask(physical,inputNow,action,raw,ui.page()==UiPage::Player);
-    if(hasAction&&!dispatch)ui.recordSuppressedAction();
-    if (hasAction && dispatch) {
-#if defined(P3A_DEVICE_GATE)
-        const bool consumed = gate.beforeAction(action, raw, ui.page());
-        if (!consumed) {
-            ui.handleAction(action);
-        }
-#else
-        const auto page=ui.page();
-        const bool accepted=action==UiAction::SaveDiagnostics || ui.handleAction(action);
-        if(action==UiAction::SaveDiagnostics)player.requestCheckpoint();
-        session.action(action,raw,page,accepted);
-#endif
-        Serial.printf("input page=%s action=%s x=%d y=%d fn=%d count=%u\n",
-                      uiPageName(ui.page()), uiActionName(action), raw.x, raw.y,
-                      raw.fn ? 1 : 0, static_cast<unsigned>(raw.keyCount));
-    }
 #if !defined(P3A_DEVICE_GATE)
     session.recordWork(audioUs,libraryUs,micros()-workAt);
 #endif
-    if(micros()-workAt>=6000){player.service();}
+    if(micros()-workAt>=6000){player.serviceAudio();}
 
 #if defined(P3A_DEVICE_GATE)
     gate.service(ui, player);
@@ -158,7 +166,13 @@ void loop() {
     // back to audio. The real 70ms PCM / 100ms presentation limits are logged.
     const uint32_t burstAt=micros();
     for(unsigned work=0;work<64;++work){
-        ui.service();
+        // Storage owns its own turn; never follows a UI operation in the
+        // same step. The next check observes the real indivisible I/O time.
+        static unsigned backgroundTurn=0;
+        if(++backgroundTurn%8==0 && !ui.nowPlaying().presentingLyrics() && !ui.settingsBusy())player.servicePersistence();
+        else ui.service();
+        if(micros()-burstAt>=6000)break;
+        collectInput();dispatchInput();
 #if !defined(P3A_DEVICE_GATE)
         session.observe(ui,player);
 #endif
@@ -169,7 +183,7 @@ void loop() {
     // Logging gets a fresh audio service boundary, not the tail of a render
     // burst. Actual logging and resource load remain inside PCM measurement.
     if(session.workDue() && !ui.nowPlaying().presentingLyrics() && !ui.settingsBusy()){
-        workAt=micros();player.service();session.recordWork(micros()-workAt,0,0);
+        workAt=micros();player.serviceAudio();session.recordWork(micros()-workAt,0,0);
         session.service(ui,player,burstUs);
     }else session.recordBurst(burstUs);
     if(ui.readyToReturn()){

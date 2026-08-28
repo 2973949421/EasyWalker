@@ -4,6 +4,31 @@
 #include "player/ui/media/FrameCachePolicy.h"
 #include "player/ui/media/MediaLayout.h"
 using namespace adv_walkman::player;
+#include "player/ui/InputEdges.h"
+#include "player/ui/media/ViewTransition.h"
+static_assert(checkInputEdges(),"short taps, hold, combinations, epoch cancellation");
+constexpr bool queuedInput(){
+    InputEdges edges;InputEdges::Event event;
+    for(unsigned i=0;i<16;++i){edges.observe(1ULL<<(i%14),i*4,7);edges.observe(0,i*4+1,7);}
+    for(unsigned i=0;i<16;++i)if(!edges.pop(7,event)||event.key!=i%14||event.at!=i*4)return false;
+    if(edges.pop(7,event))return false;
+    edges.observe(2,100,7,true);edges.observe(0,101,7);if(edges.pop(7,event))return false;
+    for(unsigned i=0;i<17;++i){edges.observe(1,i*4+200,7);edges.observe(0,i*4+201,7);}
+    return edges.overflow==1&&!edges.pop(7,event);
+}
+static_assert(queuedInput(),"FIFO retains short presses and rejects overflow without invented actions");
+constexpr bool viewRequests(){
+    ViewTransition view;
+    if(!view.toggle(true)||view.requested!=MediaView::Lyrics)return false;
+    const auto generation=view.generation;
+    for(unsigned i=0;i<8;++i)view.toggle(true);
+    if(view.generation!=generation||view.coalesced!=8||!view.pending)return false;
+    view.commit(MediaView::Lyrics);view.toggle(true);
+    if(view.requested!=MediaView::Cover)return false;
+    view.cancel();if(view.requested!=MediaView::Lyrics||view.pending)return false;
+    return !view.toggle(false);
+}
+static_assert(viewRequests(),"repeated View never cancels the undisplayed target");
 static_assert(chooseMediaWork(0,true,true,true,true)==MediaWork::Font,"due glyphs have priority");
 static_assert(chooseMediaWork(1,false,true,true,true)==MediaWork::Lyrics,"due text has priority");
 static_assert(chooseMediaWork(3,true,true,true,true)==MediaWork::Cover,"cover still progresses during due work");

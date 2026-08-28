@@ -12,8 +12,8 @@ class FreeSession final {
     void action(UiAction action,const RawKeyEvent& raw,UiPage page,bool accepted);
     void observe(const UiCoordinator& ui,const PlayerRuntime& player);
     void service(UiCoordinator& ui,const PlayerRuntime& player,uint32_t uiBurstUs);
-    bool workDue()const{return bool(file_)||requestSave_||millis()-lastSaved_>=15000;}
-    bool storageIdle()const{return !file_;}
+    bool workDue()const{return bool(file_)||logPrepared_||requestSave_||millis()-lastSaved_>=15000;}
+    bool storageIdle()const{return !file_&&!logPrepared_;}
     void requestManualSave(){requestSave_=manual_=true;}
     bool manualSavePending()const{return manual_||writingManual_;}
     bool lastSaveOk()const{return lastSaveOk_;}
@@ -26,7 +26,7 @@ class FreeSession final {
     fs::File file_;
     // P3D fields plus five maximum-length paths need >8 KiB; bounded host
     // capacity test covers the complete checkpoint including twelve events.
-    char buffer_[14336]{},track_[512]{},failure_[64]{},component_[24]{};
+    char buffer_[16384]{},track_[512]{},failure_[64]{},component_[24]{};
     struct MediaError { ResourceFailure failure;char path[560]{};uint32_t generation=0,at=0,count=0; } mediaErrors_[4];
     char firstNavigationReason_[64]{};
     uint32_t lastErrorGeneration_[2]={UINT32_MAX,UINT32_MAX};
@@ -40,7 +40,7 @@ class FreeSession final {
     uint8_t restoredView_=0,previousPreferred_=0;
     bool startupCaptured_=false,startupPaused_=false,startupSilent_=true,noLyricsPending_=false;
     char resourcePath_[560]{},resourceOperation_[24]{};
-    struct Event {uint32_t ms;UiAction action;UiPage page;int8_t x,y;bool accepted;};
+    struct Event {uint32_t ms;UiAction action;UiPage page;int8_t x,y;bool accepted;uint32_t captured;};
     Event events_[12]{};
     uint32_t eventCount_=0,actions_=0,nav_=0,volumeEvents_=0,playEvents_=0,viewEvents_=0;
     uint32_t started_=0,lastSaved_=0,sequence_=0,playingAt_=0,longestPlaying_=0;
@@ -53,6 +53,6 @@ class FreeSession final {
     bool playing_=false,loading_=false,requestSave_=true,manual_=false,writingManual_=false;
     bool inputCheck_=false,textSeen_=false,textOk_=false,lyricsReady_=false,coverReady_=false,overflow_=false;
     uint32_t lastPageCount_=0,lastSelections_=0,lastNavigationErrors_=0;
-    bool lastSaveOk_=false;
+    bool lastSaveOk_=false,logPrepared_=false,logFlushed_=false,logWriteOk_=true;
 };
 } }

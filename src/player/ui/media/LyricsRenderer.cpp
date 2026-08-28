@@ -42,6 +42,7 @@ void LyricsRenderer::place(const char* text,unsigned first,unsigned capacity,int
 bool LyricsRenderer::prepare(const LyricsTimeline& timeline,FontCache& fonts,uint32_t positionMs,int target){
     if(target==-999)target=timeline.current();
     stats_=LyricsLayoutStats{};stats_.intro=target<0;
+    prepareCodepoint_=0;prepareFace_=0;
     if(!timeline.cueReady(std::max(0,target)))return false;
     bool ready=true;
     const int relative=std::max(0,target)-timeline.current();
@@ -76,8 +77,18 @@ bool LyricsRenderer::prepare(const LyricsTimeline& timeline,FontCache& fonts,uin
 bool LyricsRenderer::prepareFrame(FontCache& fonts,uint8_t pin){
     // One font group at a time. Pins accumulate while preparing and are held
     // until the whole frame has reached the display.
-    for(uint8_t face:{MediaLayout::cjkFace,MediaLayout::latinFace})for(unsigned i=0;i<stats_.glyphs;++i){
-        const auto cp=glyphs_[i].cp;if((cp<0x100?MediaLayout::latinFace:MediaLayout::cjkFace)==face && !fonts.request(cp,face,pin))return false;
+    // VLW bitmaps are ordered by codepoint. Dedupe/order without another frame
+    // or bitmap buffer; at most kMaxGlyphs small comparisons per unique glyph.
+    while(prepareFace_<2){
+        const uint8_t face=prepareFace_==0?MediaLayout::cjkFace:MediaLayout::latinFace;
+        uint32_t next=0;
+        do{next=0x10000;
+            for(unsigned i=0;i<stats_.glyphs;++i){const auto cp=glyphs_[i].cp;
+                if(cp>=prepareCodepoint_&&(cp<0x100?MediaLayout::latinFace:MediaLayout::cjkFace)==face)next=std::min<uint32_t>(next,cp);}
+            if(next==0x10000)break;
+            if(!fonts.request(next,face,pin))return false;prepareCodepoint_=next+1;
+        }while(prepareCodepoint_<0x10000);
+        ++prepareFace_;prepareCodepoint_=0;
     }
     return !fonts.busy() && !fonts.stats().missing && !fonts.stats().ioErrors && !fonts.stats().capacityErrors;
 }

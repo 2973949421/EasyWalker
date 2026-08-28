@@ -58,7 +58,7 @@ class FreeChecks(unittest.TestCase):
         source=read('src/player/ui/NowPlayingPresenter.cpp')
         self.assertNotIn('fillRect(G::overlayX',source)
         self.assertIn('row_.setTextColor(kText);',source)
-        self.assertIn('overlayPending_ && media_.canPatchOverlay()',source)
+        self.assertIn('overlayPending_ && !media_.status().viewPending && media_.canPatchOverlay()',source)
         self.assertIn('if(framePartial_)display.setClipRect',source)
         self.assertNotIn('createSprite',source)
     def test_observer_cannot_drive_player(self):

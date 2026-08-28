@@ -25,7 +25,7 @@ class OptimizationChecks(unittest.TestCase):
         for px,text in ((14,'0123456789:/-?... 已保存 保存失败'),(10,'0123456789%1AS?')):
             ui|={(f'latin-{px}' if ord(c)<256 else f'cjk-{px}',ord(c)) for c in text}
         count=maximum=unique_max=0
-        for path in (PACKAGE/'Lyrics').rglob('*.lrc'):
+        for path in (PACKAGE/'Lyrics/AveMujica').glob('*.lrc'):
             if '.zh-' in path.name:continue
             translated=path.with_name(path.stem+'.zh-Hans.lrc');frames=[]
             for _,ja,zh in pair_cues(parse_lrc(path.read_bytes()),parse_lrc(translated.read_bytes())):

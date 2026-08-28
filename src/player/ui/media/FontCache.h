@@ -58,6 +58,9 @@ class FontCache final {
     uint32_t count_=0,lo_=0,hi_=0,vlwSize_=0;
     ResourceFailure failure_{};mutable FontCacheStats stats_{};
     uint8_t indexPage_[512]{};
+    struct FaceIndex {uint32_t count=0,vlwSize=0,headerCrc=0;uint8_t format=0;bool checked=false,paired=false;};
+    FaceIndex indexes_[FaceCount]{};
+    uint8_t indexFormat_=0;
     uint32_t indexPageAt_=UINT32_MAX;
     uint16_t indexPageSize_=0;
     void fail(bool io,const char* reason,const char* operation,int expected=-1,int actual=-1);

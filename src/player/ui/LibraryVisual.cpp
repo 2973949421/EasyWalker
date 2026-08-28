@@ -15,14 +15,14 @@ void arc(lgfx::LGFXBase& row,FontCache& cache,const char* text,int cx,int cy,int
     uint32_t cps[10]{};unsigned count=0;bool bad=false;float advances[10]{},total=0;
     while(*text&&count<10){const auto cp=mediaCodepoint(text,bad);const auto* g=cache.find(cp,FontCache::faceFor(cp,12));
         const float advance=g?std::max<int>(g->advance,4):12;
-        if(total+advance>64)break;
+        if(total+advance>32)break;
         cps[count]=cp;advances[count++]=advance;total+=advance;}
     float cursor=0;
     for(unsigned k=0;k<count;++k){
-        const float angle=(cursor+advances[k]*.5f-total*.5f)/24.0f;cursor+=advances[k];
+        const float angle=(cursor+advances[k]*.5f-total*.5f)/13.0f;cursor+=advances[k];
         const float co=std::cos(angle),si=std::sin(angle);
         const auto* g=cache.find(cps[k],FontCache::faceFor(cps[k],12));const auto* bits=g?cache.bitmap(*g):nullptr;if(!bits)continue;
-        const int px=cx+std::lround(24*si),py=cy-std::lround(24*co);
+        const int px=cx+std::lround(13*si),py=cy-std::lround(13*co);
         for(int j=0;j<g->height;++j)for(int i=0;i<g->width;++i){
             const int dx=i-int(g->width)/2,dy=j-int(g->height)/2;
             const int x=px+std::lround(dx*co-dy*si),y=py+std::lround(dx*si+dy*co)-stripeY;
@@ -40,8 +40,7 @@ void LibraryVisual::select(const char* path,int direction){
     direction_=direction;animationAt_=millis();animationStep_=direction?0:3;
 }
 bool LibraryVisual::prepare(FontCache& fonts,const UiRenderContext& c){
-    const char* fixed="左右选择 Enter进入 S设置 暂无曲库 封面不可用 加载失败 Enter重试 0123456789/";
-    if(!fonts.requestUiWindow(fixed,12,0,2000,1))return false;
+    if(!c.catalogCount&&!fonts.requestUiWindow("暂无曲库",12,0,123,1))return false;
     if(c.error&&c.error[0]&&!fonts.requestUiWindow(c.error,12,0,123,1))return false;
     if(!fonts.requestUiWindow(c.libraryName,12,0,246,1))return false;
     // Small arc has at most ten complete codepoints. Full title is independent.
@@ -54,38 +53,38 @@ void LibraryVisual::drawDiscs(M5Canvas& row,FontCache& fonts,const UiRenderConte
     if(!c.catalogCount)return;
     const int shift=direction_*(3-int(animationStep_))*5;
     // Boundary neighbours, not wrapped duplicates, for one/two collections.
-    if(c.catalogIndex>0)disc(row,24+shift,202-y,26,false);
-    if(c.catalogIndex+1<c.catalogCount)disc(row,110+shift,202-y,26,false);
-    disc(row,67+shift,195-y+(3-animationStep_)*2,28,true);
-    arc(row,fonts,shortName_,67+shift,195+(3-animationStep_)*2,y);
+    if(c.catalogIndex>0)disc(row,29+shift,240-y,17,false);
+    if(c.catalogIndex+1<c.catalogCount)disc(row,105+shift,240-y,17,false);
+    disc(row,67+shift,235-y+(3-animationStep_)*2,19,true);
+    arc(row,fonts,shortName_,67+shift,235+(3-animationStep_)*2,y);
 }
 bool LibraryVisual::render(M5GFX& display,M5Canvas& row,FontCache& fonts,const UiRenderContext& c,uint32_t now){
     if(!visible_)return false;
     CachedUiFont face(&fonts,12);
-    if(clear_){display.fillRect(0,0,135,164,bg);clear_=false;return true;}
+    if(clear_){display.fillRect(0,0,135,240,bg);clear_=false;return true;}
     if(!nameDone_){display.setFont(&face);display.setTextSize(1);display.setTextColor(TFT_WHITE,bg);
-        // 97px keeps the P3A real long-name two-line regression meaningful.
-        nameLayout=UiTextLayout::draw(display,c.catalogCount?c.libraryName:"暂无曲库",{19,130,97,32,2,3,true});
+        struct Centered {M5GFX* display;int line;} centered{&display,0};
+        nameLayout=UiTextLayout::visitLines(display,c.catalogCount?c.libraryName:"暂无曲库",{6,177,123,32,2,3,true},
+            [](const char* text,void* data){auto& c=*static_cast<Centered*>(data);
+                c.display->drawString(text,(135-c.display->textWidth(text))/2,177+c.line++*15);},&centered);
         display.setFont(&fonts::Font0);nameDone_=true;return true;}
     if(cover.state()!=previousState_){previousState_=cover.state();imageY_=0;}
     const uint8_t step=std::min<uint32_t>(3,(now-animationAt_)/40);
-    if(step!=animationStep_ && bottomY_>=240){animationStep_=step;bottomY_=164;}
-    if(bottomY_<240){
+    if(step!=animationStep_ && bottomY_>=240){animationStep_=step;bottomY_=210;}
+    if(bottomY_<240&&!cover.bandActive()){
         const int height=std::min(18,240-bottomY_);row.clearClipRect();row.setClipRect(0,0,135,height);row.fillScreen(bg);
         drawDiscs(row,fonts,c,bottomY_,now);row.setFont(&face);row.setTextSize(1);row.setTextColor(accent,bg);
-        char count[32];std::snprintf(count,sizeof(count),"%u/%u",unsigned(c.catalogCount?c.catalogIndex+1:0),unsigned(c.catalogCount));
-        row.setCursor(4,211-bottomY_);row.print(count);
-        row.setTextColor(TFT_WHITE,bg);row.setCursor(3,227-bottomY_);row.print(c.error&&c.error[0]?"加载失败 Enter重试":"左右选择 S设置");
         display.setClipRect(0,bottomY_,135,height);row.pushSprite(&display,0,bottomY_);display.clearClipRect();row.setFont(&fonts::Font0);row.clearClipRect();
         bottomY_+=height;if(bottomY_>=240)++frames;return true;
     }
-    if(imageY_<120){
+    if(imageY_<174){
         const bool ready=cover.state()==MediaState::Ready;
-        if(ready&&!cover.rowReady(imageY_)){cover.requestRow(imageY_);return false;}
-        row.clearClipRect();row.setClipRect(0,0,135,2);row.fillScreen(bg);
-        if(ready)cover.drawRow(row,imageY_);else{disc(row,67,60-imageY_,32,false);row.drawRect(7,-imageY_,120,120,muted);}
-        display.setClipRect(0,6+imageY_,135,2);row.pushSprite(&display,0,6+imageY_);display.clearClipRect();row.clearClipRect();imageY_+=2;
-        if(imageY_>=120&&ready)++coverFrames;return true;
+        const int height=std::min(18,174-imageY_);
+        if(!cover.bandActive()){row.clearClipRect();row.setClipRect(0,0,135,height);row.fillScreen(bg);}
+        if(ready&&!cover.prepareBand(row,imageY_,height))return false;
+        if(!ready){disc(row,67,85-imageY_,32,false);row.drawRect(0,-imageY_,135,174,muted);}
+        display.setClipRect(0,imageY_,135,height);row.pushSprite(&display,0,imageY_);display.clearClipRect();row.clearClipRect();cover.finishBand();imageY_+=height;
+        if(imageY_>=174&&ready)++coverFrames;return true;
     }
     return false;
 }

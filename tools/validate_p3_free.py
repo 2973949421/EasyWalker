@@ -4,7 +4,7 @@ import re
 import zlib
 from pathlib import Path
 
-VERSION='0.8.1-p3d.fix'
+VERSION='0.8.2-p3d.perf'
 
 def evaluate_p3d(record):
     failures=[k for k in ('settings_errors','launcher_errors','library_cover_errors') if int(record.get(k,0))]
@@ -58,9 +58,12 @@ def evaluate(record):
     for key,limit in [('audio_errors',0),('backpressure',0),('pcm_gap_max_us',70000),('present_max_us',100000),('lyric_late_max_ms',200)]:
         if int(record[key])>limit:problems.append(key)
     if problems:return 'FAIL',sorted(set(problems))
+    for key,limit in [('input_accept_max_ms',50),('selection_feedback_max_ms',100),('warm_return_max_ms',300),('view_warm_max_ms',300),('view_cold_max_ms',1500),('view_failures',0),('input_queue_overflow',0)]:
+        if key not in record:return 'INCOMPLETE',[key]
+        if int(record[key])>limit:return 'FAIL',[key]
     missing=[key for key in ('a_auto','b_auto','c_auto') if record.get(key)!='COVERED']
     if missing:return 'INCOMPLETE',missing
-    for key in ('playlist_frames','library_frames','different_track_selections','tab_playing','tab_paused'):
+    for key in ('playlist_frames','library_frames','different_track_selections','tab_playing','tab_paused','warm_returns','view_warm_completed','view_cold_completed'):
         if int(record.get(key,0))<=0:return 'INCOMPLETE',[key]
     if int(record.get('time_font_px',0))!=14:return 'FAIL',['time_font_px']
     # Recheck measured evidence, rather than trusting a result label.

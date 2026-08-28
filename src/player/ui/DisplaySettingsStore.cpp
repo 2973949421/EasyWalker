@@ -19,7 +19,7 @@ void DisplaySettingsStore::begin(){
         if(!loaded||newerDisplayGeneration(g,generation_)){value=p;generation_=g;slot_=i;loaded=true;}}
     restored=value;
 }
-void DisplaySettingsStore::fail(const char* reason){file_.close();phase_=0;dirty_=false;error_=reason;++errors;}
+void DisplaySettingsStore::fail(const char* reason){phase_=file_?6:0;dirty_=false;error_=reason;++errors;}
 void DisplaySettingsStore::service(uint32_t now,bool storageIdle){
     if(!storageIdle)return;
     const uint32_t started=micros();
@@ -29,11 +29,14 @@ void DisplaySettingsStore::service(uint32_t now,bool storageIdle){
         put32(bytes_+20,mediaCrc(~0U,bytes_,20)^~0U);writingRevision_=revision_;
         file_=SD.open(paths[slot_^1],"w");if(!file_)fail("settings_open");else phase_=1;
     }else if(phase_==1){if(file_.write(bytes_,24)!=24)fail("settings_write");else phase_=2;
-    }else if(phase_==2){file_.flush();if(file_.getWriteError())fail("settings_flush");else{file_.close();phase_=3;}
+    }else if(phase_==2){file_.flush();if(file_.getWriteError())fail("settings_flush");else phase_=5;
+    }else if(phase_==5){file_.close();phase_=3;
+    }else if(phase_==6){file_.close();phase_=0;
     }else if(phase_==3){file_=SD.open(paths[slot_^1],"r");if(!file_)fail("settings_verify_open");else phase_=4;
     }else if(phase_==4){uint8_t check[24];DisplayPreferences p;uint32_t g;
-        const bool ok=file_.size()==24&&file_.read(check,24)==24&&decode(check,p,g)&&!std::memcmp(check,bytes_,24);file_.close();
-        if(!ok)fail("settings_verify");else{generation_=g;slot_^=1;phase_=0;dirty_=revision_!=writingRevision_;++writes;error_="none";}}
+        const bool ok=file_.size()==24&&file_.read(check,24)==24&&decode(check,p,g)&&!std::memcmp(check,bytes_,24);
+        if(!ok)fail("settings_verify");else phase_=7;
+    }else if(phase_==7){file_.close();generation_=mediaU32(bytes_+8);slot_^=1;phase_=0;dirty_=revision_!=writingRevision_;++writes;error_="none";}
     serviceMaxUs=std::max<uint32_t>(serviceMaxUs,micros()-started);
 }
 } }

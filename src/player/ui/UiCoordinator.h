@@ -11,6 +11,7 @@
 #include "UiTypes.h"
 #include "LibraryVisual.h"
 #include "SettingsPanel.h"
+#include "InputEdges.h"
 #include "player/app/LibraryRuntime.h"
 #include "player/app/PlayerRuntime.h"
 
@@ -18,6 +19,9 @@ namespace adv_walkman {
 namespace player {
 constexpr size_t kP3DMediaBudgetBytes=kMediaBudgetBytes+sizeof(LibraryVisual);
 static_assert(kP3DMediaBudgetBytes<=48*1024,"P3D media memory exceeds 48 KiB");
+constexpr size_t kP3DMediaAndEventsBytes=kP3DMediaBudgetBytes+sizeof(InputEdges);
+static_assert(kP3DMediaAndEventsBytes<=48*1024,"media plus new input event queue exceeds 48 KiB");
+extern const uint32_t p3MemoryReport[6];
 
 class UiCoordinator final {
   public:
@@ -50,6 +54,12 @@ class UiCoordinator final {
     void setExternalError(const char* error);
 
     UiPage page() const;
+    uint32_t inputEpoch()const{return stats_.pageTransitions;}
+    void recordInputLatency(uint32_t ms){inputLatencyMaxMs_=std::max(inputLatencyMaxMs_,ms);}
+    uint32_t inputLatencyMaxMs()const{return inputLatencyMaxMs_;}
+    void recordInputQueue(uint32_t overflow,uint32_t stale){inputOverflow_=overflow;inputStale_=stale;}
+    uint32_t inputOverflow()const{return inputOverflow_;}
+    uint32_t inputStale()const{return inputStale_;}
     UiStats stats() const;
     const char* navigationTarget() const { return navigationTarget_; }
     const char* navigationError() const { return navigationError_; }
@@ -161,6 +171,8 @@ class UiCoordinator final {
     int libraryMoveDirection_=0;
     uint8_t appliedBrightness_=255;
     uint32_t suppressedActions_=0;
+    uint32_t inputLatencyMaxMs_=0;
+    uint32_t inputOverflow_=0,inputStale_=0;
 };
 
 }  // namespace player

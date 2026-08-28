@@ -32,8 +32,10 @@ bool UiCoordinator::begin(M5GFX& display, PlayerRuntime& player,
 #if !defined(P3A_DEVICE_GATE)
     // Real media parser/layout/cancellation, while Player remains restored
     // Paused/Empty. No decoder, scripted seek, sound, or state-file write.
-    const char* mediaCheck=nowPlaying_.bootMediaSelfCheck();
-    stats_.displaySelfChecks+=4;
+    char restoredPath[kTrackPathCapacity]{};
+    const bool hasRestored=player.currentPath(restoredPath,sizeof(restoredPath));
+    const char* mediaCheck=nowPlaying_.bootMediaSelfCheck(hasRestored?restoredPath:nullptr);
+    stats_.displaySelfChecks+=hasRestored?4:1;
     if(!stats_.displaySelfFailure)stats_.displaySelfFailure=mediaCheck;
 #endif
     nowPlaying_.setPreferredView(player.preferredNowPlayingView());
@@ -106,7 +108,8 @@ void UiCoordinator::service() {
     const uint32_t now = millis();
     nowPlaying_.setActive(page_ == UiPage::Player, now);
     nowPlaying_.update(snapshot, current, *libraryRuntime_, now);
-    nowPlaying_.setPreferredView(player_->preferredNowPlayingView());
+    if(page_==UiPage::Player&&!nowPlaying_.mediaStatus().viewPending)
+        player_->setPreferredNowPlayingView(static_cast<uint8_t>(nowPlaying_.mediaStatus().preferred));
     // A call performs resource work OR drawing, never both in a single
     // uninterruptible UI slice. Ready lyric stripes do not access storage.
     resourceTurn_=!resourceTurn_;
@@ -155,7 +158,9 @@ void UiCoordinator::service() {
         dirty_ = false;
         return;
     }
-    if ((page_==UiPage::Library||page_==UiPage::Settings) || (dirty_ && now - lastRenderAtMs_ >= kMinimumRenderIntervalMs)) {
+    // Rate-limit animations, not glyph preparation. A failed font request is
+    // not a painted frame and must not impose another 20ms wait per glyph.
+    if ((page_==UiPage::Library||page_==UiPage::Settings) || dirty_) {
         renderRetryRequested_ = false;
         render();
         lastRenderAtMs_ = now;
@@ -260,7 +265,6 @@ bool UiCoordinator::handleAction(UiAction action) {
             }
             if(action==UiAction::ToggleView) {
                 const bool changed=nowPlaying_.toggleView();
-                if(changed)player_->setPreferredNowPlayingView(static_cast<uint8_t>(nowPlaying_.mediaStatus().preferred));
                 return changed;
             }
             if (action == UiAction::Back) {
@@ -542,7 +546,8 @@ void UiCoordinator::render() {
         UiTextLayout::draw(*display_,"ENTER: RETRY\nESC: BACK",{8,155,119,70,3,3,true});
         renderRetryRequested_=false;return;
     }
-    if (!browserContextReady_) {
+    const bool partialPlaylist=page_==UiPage::Playlist&&navigation_.state==NavigationState::Ready&&!locateCurrent_&&prepareRow_>0;
+    if (!browserContextReady_&&!partialPlaylist) {
         if(loadingDrawn_ || millis()-pageRequestedAt_<250)return;
         if (!fonts_.requestUiWindow("加载中",12,0,123,1)) return;
         CachedUiFont loading(&fonts_); display_->setFont(&loading);
@@ -566,13 +571,21 @@ void UiCoordinator::render() {
     // Only the current region's glyphs are prepared; this never reads SD.
     if(page_==UiPage::Playlist){
         if(!dirtyRegions_){renderRetryRequested_=false;return;}
-        drawRegion_=0;while(!(dirtyRegions_&(1U<<drawRegion_)))++drawRegion_;
+        uint8_t available=dirtyRegions_;
+        if(!browserContextReady_){uint8_t ready=1;
+            for(unsigned r=0;r<kP3AVisibleRows;++r)if(context.rows[r].valid)ready|=1U<<(r+1);
+            available&=ready;if(!available)return;}
+        drawRegion_=0;while(!(available&(1U<<drawRegion_)))++drawRegion_;
+        const uint8_t selectedRegion=1U<<(playlistSelected_%kP3AVisibleRows+1);
+        if((available&selectedRegion)&&!(available&1))drawRegion_=playlistSelected_%kP3AVisibleRows+1;
+        if(feedbackRegions_){drawRegion_=0;while(!(feedbackRegions_&(1U<<drawRegion_)))++drawRegion_;}
     }
     const char* fixed = page_ == UiPage::Playlist ? (drawRegion_==0?"播放列表 ...":
-        drawRegion_<=kP3AVisibleRows?"> /...":"上下选择 Enter播放 Esc返回 Tab当前 加载中 暂无歌曲 重试...") :
+        drawRegion_<=kP3AVisibleRows?"> /...":context.error?"Enter 重试\nEsc 返回":context.hint?context.hint:"上下选择 Enter播放\nEsc 返回 Tab当前") :
         page_ == UiPage::Library ? "LIBRARY COLLECTION LEFT / RIGHT ENTER TO OPEN S: SETTINGS ESC: STAY RETRY0123456789" :
         "SETTINGS P3A FOUNDATION Full settings UI arrives in P3D ESC BACK TO LIBRARY";
     if (!fonts_.requestUiWindow(fixed,12,0,2000,1)) return;
+    if(page_==UiPage::Playlist && drawRegion_==7 && !context.playlistCount && !fonts_.requestUiWindow("暂无歌曲",12,0,123,1))return;
     if((page_!=UiPage::Playlist||drawRegion_==0)&&!fonts_.requestUiWindow(context.libraryName,12,0,page_==UiPage::Library?194:123,1)) return;
     if(page_!=UiPage::Playlist||drawRegion_==kP3AVisibleRows+1)
         for(const char* text:{context.hint,context.error})if(text&&!fonts_.requestUiWindow(text,12,0,2000,1))return;
@@ -618,7 +631,7 @@ void UiCoordinator::render() {
     ++stats_.renderCount;
     stats_.renderMaxUs = std::max(stats_.renderMaxUs, elapsed);
     renderRetryRequested_ = page_ == UiPage::Playlist && dirtyRegions_;
-    if (!renderRetryRequested_) {
+    if (!renderRetryRequested_&&browserContextReady_) {
         if(warmReturnPending_){stats_.warmReturnMaxMs=std::max<uint32_t>(stats_.warmReturnMaxMs,millis()-pageRequestedAt_);warmReturnPending_=false;}
         if(!stats_.pageFirstFrameComplete)
             stats_.firstFrameMaxMs=std::max<uint32_t>(stats_.firstFrameMaxMs,millis()-pageRequestedAt_);
@@ -710,10 +723,10 @@ void UiCoordinator::buildPlaylistRows(UiRenderContext& context) {
                                kP3AVisibleRows;
     if (prepareRow_ == 0) {++stats_.windowBuilds;for(auto& row:context.rows) row.valid=false;}
     if (prepareRow_ < kP3AVisibleRows) {
-        const size_t rowIndex = prepareRow_;
+        const size_t rowIndex = (playlistSelected_%kP3AVisibleRows+prepareRow_)%kP3AVisibleRows;
         const size_t logical = windowStart + rowIndex;
         if (logical >= count) {
-            prepareRow_=kP3AVisibleRows;return;
+            ++prepareRow_;renderRetryRequested_=prepareRow_<kP3AVisibleRows;return;
         }
         const size_t physical = physicalEntryIndex(logical);
         LibraryEntry entry;

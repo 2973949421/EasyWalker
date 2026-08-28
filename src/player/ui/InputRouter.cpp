@@ -11,8 +11,12 @@ uint64_t InputRouter::physicalMask(){uint64_t mask=0;
     return mask;
 }
 bool InputRouter::pollMask(uint64_t mask,uint32_t now,UiAction& action,RawKeyEvent& raw,bool playerPage){
+    capture(mask,now,0,false);return pop(0,action,raw,playerPage);
+}
+bool InputRouter::pop(uint32_t epoch,UiAction& action,RawKeyEvent& raw,bool playerPage){
     action=UiAction::None;raw=RawKeyEvent{};
-    uint8_t key;if(!edges_.sample(mask,now,key))return false;
+    InputEdges::Event event;if(!edges_.pop(epoch,event))return false;
+    const uint8_t key=event.key;raw.capturedAtMs=event.at;
     raw.x=key%14;raw.y=key/14;raw.fn=false;raw.keyCount=1;
     const auto at=[&](int x,int y){return raw.x==x&&raw.y==y;};
     if(at(0,0))action=UiAction::Back;

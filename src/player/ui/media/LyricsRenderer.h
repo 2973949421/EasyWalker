@@ -24,6 +24,8 @@ class LyricsRenderer final {
     Glyph glyphs_[kMaxGlyphs]{};
     LyricsLayoutStats stats_{};
     uint16_t color_=0xFFFF;
+    uint32_t prepareCodepoint_=0;
+    uint8_t prepareFace_=0;
     int step(uint32_t cp,FontCache& font,bool& ready);
     int advanceColumn(const char* start,uint32_t cp,bool& inWord,int& y,
                       unsigned& column,FontCache& font,bool& ready);

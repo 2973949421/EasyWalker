@@ -34,6 +34,7 @@ enum class UiAction : uint8_t {
 };
 
 struct RawKeyEvent {
+    uint32_t capturedAtMs = 0;
     int8_t x = -1;
     int8_t y = -1;
     uint8_t keyCount = 0;

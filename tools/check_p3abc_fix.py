@@ -25,7 +25,7 @@ class FixChecks(unittest.TestCase):
         self.assertNotIn('isChange()', router)
         self.assertIn('keyList()', router)
         self.assertIn('>=25', edges)
-        self.assertIn('mask!=stable_', edges)
+        self.assertIn('mask!=raw_', edges)
         self.assertIn('mask&(mask-1)', edges)
         for file in ('src/player/ui/PageRenderers.cpp', 'src/player/p3a/P3AGate.cpp',
                      'src/player/p3abc/P3ABCGate.cpp', 'src/player/ui/NowPlayingPresenter.cpp'):
@@ -79,7 +79,7 @@ class FixChecks(unittest.TestCase):
         self.assertIn('++missedDeadlines_', media)
         renderer = source('src/player/ui/media/LyricsRenderer.cpp')
         self.assertNotIn('"前奏"', renderer)
-        self.assertIn('fonts.request(cp,face,pin)', renderer)
+        self.assertIn('fonts.request(next,face,pin)', renderer)
 
     def test_cards_do_not_overlay_real_media(self):
         ui = source('src/player/ui/UiCoordinator.cpp')

@@ -22,15 +22,15 @@ class P3DChecks(unittest.TestCase):
         self.assertNotEqual(bad.returncode,0)
         self.assertIn('old five-second timer',bad.stderr)
     def test_cover_roundtrip_and_corruption(self):
-        data=(PACKAGE/DEST).read_bytes();self.assertEqual(validate_cover(data),(120,120))
+        data=(PACKAGE/DEST).read_bytes();self.assertEqual(validate_cover(data),(135,173))
         for offset in (0,4,6,8,10,12,14,16,20,100):
             broken=bytearray(data);broken[offset]^=1
             with self.assertRaises(ValueError):validate_cover(broken)
         with self.assertRaises(ValueError):validate_cover(data[:-1])
         source_image=io.BytesIO();Image.new('RGB',(80,160),(255,0,0)).save(source_image,format='PNG');source_image.seek(0)
         image,data=compile_cover(source_image)
-        self.assertEqual(image.getpixel((30,60)),(255,0,0));self.assertNotEqual(image.getpixel((0,60)),(255,0,0))
-        self.assertEqual(struct.unpack_from('<H',data,24+(60*120+60)*2)[0],0xf800)
+        self.assertEqual(image.size,(87,174));self.assertEqual(image.getpixel((0,60)),(255,0,0))
+        self.assertEqual(struct.unpack_from('<H',data,24+(60*87+60)*2)[0],0xf800)
     def test_ui_fonts_and_arc_capacity(self):
         self.assertGreater(font_coverage(),50)
         fixed=source('src/player/ui/SettingsPanel.cpp').split('const char* fixed="')[1].split('";')[0]
@@ -50,8 +50,8 @@ class P3DChecks(unittest.TestCase):
     def test_render_and_wake_lifecycle(self):
         ui=source('src/player/ui/UiCoordinator.cpp');main=source('src/player/app/PlayerDevMain.cpp')
         self.assertIn('if(power_.asleep())return;',ui)
-        self.assertLess(main.index('ui.physicalActivity'),main.index('input.pollMask'))
-        self.assertIn('&& dispatch',main)
+        self.assertLess(main.index('ui.physicalActivity'),main.index('input.capture'))
+        self.assertIn('input.capture(mask,now,ui.inputEpoch(),!allowed)',main)
         self.assertIn('row_.setBuffer(pixels_,135,18,16)',source('src/player/ui/NowPlayingPresenter.h'))
         for p in ('LibraryVisual.cpp','SettingsPanel.cpp'):
             render=source('src/player/ui/'+p).split('bool '+('LibraryVisual' if p.startswith('Library') else 'SettingsPanel')+'::render(')[1]
@@ -88,7 +88,9 @@ class P3DChecks(unittest.TestCase):
                 total+=4*(len(fmt)+559+64+64+6*10)
                 continue
             if fmt.startswith('event_'):
-                total+=12*90;continue
+                total+=12*128;continue
+            if fmt.startswith('store_%s'):
+                total+=15*64;continue
             for line in fmt.splitlines(keepends=True):
                 key=line.split('=',1)[0];limit=paths.get(key,bounds.get(key,32))
                 value=re.sub(r'%[0-9]*[lu]*[udx]',lambda m:'9'*10,line)
@@ -97,7 +99,8 @@ class P3DChecks(unittest.TestCase):
         self.assertLessEqual(total,capacity,'bounded paths must fit a complete log checkpoint')
         service=code.split('void FreeSession::service(')[1]
         for failure in ('checkpoint_buffer','log_buffer','open_log','write_log'):
-            before=service[:service.index('fail("logging","'+failure+'")')][-120:]
-            self.assertIn('writingManual_',before)
+            self.assertIn('fail("logging","'+failure+'")',service)
+        self.assertIn('else if(!logFlushed_)',service)
+        self.assertIn('lastSaveOk_=logOk&&persisted&&ui.displaySettingsSaved()',service)
         self.assertIn('c.error&&c.error[0]',source('src/player/ui/LibraryVisual.cpp'))
 if __name__=='__main__':unittest.main(verbosity=2)

@@ -15,7 +15,7 @@ uint16_t blend(uint16_t f,uint16_t b,uint8_t a){
 }
 }
 bool FontCache::begin(){if(!work_)work_=new(std::nothrow) Work{};return work_!=nullptr;}
-void FontCache::release(){index_.close();fontFile_.close();delete work_;work_=nullptr;phase_=0;currentFont_=255;pending_=-1;used_=clock_=0;presenting_=false;failure_=ResourceFailure{};stats_=FontCacheStats{};}
+void FontCache::release(){index_.close();fontFile_.close();delete work_;work_=nullptr;phase_=0;currentFont_=255;pending_=-1;used_=clock_=0;presenting_=false;failure_=ResourceFailure{};stats_=FontCacheStats{};for(auto& i:indexes_)i={};}
 uint16_t FontCache::tick(){if(++clock_==0){for(auto& g:work_->metrics)g.age/=2;clock_=32768;}return clock_;}
 const CachedGlyph* FontCache::find(uint32_t cp,uint8_t font)const{
     if(!work_ || cp>0xFFFF)return nullptr;for(const auto& g:work_->metrics)if(g.state && g.codepoint==cp && g.font==font)return &g;return nullptr;
@@ -73,45 +73,67 @@ void FontCache::compact(){
 }
 bool FontCache::allocateBitmap(CachedGlyph& glyph){
     const unsigned length=(glyph.width*glyph.height+1)/2;if(!length){glyph.arena=0;return true;}if(used_+length>kBitmapBytes)compact();
-    while(used_+length>kBitmapBytes){CachedGlyph* victim=nullptr;
+    unsigned reclaim=0;
+    while(used_+length>kBitmapBytes+reclaim){CachedGlyph* victim=nullptr;
         for(auto& g:work_->metrics)if(g.state==2&&!g.pinned&&(!victim||g.age<victim->age))victim=&g;
-        if(!victim){++stats_.capacityErrors;return false;}victim->state=1;victim->arena=0xFFFF;compact();}
+        if(!victim){++stats_.capacityErrors;return false;}reclaim+=(victim->width*victim->height+1)/2;victim->state=1;victim->arena=0xFFFF;}
+    if(reclaim)compact();
     glyph.arena=used_;used_+=length;return true;
 }
-void FontCache::failurePath(char* output,size_t size)const{std::snprintf(output,size,"/ADVWalkman/fonts/%s.%s",names[failureFont_],failureIndex_?"idx":"vlw");}
+void FontCache::failurePath(char* output,size_t size)const{std::snprintf(output,size,"/ADVWalkman/fonts/%s.%s",names[failureFont_],failureIndex_?(indexFormat_==2?"idx2":"idx"):"vlw");}
 void FontCache::fail(bool io,const char* reason,const char* operation,int expected,int actual){
-    failure_.set(reason,operation,errno,expected,actual);failureFont_=pending_>=0?work_->metrics[pending_].font:0;failureIndex_=phase_!=4&&phase_!=5;
+    failure_.set(reason,operation,errno,expected,actual);failureFont_=pending_>=0?work_->metrics[pending_].font:0;failureIndex_=phase_!=4&&phase_!=5&&phase_!=6;
     if(pending_>=0){auto& g=work_->metrics[pending_];g.state=3;g.arena=0xFFFF;if(g.font>=Latin10&&g.codepoint<256)work_->latinAdvance[g.font-Latin10][g.codepoint]=0x88;}
     if(io)++stats_.ioErrors;else++stats_.missing;phase_=0;pending_=-1;index_.close();fontFile_.close();currentFont_=255;
 }
 void FontCache::service(){
     if(!work_||!busy()||pending_<0||presenting_)return;const uint32_t start=micros();auto& g=work_->metrics[pending_];uint8_t b[32]{};char path[64];errno=0;
-    if(phase_==1){index_.close();fontFile_.close();indexPageAt_=UINT32_MAX;++stats_.opens;currentFont_=g.font;std::snprintf(path,sizeof(path),"/ADVWalkman/fonts/%s.idx",names[g.font]);
-        const auto opened=openResource(index_,path,128,failure_);if(opened!=MediaState::Loading)fail(true,"font_index_open","open");else phase_=2;
-    }else if(phase_==2){++stats_.reads;const int n=index_.read(b,16);stats_.bytes+=n>0?n:0;
-        if(n!=16)fail(true,"font_index_read","read",16,n);
-        else if(std::memcmp(b,"FIDX",4)||mediaU16(b+4)!=1||mediaU16(b+6)!=24)fail(true,"font_index_header","validate");
-        else{count_=mediaU32(b+8);vlwSize_=mediaU32(b+12);lo_=0;hi_=count_;if(count_>65536||index_.size()!=16+count_*24)fail(true,"font_index_length","validate");else phase_=5;}
+    if(phase_==1){
+        if(index_){index_.close();return;}
+        if(fontFile_){fontFile_.close();return;}
+        indexPageAt_=UINT32_MAX;++stats_.opens;currentFont_=g.font;
+        indexFormat_=indexes_[g.font].format==1?1:2;
+        std::snprintf(path,sizeof(path),"/ADVWalkman/fonts/%s.%s",names[g.font],indexFormat_==2?"idx2":"idx");
+        const auto opened=openResource(index_,path,512,failure_);
+        if(opened==MediaState::Missing&&indexFormat_==2){indexes_[g.font].format=1;phase_=1;failure_=ResourceFailure{};}
+        else if(opened!=MediaState::Loading)fail(true,"font_index_open","open");
+        else if(indexes_[g.font].checked){count_=indexes_[g.font].count;vlwSize_=indexes_[g.font].vlwSize;lo_=0;hi_=count_;phase_=5;}
+        else phase_=2;
+    }else if(phase_==2){++stats_.reads;const int wanted=indexFormat_==2?20:16;const int n=index_.read(b,wanted);stats_.bytes+=n>0?n:0;
+        if(n!=wanted)fail(true,"font_index_read","read",wanted,n);
+        else if(std::memcmp(b,"FIDX",4)||mediaU16(b+4)!=indexFormat_||mediaU16(b+6)!=(indexFormat_==2?16:24))fail(true,"font_index_header","validate");
+        else{count_=mediaU32(b+8);vlwSize_=mediaU32(b+12);lo_=0;hi_=count_;
+            if(count_>65536||index_.size()!=(indexFormat_==2?512+count_*16:16+count_*24))fail(true,"font_index_length","validate");
+            else{auto& cached=indexes_[g.font];cached.count=count_;cached.vlwSize=vlwSize_;cached.headerCrc=indexFormat_==2?mediaU32(b+16):0;cached.format=indexFormat_;cached.checked=true;phase_=5;}}
     }else if(phase_==5){++stats_.opens;std::snprintf(path,sizeof(path),"/ADVWalkman/fonts/%s.vlw",names[g.font]);const auto opened=openResource(fontFile_,path,256,failure_);
-        if(opened!=MediaState::Loading)fail(true,"font_bitmap_open","open");else if(fontFile_.size()!=vlwSize_)fail(true,"font_bitmap_length","validate");else phase_=3;
+        if(opened!=MediaState::Loading)fail(true,"font_bitmap_open","open");else if(fontFile_.size()!=vlwSize_)fail(true,"font_bitmap_length","validate");else phase_=indexFormat_==2&&!indexes_[g.font].paired?7:3;
+    }else if(phase_==7){++stats_.reads;const int n=fontFile_.read(b,24);stats_.bytes+=n>0?n:0;
+        if(n!=24||(mediaCrc(~0U,b,24)^~0U)!=indexes_[g.font].headerCrc)fail(true,"font_index_pair","validate",24,n);
+        else{indexes_[g.font].paired=true;phase_=3;}
     }else if(phase_==3){
         // At most four small index reads / 750us soft CPU slice.
         for(unsigned attempt=0;attempt<4 && phase_==3;++attempt){
             if(lo_>=hi_){fail(false,"font_glyph_missing","lookup");break;}
-            const uint32_t middle=lo_+(hi_-lo_)/2;
+            const uint32_t middle=indexFormat_==2?g.codepoint:lo_+(hi_-lo_)/2;
+            if(middle>=count_){fail(false,"font_glyph_missing","lookup");break;}
             // 21 whole records (504 bytes). A miss is one bounded I/O step;
             // the next service call searches RAM before requesting more I/O.
-            const uint32_t page=16+(middle/21)*504,offset=(middle%21)*24;
+            const uint32_t page=indexFormat_==2?512+(middle/32)*512:16+(middle/21)*504;
+            const uint32_t offset=indexFormat_==2?(middle%32)*16:(middle%21)*24;
             if(indexPageAt_!=page){
-                if(index_.position()!=page&&!index_.seek(page)){fail(true,"font_index_seek","seek");break;}
-                const unsigned wanted=std::min<uint32_t>(504,index_.size()-page);
+                if(index_.position()!=page){if(!index_.seek(page))fail(true,"font_index_seek","seek");break;}
+                const unsigned wanted=std::min<uint32_t>(indexFormat_==2?512:504,index_.size()-page);
                 ++stats_.reads;const int n=index_.read(indexPage_,wanted);stats_.bytes+=n>0?n:0;
                 if(n!=int(wanted)){fail(true,"font_record_read","read",wanted,n);break;}
                 indexPageAt_=page;indexPageSize_=n;break;
             }
             ++stats_.indexPageHits;
-            if(offset+24>indexPageSize_){fail(true,"font_record_bounds","validate");break;}
-            std::memcpy(b,indexPage_+offset,24);
+            if(offset+(indexFormat_==2?16:24)>indexPageSize_){fail(true,"font_record_bounds","validate");break;}
+            if(indexFormat_==2){
+                if(!mediaU32(indexPage_+offset)){fail(false,"font_glyph_missing","lookup");break;}
+                b[0]=g.codepoint&255;b[1]=g.codepoint>>8;b[2]=b[3]=0;
+                std::memcpy(b+4,indexPage_+offset,14);
+            }else std::memcpy(b,indexPage_+offset,24);
             if(mediaU32(b)<g.codepoint)lo_=middle+1;else if(mediaU32(b)>g.codepoint)hi_=middle;
             else{const unsigned w=mediaU16(b+8),h=mediaU16(b+10);const int dx=int16_t(mediaU16(b+14)),dy=int16_t(mediaU16(b+16));g.offset=mediaU32(b+4);
                 if(w>18||h>18||dx<-128||dx>127||dy<-128||dy>127||g.offset>vlwSize_||w*h>vlwSize_-g.offset){fail(true,"font_metric_bounds","validate");break;}
@@ -122,12 +144,14 @@ void FontCache::service(){
         }
     }else if(phase_==4){
         if(currentFont_!=g.font || !fontFile_){phase_=1;}
+        else if(fontFile_.position()!=g.offset){if(!fontFile_.seek(g.offset))fail(true,"font_bitmap_seek","seek");}
         else if(!allocateBitmap(g)){fail(true,"font_frame_capacity","allocate");}
-        else{const unsigned length=g.width*g.height;++stats_.reads;if(!fontFile_.seek(g.offset))fail(true,"font_bitmap_seek","seek");
-            else{uint8_t source[18*18];const int n=fontFile_.read(source,length);stats_.bytes+=n>0?n:0;
+        else phase_=6;
+    }else if(phase_==6){const unsigned length=g.width*g.height;++stats_.reads;
+            {uint8_t source[18*18];const int n=fontFile_.read(source,length);stats_.bytes+=n>0?n:0;
                 if(n!=int(length))fail(true,"font_bitmap_read","read",length,n);
                 else{for(unsigned i=0;i<length;i+=2){const unsigned a=(source[i]+8)/17,b=i+1<length?(source[i+1]+8)/17:0;work_->bitmaps[g.arena+i/2]=(a<<4)|b;}
-                    g.state=2;phase_=0;pending_=-1;}}}
+                    g.state=2;phase_=0;pending_=-1;}}
     }stats_.serviceMaxUs=std::max<uint32_t>(stats_.serviceMaxUs,micros()-start);
 }
 void FontCache::draw(lgfx::LGFXBase& target,uint32_t cp,uint8_t font,int x,int y,uint16_t fg,uint16_t bg,bool clockwise)const{

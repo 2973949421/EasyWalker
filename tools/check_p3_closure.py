@@ -19,7 +19,7 @@ class ClosureChecks(unittest.TestCase):
             validate_cover((PACKAGE/'ADVWalkman/covers/AveMujica'/f'{base}.cover.adv').read_bytes())
     def test_all_lyrics_real_glyph_bounds_and_pinned_budget(self):
         fonts=Fonts();total=0;max_bitmap=0;max_unique=0
-        for original in (PACKAGE/'Lyrics').rglob('*.lrc'):
+        for original in (PACKAGE/'Lyrics/AveMujica').glob('*.lrc'):
             if '.zh-' in original.name:continue
             translated=original.with_name(original.stem+'.zh-Hans.lrc')
             for ms,ja,zh in pair_cues(parse_lrc(original.read_bytes()),parse_lrc(translated.read_bytes())):

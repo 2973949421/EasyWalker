@@ -19,7 +19,7 @@ class LyricsTimeline final {
     bool windowReady() const { return cueReady(std::max(0,current_)); }
     bool cueReady(int cue)const;
     bool busy()const{return phase_!=0;}
-    void suspend(){file_.close();directory_.close();lineLength_=0;}
+    void suspend(){file_.close();directory_.close();windows_[0].close();windows_[1].close();lineLength_=0;lineStarted_=false;}
     int current() const { return current_; }
     uint32_t revision() const { return revision_; }
     uint32_t startMs() const;
@@ -41,6 +41,8 @@ class LyricsTimeline final {
     };
     Work* work_=nullptr;
     fs::File file_,directory_;
+    fs::File windows_[2];
+    bool lineStarted_=false;
     char base_[560]{},alternative_[560]{};
     const char* error_="none";
     ResourceFailure failure_{};
@@ -65,6 +67,7 @@ class LyricsTimeline final {
     bool readIndexSlice();
     void startWindow();
     void loadWindowSlice();
+    void advanceSlot(){loadSlot_=loadSlot_==0?2:loadSlot_==2?1:loadSlot_==1?3:4;lineStarted_=false;lineLength_=0;}
 };
 static_assert(LyricsTimeline::workBytes()<=16*1024,"lyrics work set");
 } }

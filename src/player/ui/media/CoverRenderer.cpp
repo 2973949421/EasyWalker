@@ -2,7 +2,7 @@
 #include <cstring>
 #include <algorithm>
 namespace adv_walkman { namespace player {
-void CoverRenderer::release(){file_.close();state_=MediaState::Idle;phase_=0;readyRow_=requestedRow_=-1;}
+void CoverRenderer::release(){band_.cancel();file_.close();state_=MediaState::Idle;phase_=0;readyRow_=requestedRow_=-1;}
 void CoverRenderer::selectTrack(const char* track){
     release();error_="none";failure_=ResourceFailure{};++revision_;
     if(!mediaResourcePath(track,"/ADVWalkman/covers",".cover.adv",path_,sizeof(path_))){state_=MediaState::Error;error_="cover_path";failure_.set(error_,"resolve");return;}
@@ -25,22 +25,19 @@ void CoverRenderer::service(){
     }else if(phase_==3){
         const unsigned length=std::min<uint32_t>(512,remaining_);errno=0;const int n=file_.read(bytes_,length);bytesRead_+=n>0?n:0;
         if(n!=int(length)){failure_.set("cover_truncated","read",errno,length,n);fail("cover_truncated");return;}crc_=mediaCrc(crc_,bytes_,length);remaining_-=length;
-        if(!remaining_){if((crc_^~0U)!=expectedCrc_){fail("cover_crc");return;}state_=MediaState::Ready;phase_=0;file_.close();++revision_;}
-    }else if(state_==MediaState::Ready && requestedRow_>=0 && readyRow_!=requestedRow_){
+        if(!remaining_){if((crc_^~0U)!=expectedCrc_){fail("cover_crc");return;}state_=MediaState::Ready;phase_=0;++revision_;}
+    }else if(state_==MediaState::Ready && band_.active()&&!band_.ready()){
         if(!file_){++opens_;const auto opened=openResource(file_,path_,512,failure_);if(opened!=MediaState::Loading)fail(failure_.reason);return;}
-        const unsigned length=std::min(stripeHeight(),height_-requestedRow_)*width_*2;
-        const uint32_t offset=28+requestedRow_*width_*2;
-        errno=0;if(file_.position()!=offset&&!file_.seek(offset)){failure_.set("cover_seek","seek",errno);fail("cover_seek");return;}
+        const unsigned length=band_.request();
+        const uint32_t offset=band_.offset(28);
+        errno=0;if(file_.position()!=offset){if(!file_.seek(offset)){failure_.set("cover_seek","seek",errno);fail("cover_seek");}return;}
         const int n=file_.read(bytes_,length);if(n!=int(length)){failure_.set("cover_read","read",errno,length,n);fail("cover_read");return;}
-        bytesRead_+=length;readyRow_=requestedRow_;
+        bytesRead_+=length;band_.append(bytes_,length);
     }
 }
 void CoverRenderer::requestRow(int y){if(y>=top() && y<top()+height_)requestedRow_=y-top();else requestedRow_=-1;}
 void CoverRenderer::drawRow(lgfx::LGFXBase& canvas,int y,uint16_t background) const {
-    if(state_==MediaState::Ready && y>=top() && y<top()+height_ && readyRow_==y-top()){
-        for(int row=0;row<std::min({stripeHeight(),int(canvas.height()),height_-readyRow_});++row)
-            for(unsigned x=0;x<width_;++x)canvas.drawPixel((135-width_)/2+x,row,mediaU16(bytes_+row*width_*2+2*x));
-    }else if(state_!=MediaState::Ready){
+    if(state_!=MediaState::Ready){
         // Font-independent fallback graphic; normal UI never falls back to
         // Font0 merely because a song lacks a jacket.
         canvas.drawRect(43,68-y,48,48,0x8410);
