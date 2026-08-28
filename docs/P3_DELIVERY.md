@@ -4,7 +4,13 @@
 > `TECH_DESIGN.md`、任务状态以 `TASKS.md` 为准。P3 不重新选择 Audio Backend，
 > 不改变 P1 Queue / Session 或 P2 Library Engine 语义。
 
-## 当前验收方式 — 0.8.2（覆盖下方历史 Gate 操作顺序）
+## 当前验收方式 — 0.8.3（覆盖下方历史 Gate 操作顺序）
+
+详见`P3_REFINEMENT.md`：显示生命周期分步排空、短按唤醒与代次隔离；六行官方标题、暖窗口保留；华文行楷/Kunstler大名称及弧形重叠黑胶轮盘。四首MP3只改Title，路径/歌词/封面/Queue/Session不变。扬声器破音DEFERRED，耳机验收。
+
+一次安装同名联合BIN，自由操作；15秒息屏在Lyrics/Cover/Playlist各唤醒两次，首次键仅唤醒。约20分钟日常听歌后返回列表并唤醒，检查Tab/View和全部11首标题；T保存、手动重启暂停恢复。设置/Launcher独立核验。旧唤醒停音失去输入仍UNVERIFIED，A/B/C/D均DEVICE TEST，不能以构建或一次没复现收口。
+
+## 历史验收方式 — 0.8.2
 
 本轮详见`P3_PERFORMANCE_FIX.md`：View可靠目标请求、不显示等待标识；按键队列、字体.idx2、18px条带和存档分步优化。曲库五人图全宽/名称居中，10首译文复核；正式AveMujica为11首，Crucifix X替代SD旧benchmark，暗黑天国无歌词。原文与音频内容不改。
 
@@ -31,7 +37,7 @@ A/B/C/D继续DEVICE TEST。不能用P3D视觉完成掩盖
 
 按用户本轮授权只前置冻结的两个 Play/Pause 及 Vol+/−，其他 P4 控制 / DSP 不做。
 Cover保持28 / 188 / 24 px；Lyrics去掉Header，上方216 px显示当前双语组，
-18 px微加粗楷体 / 14 px Times、英文整词换列。所有正常UI统一楷体 / Times。
+18 px微加粗楷体 / 14 px Times、英文整词换列。普通UI使用楷体 / Times；曲库名称/弧形短名专用华文行楷 / Kunstler。
 透明细音量条、正常播放无前后句，前奏灰色首组第一页；ASCII默认40×32；100%为最初未限幅版40%，
 启动逻辑80 / 约31%仍为raw32。新增10首AveMujica歌曲及9组中日歌词，暗黑天国无歌词。
 0.7.4约10分钟日志零Audio Error / Backpressure、歌词更新69 ms，但PCM最大70.494 ms

@@ -1016,7 +1016,15 @@ V1 只有四个实际页面：播放器、播放列表、曲库、设置；不�
 
 播放列表采用低复杂度标准列表：Up / Down 选择、Enter 播放并进入播放器、Esc 返回曲库；至少显示序号、Title、选择高亮和可选的正在播放标识。底层可以复用 P1 Queue，但 UI 不改变 Queue / Session 语义。
 
-Library绘制交给`LibraryVisual`：顶部174px独立封面，y177起两行居中名称，y210起紧凑唱片，160ms/最多4帧选择动画。弧形短名按实际advance及可见弧长计算。复用135×18行缓冲；退出Library关句柄但保留同库CRC成功状态，真正换库才失效。新选择取消未提交条带，不能画入下一页。
+Library绘制交给`LibraryVisual`：顶部174px独立封面，y174起一行22px/两行44px居中名称，其余高度显示重叠轮盘。唱片半径26px，圆心沿半径60px的共同圆弧、相邻40度布置（横向约38.6px）；按远近从后向前绘制，中央最高。160ms/最多4帧，重定向最新选择，不排队。弧形短名按实际advance、46px弧长及完整旋转字形边界计算。复用135×18行缓冲；退出Library分步关句柄但保留同库CRC成功状态，真正换库才失效。新选择取消未提交条带，不能画入下一页。
+
+0.8.3显示生命周期：`ScreenPowerController`仅处理物理活动、时限和整组唤醒吞键；`DisplayLifecycle`为Cancel→Drain→Apply，Drain中新的睡醒请求只更新最终目标，不跳过清理。Coordinator的Cancel释放显示固定状态和未提交条带，Drain每次至多关闭一个字体/歌词/图片句柄，Apply恢复亮度并重画。Player在非活动状态先更新真实路径，再激活媒体，避免睡眠跨自然换歌后恢复旧资源。输入代次在页面、睡眠及唤醒变化时更新。暂停状态不因显示生命周期改变。
+
+六行标题使用`LibraryRuntime::cachedMetadataForPath`直接查询已有12项缓存，命中不取消读者。选中行优先，其余可见行逐步请求；不为每行复制完整路径。目录代次变化才重建模型；播放状态变化不使整个窗口失效，当前曲目变化只更新相关播放标记。暖返回和唤醒首帧分别计时。
+
+新增四个Library字体编号：CJK12/18、Latin14/22，资源名`library-cjk-*`及`library-latin-*`，不覆盖原字体。`CachedGlyph`仍16bytes，独立字体字节、8bit age；回绕时全体年龄减半并从128继续。仅原Latin10..14可访问三档advance表。11种字体保留15KiB位图/200项度量及.idx/.idx2兼容。相同覆盖度像素按行段绘制，图像≤512byte转换为本地RGB565后写入已有条带，提交阶段不读SD。
+
+诊断：`RuntimeDiagnostics`记录复位原因及Audio/Keyboard/Directory/Settings/Persistence/Ui/Log峰值。16byte RTC阶段记录只有复位原因与校验均有效才采用；断电不承诺保留。`runtime_peaks_us`按上述七阶段顺序排列；唤醒日志记录捕获、背光、媒体恢复、首帧、解除吞键、恢复时位置/PCM，当前值复用`position_ms`/`pcm_buffers`。未完成明确标PENDING/NA；首个metadata回退原因1=无Title、2+Mp3MetadataError=解析错误、255=路径过长。完整日志仍受16KiB上限检查，静态常量明细从ELF构建清单读取。
 
 独立`LibraryCoverReader`按下列入口取普通彩色图，绝不从歌曲封面推断：
 

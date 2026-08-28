@@ -1,5 +1,17 @@
 # Changelog
 
+## V0.8.3 — Cooperative wake recovery, official titles and vinyl wheel
+
+Date: 2026-08-29
+
+- 睡醒取消/排空/恢复不在物理按键采样中执行；每步至多关闭一个资源句柄，旧帧和固定标记统一取消，真实歌曲位置恢复。
+- 短按唤醒、整组按键释放后才执行，睡醒代次隔离；增加复位原因、16byte RTC阶段、唤醒/PCM里程碑与分阶段峰值。
+- 六行正式标题查询复用12项缓存，选中优先、非选中行后补，播放状态变化不重建整个列表；暖返回与唤醒计时分开。
+- 曲库名称华文行楷18/Kunstler22、弧形短名12/14；顶部完整合图不变，底部共同圆弧重叠黑胶，最多4帧，少于三曲库不复制。
+- 四首MP3只校正官方Title，无重编码，11首标签/资源绑定已核对；路径、排序、歌词、歌曲封面及存档不改。
+- 字模记录仍16bytes；11字体编号与8bit年龄压缩，缓存上限不变；覆盖度行段绘制和已有RGB565条带批量写入。
+- 本地检查/构建/交付证据见`docs/P3_REFINEMENT.md`。唤醒停音异常根因尚未真机确认，A/B/C/D仍DEVICE TEST；扬声器破音DEFERRED。
+
 ## V0.8.2 — Reliable View requests and bounded media/storage work
 
 Date: 2026-08-28
