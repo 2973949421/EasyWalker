@@ -28,14 +28,20 @@ constexpr bool newerDisplayGeneration(uint32_t candidate,uint32_t current){retur
 class ScreenPowerController {
  public:
     ADV_DISPLAY_CX void begin(uint32_t now,bool player) {last_=changed_=now;player_=player;}
+    ADV_DISPLAY_CX void pageChanged(uint32_t now,bool player){last_=now;player_=player;}
     ADV_DISPLAY_CX bool sample(uint64_t mask,uint32_t now,bool player,const DisplayPreferences& p) {
         if(player!=player_){player_=player;last_=now;}
-        if(mask!=raw_){raw_=mask;changed_=now;}
+        if(mask!=raw_){
+            const uint64_t pressed=mask&~raw_;raw_=mask;changed_=now;last_=now;
+            if(pressed){last_=now;if(asleep_){asleep_=false;swallow_=true;lastWakeMask=mask;++wakes;}}
+        }
         if(raw_!=stable_ && uint32_t(now-changed_)>=25){
             const uint64_t pressed=raw_&~stable_;stable_=raw_;
-            if(pressed){last_=now;if(asleep_){asleep_=false;swallow_=true;lastWakeMask=mask;++wakes;}}
-            if(!stable_)swallow_=false;
+            if(pressed && !swallow_)last_=now;
         }
+        // A complete short tap may never enter stable_. Its release still
+        // unlocks input, but only after the WHOLE waking chord is up for 25ms.
+        if(swallow_&&!raw_&&uint32_t(now-changed_)>=25)swallow_=false;
         const uint32_t timeout=displayTimeoutMs(player?p.playerTimeout:p.otherTimeout);
         if(!asleep_ && !raw_ && !swallow_ && timeout && uint32_t(now-last_)>=timeout){asleep_=true;++sleeps;}
         return !asleep_&&!swallow_;

@@ -12,6 +12,8 @@
 #include "LibraryVisual.h"
 #include "SettingsPanel.h"
 #include "InputEdges.h"
+#include "DisplayLifecycle.h"
+#include "RuntimeDiagnostics.h"
 #include "player/app/LibraryRuntime.h"
 #include "player/app/PlayerRuntime.h"
 
@@ -19,7 +21,10 @@ namespace adv_walkman {
 namespace player {
 constexpr size_t kP3DMediaBudgetBytes=kMediaBudgetBytes+sizeof(LibraryVisual);
 static_assert(kP3DMediaBudgetBytes<=48*1024,"P3D media memory exceeds 48 KiB");
-constexpr size_t kP3DMediaAndEventsBytes=kP3DMediaBudgetBytes+sizeof(InputEdges);
+// Account explicitly for refinement state outside the media owners: wake
+// record, power/input epochs, diagnostics + RTC + six-row metadata bookkeeping.
+constexpr size_t kRefinementStateReserve=192;
+constexpr size_t kP3DMediaAndEventsBytes=kP3DMediaBudgetBytes+sizeof(InputEdges)+kRefinementStateReserve;
 static_assert(kP3DMediaAndEventsBytes<=48*1024,"media plus new input event queue exceeds 48 KiB");
 extern const uint32_t p3MemoryReport[6];
 
@@ -54,7 +59,12 @@ class UiCoordinator final {
     void setExternalError(const char* error);
 
     UiPage page() const;
-    uint32_t inputEpoch()const{return stats_.pageTransitions;}
+    uint32_t inputEpoch()const{return inputEpoch_;}
+    struct WakeStats{uint32_t captured=0,backlight=0,resume=0,firstFrame=0,unlocked=0,position=0,frames=0,pcm=0;};
+    const WakeStats& wakeStats()const{return wake_;}
+    uint32_t unfinishedWakes()const{return unfinishedWakes_;}
+    uint32_t metadataFallbacks()const{return metadataFallbacks_;}
+    uint8_t metadataFallbackCause()const{return metadataFallbackCause_;}
     void recordInputLatency(uint32_t ms){inputLatencyMaxMs_=std::max(inputLatencyMaxMs_,ms);}
     uint32_t inputLatencyMaxMs()const{return inputLatencyMaxMs_;}
     void recordInputQueue(uint32_t overflow,uint32_t stale){inputOverflow_=overflow;inputStale_=stale;}
@@ -128,7 +138,10 @@ class UiCoordinator final {
     char lastPlaylistPath_[kTrackPathCapacity] = {};
     char pendingTrackPath_[kTrackPathCapacity] = {};
     char selectedMetadataPath_[kTrackPathCapacity] = {};
-    char selectedMetadataTitle_[kMetadataTitleCapacity] = {};
+    uint8_t metadataReadyRows_=0;
+    uint32_t metadataFallbacks_=0;
+    uint8_t metadataFallbackCause_=0; // 1=no Title, 2+Mp3MetadataError, 255=path overflow
+    void recordMetadataFallback(uint8_t cause){++metadataFallbacks_;if(!metadataFallbackCause_)metadataFallbackCause_=cause;}
     bool metadataRequested_ = false;
 
     char hint_[64] = {};
@@ -173,6 +186,11 @@ class UiCoordinator final {
     uint32_t suppressedActions_=0;
     uint32_t inputLatencyMaxMs_=0;
     uint32_t inputOverflow_=0,inputStale_=0;
+    uint32_t inputEpoch_=0;
+    DisplayLifecycle displayLifecycle_;
+    bool wakeFramePending_=false;
+    WakeStats wake_{};
+    uint32_t unfinishedWakes_=0;
 };
 
 }  // namespace player

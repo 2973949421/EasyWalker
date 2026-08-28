@@ -1,4 +1,5 @@
 #include "player/ui/DisplayPolicy.h"
+#include "player/ui/DisplayLifecycle.h"
 using namespace adv_walkman::player;
 constexpr bool normalTimers(){
     DisplayPreferences p;ScreenPowerController s;s.begin(0,true);
@@ -8,7 +9,7 @@ constexpr bool normalTimers(){
     if(s.sample(1,200000,true,p))return false;
     s.sample(0,200001,true,p);if(!s.sample(0,200026,true,p))return false;
     if(!s.sample(0,350000,true,p))return false; // No old five-second wake timer.
-    if(s.sample(0,360026,true,p))return false;
+    if(s.sample(0,380001,true,p))return false;
     return true;
 }
 constexpr bool chordsAndPages(){
@@ -32,6 +33,37 @@ constexpr bool wrapAndNever(){
 static_assert(normalTimers(),"normal timeout and swallowed wake");
 static_assert(chordsAndPages(),"whole chord and page timer");
 static_assert(wrapAndNever(),"wrap and never sleep");
+constexpr bool shortWake(){
+    DisplayPreferences p;p.otherTimeout=0;ScreenPowerController s;s.begin(0,false);
+    s.sample(0,15000,false,p);
+    if(s.sample(1,15001,false,p)||s.asleep()||s.wakes!=1)return false;
+    if(s.sample(0,15004,false,p)||s.sample(0,15028,false,p))return false;
+    if(!s.sample(0,15029,false,p))return false;
+    s.pageChanged(20000,false);
+    return s.sample(0,34999,false,p)&&!s.sample(0,35000,false,p);
+}
+static_assert(shortWake(),"captured short wake survives debounce and restarts same-class page timer");
+constexpr bool longWakeRelease(){
+    DisplayPreferences p;p.otherTimeout=0;ScreenPowerController s;s.begin(0,false);
+    s.sample(0,15000,false,p);s.sample(1,15001,false,p);s.sample(1,15026,false,p);
+    s.sample(1,40000,false,p);s.sample(0,40001,false,p);
+    return s.sample(0,40026,false,p)&&s.sample(0,55000,false,p)&&!s.sample(0,55001,false,p);
+}
+static_assert(longWakeRelease(),"held wake key release starts a full normal timeout");
+constexpr bool interruptedCleanup(){
+    // Inject sleep/wake at every resource-drain boundary. Production policy
+    // must neither skip Drain nor restart it under rapid state changes.
+    for(unsigned operation=0;operation<8;++operation){
+        DisplayLifecycle life;life.request(true);if(life.stage()!=DisplayLifecycle::Cancel)return false;
+        life.cancelled();
+        for(unsigned i=0;i<8;++i){if(i==operation)life.request(false);if(life.stage()!=DisplayLifecycle::Drain)return false;}
+        life.drained();if(life.asleep()||life.stage()!=DisplayLifecycle::Apply)return false;
+        life.applied();if(life.pending())return false;
+        life.request(true);life.request(false);if(life.stage()!=DisplayLifecycle::Cancel)return false;
+    }
+    return true;
+}
+static_assert(interruptedCleanup(),"wake during any pending resource close preserves cancellation ordering");
 static_assert(validDisplayPreferences(DisplayPreferences{}),"defaults valid");
 static_assert(displayTimeoutMs(3)==180000&&displayTimeoutMs(1)==30000,"page defaults");
 constexpr bool recordChecks(){

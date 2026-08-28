@@ -68,6 +68,32 @@ void UiCoordinator::service() {
     if (display_ == nullptr || player_ == nullptr || libraryRuntime_ == nullptr) {
         return;
     }
+    // Input only records the desired power state. Cancel is RAM-only;
+    // subsequent calls close at most ONE file before returning to audio.
+    if(displayLifecycle_.stage()==DisplayLifecycle::Cancel){
+        nowPlaying_.setActive(false,millis());libraryVisual_.release();
+        fonts_.clearPins();displayLifecycle_.cancelled();return;
+    }
+    if(nowPlaying_.serviceSuspension())return;
+    // Browser fonts can own handles even though Player is already inactive.
+    if(displayLifecycle_.stage()==DisplayLifecycle::Drain&&!fonts_.suspendOne())return;
+    if(libraryVisual_.serviceSuspension())return;
+    displayLifecycle_.drained();
+    if(displayLifecycle_.stage()==DisplayLifecycle::Apply){
+        appliedBrightness_=power_.asleep()?0:uint16_t(settings_.store.value.brightness)*255/100;
+        display_->setBrightness(appliedBrightness_);displayLifecycle_.applied();
+        if(!power_.asleep()){
+            wake_.backlight=millis();wake_.resume=millis();wake_.position=player_->snapshot().positionMs;
+            wake_.pcm=player_->snapshot().pcmBuffersSinceReset;
+            wake_.frames=nowPlaying_.mediaStatus().frames;wakeFramePending_=true;
+            pageClearRequested_=true;pageRequestedAt_=millis();warmReturnPending_=false;
+            // Preserve the six-row model; wake is a repaint, not a rescan.
+            dirtyRegions_=255;dirty_=true;libraryVisualDirty_=true;p3dPrepared_=false;
+            libraryVisual_.invalidate();settings_.invalidate();nowPlaying_.invalidateDisplay();
+            if(page_==UiPage::Library)invalidateBrowser();
+        }
+        return;
+    }
     if(power_.asleep())return;
     stats_.minimumHeap = std::min(stats_.minimumHeap, ESP.getFreeHeap());
     stats_.navigationState = navigation_.state;
@@ -106,8 +132,20 @@ void UiCoordinator::service() {
     char current[kTrackPathCapacity] = {};
     player_->currentPath(current, sizeof(current));
     const uint32_t now = millis();
+    // Update the inactive model BEFORE activation: sleep may span EOF/next track.
+    if(!nowPlaying_.model().active)nowPlaying_.update(snapshot,current,*libraryRuntime_,now);
     nowPlaying_.setActive(page_ == UiPage::Player, now);
     nowPlaying_.update(snapshot, current, *libraryRuntime_, now);
+    const bool directoryChanged=library.state()!=lastLibraryState_||library.currentGeneration()!=lastLibraryGeneration_;
+    const bool trackChanged=std::strcmp(current,lastCurrentTrack_)!=0;
+    lastLibraryState_=library.state();lastLibraryGeneration_=library.currentGeneration();
+    lastPlayerState_=snapshot.state;setPath(lastCurrentTrack_,sizeof(lastCurrentTrack_),current);
+    if(directoryChanged&&page_!=UiPage::Player){invalidateBrowser();dirty_=true;}
+    else if(trackChanged&&page_==UiPage::Playlist&&browserContextReady_){
+        for(unsigned i=0;i<kP3AVisibleRows;++i){auto& row=renderContext_.rows[i];
+            const char* base=std::strrchr(current,'/');const bool playing=row.valid&&base&&!std::strcmp(base+1,row.basename)&&!std::strncmp(current,navigationTarget_,std::strlen(navigationTarget_))&&current[std::strlen(navigationTarget_)]=='/';
+            if(playing!=row.playing){row.playing=playing;dirtyRegions_|=1U<<(i+1);dirty_=true;}}
+    }
     if(page_==UiPage::Player&&!nowPlaying_.mediaStatus().viewPending)
         player_->setPreferredNowPlayingView(static_cast<uint8_t>(nowPlaying_.mediaStatus().preferred));
     // A call performs resource work OR drawing, never both in a single
@@ -127,17 +165,6 @@ void UiCoordinator::service() {
     }
     if(error[0]=='\0' && (fonts_.stats().ioErrors || fonts_.stats().missing || fonts_.stats().capacityErrors))error=fonts_.failure().reason;
     nowPlaying_.setContent(hint_, error);
-    if (library.state() != lastLibraryState_ ||
-        library.currentGeneration() != lastLibraryGeneration_ ||
-        snapshot.state != lastPlayerState_ ||
-        std::strcmp(current, lastCurrentTrack_) != 0) {
-        lastLibraryState_ = library.state();
-        lastLibraryGeneration_ = library.currentGeneration();
-        lastPlayerState_ = snapshot.state;
-        setPath(lastCurrentTrack_, sizeof(lastCurrentTrack_), current);
-        if (page_ != UiPage::Player) invalidateBrowser();
-        dirty_ = true;
-    }
 
     if(gateCard_[0]) {
         if(gateCardDirty_) {
@@ -155,6 +182,7 @@ void UiCoordinator::service() {
             stats_.renderMaxUs = std::max(stats_.renderMaxUs,
                                           nowPlaying_.stats().renderMaxUs);
         }
+        if(wakeFramePending_&&nowPlaying_.mediaStatus().frames>wake_.frames){wake_.firstFrame=millis();wakeFramePending_=false;}
         dirty_ = false;
         return;
     }
@@ -163,6 +191,7 @@ void UiCoordinator::service() {
     if ((page_==UiPage::Library||page_==UiPage::Settings) || dirty_) {
         renderRetryRequested_ = false;
         render();
+        if(wakeFramePending_&&stats_.pageFirstFrameComplete){wake_.firstFrame=millis();wakeFramePending_=false;}
         lastRenderAtMs_ = now;
         dirty_ = renderRetryRequested_;
     }
@@ -353,7 +382,8 @@ void UiCoordinator::setPage(UiPage page) {
     if (page_ != page) {
         page_ = page;
         ++stats_.pageTransitions;
-        nowPlaying_.setActive(page == UiPage::Player, millis());
+        ++inputEpoch_;power_.pageChanged(millis(),page==UiPage::Player);
+        if(page!=UiPage::Player)nowPlaying_.setActive(false,millis());
         if(page!=UiPage::Library)libraryVisual_.release();
         else libraryVisualDirty_=true;
         // A visible Player may have replaced the shared Metadata request.
@@ -369,6 +399,7 @@ void UiCoordinator::setPage(UiPage page) {
 void UiCoordinator::invalidateBrowser() {
     fonts_.clearPins(FontCache::Ui);
     browserContextReady_ = false; prepareRow_ = 0; drawRegion_ = 0;
+    metadataReadyRows_=0;
     dirtyRegions_=255;
     feedbackRegions_=0;
     dirty_ = true;
@@ -377,10 +408,8 @@ void UiCoordinator::invalidateBrowser() {
 }
 
 void UiCoordinator::selectVisibleMetadata(){
-    selectedMetadataPath_[0]=selectedMetadataTitle_[0]=0;metadataRequested_=false;
-    const auto& row=renderContext_.rows[playlistSelected_%kP3AVisibleRows];
-    if(row.valid && row.type==LibraryEntryType::Track)
-        std::snprintf(selectedMetadataPath_,sizeof(selectedMetadataPath_),"%s/%s",navigationTarget_,row.basename);
+    // Changing selection must not throw away titles from other visible rows.
+    selectedMetadataPath_[0]=0;metadataRequested_=false;
 }
 void UiCoordinator::movePlaylistSelection(size_t next){
     const size_t old=playlistSelected_;playlistSelected_=next;locateCurrent_=false;
@@ -432,7 +461,7 @@ bool UiCoordinator::openBrowser(const char* path, UiPage page, bool locateCurren
     externalError_[0] = navigationError_[0] = '\0';
     navigation_.begin(millis());
     locateCurrent_ = locateCurrent; locateIndex_ = 0;
-    metadataRequested_ = false; selectedMetadataPath_[0] = selectedMetadataTitle_[0] = '\0';
+    metadataRequested_ = false; selectedMetadataPath_[0] = '\0';
     setPage(page); // Suspend media I/O and rendering before opening a directory.
     openRequested_ = true;
     return true;
@@ -511,25 +540,26 @@ void UiCoordinator::serviceSelectedMetadata() {
     if (library.state() != LibraryState::Ready || playlistCount() == 0) {
         return;
     }
-    if (!selectedMetadataPath_[0]) return;
-    if (!metadataRequested_) {
-        libraryRuntime_->requestMetadataPath(selectedMetadataPath_);
-        metadataRequested_ = true;
-        return;
-    }
-
-    const Mp3MetadataStatus status = libraryRuntime_->metadataStatus();
-    if (status.state == Mp3MetadataState::Ready) {
-        Mp3Metadata metadata;
-        if (libraryRuntime_->metadataForPath(selectedMetadataPath_, metadata) &&
-            metadata.title.value[0] != '\0' &&
-            std::strcmp(selectedMetadataTitle_, metadata.title.value) != 0) {
-            std::strncpy(selectedMetadataTitle_, metadata.title.value,
-                         sizeof(selectedMetadataTitle_) - 1);
-            const size_t row = playlistSelected_ % kP3AVisibleRows;
-            setPath(renderContext_.rows[row].label, sizeof(renderContext_.rows[row].label), selectedMetadataTitle_);
-            dirtyRegions_ |= 1U<<(row+1); dirty_ = true;
+    // Selected row first, then other visible rows; one path, one reader.
+    for(unsigned n=0;n<kP3AVisibleRows;++n){
+        const unsigned i=(playlistSelected_%kP3AVisibleRows+n)%kP3AVisibleRows;
+        auto& row=renderContext_.rows[i];
+        if(!row.valid||row.type!=LibraryEntryType::Track||(metadataReadyRows_&(1U<<i)))continue;
+        char path[kTrackPathCapacity];
+        if(std::snprintf(path,sizeof(path),"%s/%s",navigationTarget_,row.basename)>=int(sizeof(path))){metadataReadyRows_|=1U<<i;recordMetadataFallback(255);return;}
+        Mp3Metadata metadata;Mp3MetadataError warning=Mp3MetadataError::None;
+        if(libraryRuntime_->cachedMetadataForPath(path,metadata,&warning)&&metadata.title.value[0]){
+            if(std::strcmp(row.label,metadata.title.value)){
+                setPath(row.label,sizeof(row.label),metadata.title.value);dirtyRegions_|=1U<<(i+1);dirty_=true;
+            }
+            if(metadata.titleFromFilename||warning!=Mp3MetadataError::None)recordMetadataFallback(warning==Mp3MetadataError::None?1:2+static_cast<uint8_t>(warning));
+            metadataReadyRows_|=1U<<i;return;
         }
+        const bool same=!std::strcmp(path,libraryRuntime_->metadataRequestPath());
+        if(same&&libraryRuntime_->metadataStatus().state==Mp3MetadataState::Error){metadataReadyRows_|=1U<<i;recordMetadataFallback(2+static_cast<uint8_t>(libraryRuntime_->metadataStatus().error));return;}
+        if(!same||!metadataRequested_){libraryRuntime_->requestMetadataPath(path);metadataRequested_=true;
+            setPath(selectedMetadataPath_,sizeof(selectedMetadataPath_),path);}
+        return;
     }
 }
 
@@ -751,16 +781,10 @@ void UiCoordinator::buildPlaylistRows(UiRenderContext& context) {
             std::snprintf(path,sizeof(path),"%s/%s",library.currentPath(),entry.name)<int(sizeof(path))) {
             row.playing = lastCurrentTrack_[0] != '\0' &&
                           std::strcmp(path, lastCurrentTrack_) == 0;
-            if (row.selected && std::strcmp(path, selectedMetadataPath_) == 0 &&
-                selectedMetadataTitle_[0] != '\0') {
-                setPath(row.label, sizeof(row.label), selectedMetadataTitle_);
+            Mp3Metadata metadata;Mp3MetadataError warning=Mp3MetadataError::None;
+            if(libraryRuntime_->cachedMetadataForPath(path,metadata,&warning)&&metadata.title.value[0]){
+                setPath(row.label,sizeof(row.label),metadata.title.value);metadataReadyRows_|=1U<<rowIndex;
             }
-            if (row.selected && std::strcmp(path,selectedMetadataPath_)!=0) {
-                setPath(selectedMetadataPath_,sizeof(selectedMetadataPath_),path);
-                selectedMetadataTitle_[0]='\0';metadataRequested_=false;
-            }
-        } else if(row.selected) {
-            selectedMetadataPath_[0]=selectedMetadataTitle_[0]='\0';metadataRequested_=false;
         }
         ++prepareRow_;
         renderRetryRequested_=prepareRow_<kP3AVisibleRows;
@@ -785,7 +809,7 @@ bool UiCoordinator::beginSelectedLibrary() {
     uncategorized_ = descriptor.uncategorized;
     playlistSelected_ = 0;
     selectedMetadataPath_[0] = '\0';
-    selectedMetadataTitle_[0] = '\0';
+    metadataReadyRows_=0;
     metadataRequested_ = false;
 
     return openBrowser(descriptor.path, UiPage::Playlist);
@@ -976,16 +1000,18 @@ void UiCoordinator::serviceBackground(bool logIdle){
     if(!nowPlaying_.presentingLyrics())settings_.service(*player_,logIdle);
     if(errors!=settings_.returnErrors)p3dPrepared_=false;
     const uint8_t brightness=power_.asleep()?0:uint16_t(settings_.store.value.brightness)*255/100;
-    if(brightness!=appliedBrightness_){display_->setBrightness(brightness);appliedBrightness_=brightness;}
+    if(!displayLifecycle_.pending()&&brightness!=appliedBrightness_){display_->setBrightness(brightness);appliedBrightness_=brightness;}
 }
 bool UiCoordinator::physicalActivity(uint64_t mask,uint32_t now){
-    const bool was=power_.asleep();const bool allowed=power_.sample(mask,now,page_==UiPage::Player,settings_.store.value);
+    const bool was=power_.asleep(),swallowed=power_.swallowing();const bool allowed=power_.sample(mask,now,page_==UiPage::Player,settings_.store.value);
     if(power_.asleep()!=was){
-        if(power_.asleep()){nowPlaying_.setActive(false,now);libraryVisual_.release();}
-        else{pageClearRequested_=true;invalidateBrowser();libraryVisualDirty_=true;settings_.invalidate();nowPlaying_.invalidateDisplay();}
-        display_->setBrightness(power_.asleep()?0:uint16_t(settings_.store.value.brightness)*255/100);
-        appliedBrightness_=power_.asleep()?0:uint16_t(settings_.store.value.brightness)*255/100;
+        ++inputEpoch_;displayLifecycle_.request(power_.asleep());
+        if(!power_.asleep()){
+            if(wake_.captured&&!wake_.firstFrame)++unfinishedWakes_;
+            wake_=WakeStats{};wake_.captured=now;
+        }
     }
+    if(swallowed&&!power_.swallowing())wake_.unlocked=now;
     return allowed;
 }
 

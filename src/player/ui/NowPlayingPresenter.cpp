@@ -50,6 +50,7 @@ const char* NowPlayingPresenter::bootFontSelfCheck(M5GFX& display){
 }
 
 void NowPlayingPresenter::setActive(bool active, uint32_t nowMs) {
+    if(active&&media_.suspending())return;
     if (model_.active == active) return;
     model_.setActive(active, nowMs);
     if (active) {
@@ -73,7 +74,7 @@ void NowPlayingPresenter::update(const PlayerSnapshot& snapshot,
                                   uint32_t nowMs) {
     if (model_.setTrack(path, nowMs)) {
         measureTitle(nowMs);
-        if (fonts_ && model_.path[0]) {media_.selectTrack(model_.path);if(!model_.active)media_.suspend();contentRow_=0;}
+        if (fonts_ && model_.path[0] && model_.active) {media_.selectTrack(model_.path);contentRow_=0;}
     }
     model_.updatePlayback(snapshot.state, snapshot.positionMs, snapshot.durationMs,
                            snapshot.repeatMode, snapshot.shuffleEnabled);

@@ -42,7 +42,21 @@ void NowPlayingMedia::selectTrack(const char* path){
     transition_.pending=false;transition_.requested=preferred_;transition_.displayed=MediaView::Cover;
 }
 void NowPlayingMedia::release(){cancelPreparation();if(fonts_)fonts_->clearPins();timeline_.release();cover_.release();track_[0]=0;active_=false;frameInProgress_=false;++generation_;}
-void NowPlayingMedia::suspend(){transition_.cancel();cancelPreparation();if(fonts_){fonts_->clearPins();fonts_->suspend();}timeline_.suspend();cover_.suspend();active_=false;frameInProgress_=false;shownGeneration_=UINT32_MAX;}
+void NowPlayingMedia::suspend(){
+    if(suspendStep_)return;
+    transition_.cancel();cancelPreparation();if(fonts_)fonts_->clearPins();
+    cover_.cancelBand();active_=false;frameInProgress_=false;shownGeneration_=UINT32_MAX;
+    ++generation_;suspendStep_=1;
+}
+bool NowPlayingMedia::serviceSuspension(){
+    switch(suspendStep_){
+    case 1:if(!fonts_||fonts_->suspendOne())++suspendStep_;break;
+    case 2:if(timeline_.suspendOne())++suspendStep_;break;
+    case 3:cover_.suspend();suspendStep_=0;break;
+    default:return false;
+    }
+    return true;
+}
 void NowPlayingMedia::requestRedraw(){dirty_=true;if(frameInProgress_)redrawAfterFrame_=true;}
 void NowPlayingMedia::setPreferred(uint8_t value){
     if(transition_.pending)return;
@@ -116,7 +130,11 @@ void NowPlayingMedia::service(){
     }
     const bool lyricsPending=timeline_.busy();
     preparationTurn_=!preparationTurn_;
-    if(preparationTurn_&&!frameInProgress_&&timeline_.windowReady()&&!fonts_->busy()){
+    // An owned picture stripe must finish before hidden lyric prefetch can
+    // consume another turn. Its buffer cannot be borrowed by chrome either.
+    if(cover_.bandActive()){cover_.service();return;}
+    if(preparationTurn_&&!frameInProgress_&&timeline_.windowReady()&&!fonts_->busy()&&
+       !(transition_.pending&&transition_.requested==MediaView::Cover)){
         prepareUpcoming();const auto elapsed=micros()-start;
         if(elapsed>serviceMaxUs_){serviceMaxUs_=elapsed;peakWork_=4;}return;
     }

@@ -1,5 +1,7 @@
 #include "FreeSession.h"
 #include "player/ui/InputEdges.h"
+#include "player/ui/RuntimeDiagnostics.h"
+#include <esp_heap_caps.h>
 #include "player/ui/media/MediaTypes.h"
 #include <algorithm>
 #include <cstdarg>
@@ -160,7 +162,7 @@ void FreeSession::prepare(const UiCoordinator& ui,const PlayerRuntime& player){
         (unsigned long)m.viewCoalesced,(unsigned long)m.viewWarmMaxMs,(unsigned long)m.viewColdMaxMs,(unsigned long)m.viewFailures);
     const char* storagePhases[]={"idle","queue_path_prepare","open_target","write_header","write_payload","close_target","open_verify","read_verify","check_size","close_resize","create_target","flush_target","read_header","queue_path_fetch","publish","cleanup_close"};
     append("view_requested_at_ms=%lu\nview_ready_at_ms=%lu\nview_first_stripe_at_ms=%lu\nview_completed_at_ms=%lu\n",(unsigned long)m.viewRequestedMs,(unsigned long)m.viewReadyMs,(unsigned long)m.viewFirstStripeMs,(unsigned long)m.viewCompletedMs);
-    append("view_warm_completed=%lu\nview_cold_completed=%lu\nview_failure=%s\naudio_source_read_max_us=%lu\nmedia_plus_events_bytes=%lu\ninput_event_bytes=%lu\nshared_row_bytes=%lu\n",(unsigned long)m.viewWarmCompleted,(unsigned long)m.viewColdCompleted,m.viewFailure,(unsigned long)player.sourceReadMaxUs(),(unsigned long)p3MemoryReport[1],(unsigned long)p3MemoryReport[2],(unsigned long)p3MemoryReport[3]);
+    append("view_warm_completed=%lu\nview_cold_completed=%lu\nview_failure=%s\naudio_source_read_max_us=%lu\nmedia_plus_events_bytes=%lu\n",(unsigned long)m.viewWarmCompleted,(unsigned long)m.viewColdCompleted,m.viewFailure,(unsigned long)player.sourceReadMaxUs(),(unsigned long)p3MemoryReport[1]);
     for(unsigned i=1;i<16;++i)append("store_%s_max_us=%lu\n",storagePhases[i],(unsigned long)player.persistencePhasePeakUs(i));
     append("tab_playing=%lu\ntab_paused=%lu\ntab_before_ms=%lu\ntab_after_ms=%lu\ntab_state=%u\n",(unsigned long)u.tabPlaying,(unsigned long)u.tabPaused,(unsigned long)u.tabBeforeMs,(unsigned long)u.tabAfterMs,u.tabState);
     append("tab_events=%lu\ntab_state_errors=%lu\nwindow_builds=%lu\nhighlight_updates=%lu\npage_first_frame_max_ms=%lu\ntransport_service_max_us=%lu\npersistence_service_max_us=%lu\n",
@@ -186,6 +188,22 @@ void FreeSession::prepare(const UiCoordinator& ui,const PlayerRuntime& player){
         (unsigned long)displayTimeoutMs(ds.store.restored.playerTimeout),(unsigned long)displayTimeoutMs(ds.store.restored.otherTimeout),(unsigned long)ds.changes,(unsigned long)ds.store.writes,(unsigned long)ds.store.errors,ui.displaySettingsSaved(),(unsigned long)ds.store.serviceMaxUs);
     append("screen_asleep=%u\nwake_swallowing=%u\nscreen_sleeps=%lu\nscreen_wakes=%lu\nlibrary_cover_frames=%lu\nvinyl_frames=%lu\nlibrary_cover_state=%u\nlibrary_cover_errors=%lu\nlibrary_cover_service_max_us=%lu\nlauncher_requests=%lu\nlauncher_errors=%lu\nlauncher_error=%s\n",
         power.asleep(),power.swallowing(),(unsigned long)power.sleeps,(unsigned long)power.wakes,(unsigned long)visual.coverFrames,(unsigned long)visual.frames,unsigned(visual.cover.state()),(unsigned long)visual.cover.errors,(unsigned long)visual.cover.serviceMaxUs,(unsigned long)ds.returnRequests,(unsigned long)ds.returnErrors,ds.returnError());
+    const auto& wake=ui.wakeStats();
+    append("metadata_fallback_cause=%u\n",ui.metadataFallbackCause());
+    append("previous_phase_valid=%u\nwake_resume_pcm=%lu\nwake_unfinished_count=%lu\nmetadata_fallbacks=%lu\n",
+        runtimeDiagnostics.previousValid,(unsigned long)wake.pcm,(unsigned long)ui.unfinishedWakes(),(unsigned long)ui.metadataFallbacks());
+    append("reset_reason=%lu\nprevious_phase=%lu\nprevious_phase_ms=%lu\nspeaker_distortion=DEFERRED\n",
+        (unsigned long)runtimeDiagnostics.resetReason,(unsigned long)runtimeDiagnostics.previousPhase,(unsigned long)runtimeDiagnostics.previousMs);
+    append("wake_captured_ms=%lu\nwake_backlight_ms=%lu\nwake_resume_ms=%lu\nwake_first_frame_ms=%lu\nwake_unlock_ms=%lu\nwake_resume_position_ms=%lu\nwake_complete=%s\n",
+        (unsigned long)wake.captured,(unsigned long)wake.backlight,(unsigned long)wake.resume,(unsigned long)wake.firstFrame,
+        (unsigned long)wake.unlocked,(unsigned long)wake.position,
+        !power.wakes?"NA":wake.firstFrame&&wake.unlocked?"YES":"PENDING");
+    append("heap_largest_block=%lu\n",(unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
+    append("runtime_peaks_us=%lu,%lu,%lu,%lu,%lu,%lu,%lu\n",
+        (unsigned long)runtimeDiagnostics.maxima[1],(unsigned long)runtimeDiagnostics.maxima[2],
+        (unsigned long)runtimeDiagnostics.maxima[3],(unsigned long)runtimeDiagnostics.maxima[4],
+        (unsigned long)runtimeDiagnostics.maxima[5],(unsigned long)runtimeDiagnostics.maxima[6],
+        (unsigned long)runtimeDiagnostics.maxima[7]);
     append("wake_mask_high=%lu\nwake_mask_low=%lu\nwake_suppressed_actions=%lu\nsettings_invalid_slots=%lu\nsettings_open_failures=%lu\n",
         (unsigned long)(power.lastWakeMask>>32),(unsigned long)power.lastWakeMask,(unsigned long)ui.suppressedActions(),(unsigned long)ds.store.invalidSlots,(unsigned long)ds.store.openFailures);
     append("nav_state=%u\nnav_generation=%lu\nnav_target=%s\nnav_error=%s\nnav_errors=%lu\npage_frame_complete=%u\nplaylist_frames=%lu\nlibrary_frames=%lu\ntrack_selections=%lu\ndifferent_track_selections=%lu\nqueue_count=%u\nselected_queue_count=%lu\ncurrent_index=%u\ntime_font_px=14\n",

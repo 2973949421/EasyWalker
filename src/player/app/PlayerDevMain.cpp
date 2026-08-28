@@ -12,6 +12,7 @@
 #include "player/support/AdvStorage.h"
 #include "player/ui/InputRouter.h"
 #include "player/ui/UiCoordinator.h"
+#include "player/ui/RuntimeDiagnostics.h"
 
 namespace {
 
@@ -80,6 +81,7 @@ void renderBootFailure(const char* reason) {
 }  // namespace
 
 void setup() {
+    runtimeDiagnostics.begin();
     Serial.begin(115200);
     const uint32_t waitStarted = millis();
     while (!Serial && millis() - waitStarted < 1000) {
@@ -132,24 +134,26 @@ void loop() {
     if(!ready){delay(10);return;}
     // Audio remains first. Library, keyboard and a bounded UI burst
     // follow; title animation is capped at 20 fps, without a full framebuffer.
-    uint32_t workAt=micros();player.serviceAudio();uint32_t audioUs=micros()-workAt;
-    M5Cardputer.update();collectInput();dispatchInput();
-    workAt=micros();libraryRuntime.service();const uint32_t libraryUs=micros()-workAt;
+    runtimeDiagnostics.enter(RuntimeStage::Audio);
+    uint32_t workAt=micros();player.serviceAudio();uint32_t audioUs=micros()-workAt;runtimeDiagnostics.leave();
+    runtimeDiagnostics.enter(RuntimeStage::Keyboard);M5Cardputer.update();collectInput();dispatchInput();runtimeDiagnostics.leave();
+    runtimeDiagnostics.enter(RuntimeStage::Directory);workAt=micros();libraryRuntime.service();const uint32_t libraryUs=micros()-workAt;runtimeDiagnostics.leave();
     // A slow indivisible FS operation must not be followed by another whole
     // input/render burst before the decoder gets its next service.
-    if(libraryUs>=6000){workAt=micros();player.serviceAudio();audioUs=std::max<uint32_t>(audioUs,micros()-workAt);}
-    workAt=micros();collectInput();dispatchInput();
+    if(libraryUs>=6000){runtimeDiagnostics.enter(RuntimeStage::Audio);workAt=micros();player.serviceAudio();audioUs=std::max<uint32_t>(audioUs,micros()-workAt);runtimeDiagnostics.leave();}
+    workAt=micros();runtimeDiagnostics.enter(RuntimeStage::Keyboard);collectInput();dispatchInput();runtimeDiagnostics.leave();
+    runtimeDiagnostics.enter(RuntimeStage::Settings);
 
 #if defined(P3A_DEVICE_GATE)
     ui.serviceBackground(true);
 #else
     ui.serviceBackground(session.storageIdle());
 #endif
-
+    runtimeDiagnostics.leave();
 #if !defined(P3A_DEVICE_GATE)
     session.recordWork(audioUs,libraryUs,micros()-workAt);
 #endif
-    if(micros()-workAt>=6000){player.serviceAudio();}
+    if(micros()-workAt>=6000){runtimeDiagnostics.enter(RuntimeStage::Audio);player.serviceAudio();runtimeDiagnostics.leave();}
 
 #if defined(P3A_DEVICE_GATE)
     gate.service(ui, player);
@@ -169,10 +173,11 @@ void loop() {
         // Storage owns its own turn; never follows a UI operation in the
         // same step. The next check observes the real indivisible I/O time.
         static unsigned backgroundTurn=0;
-        if(++backgroundTurn%8==0 && !ui.nowPlaying().presentingLyrics() && !ui.settingsBusy())player.servicePersistence();
-        else ui.service();
+        if(++backgroundTurn%8==0 && !ui.nowPlaying().presentingLyrics() && !ui.settingsBusy()){
+            runtimeDiagnostics.enter(RuntimeStage::Persistence);player.servicePersistence();runtimeDiagnostics.leave();
+        }else{runtimeDiagnostics.enter(RuntimeStage::Ui);ui.service();runtimeDiagnostics.leave();}
         if(micros()-burstAt>=6000)break;
-        collectInput();dispatchInput();
+        runtimeDiagnostics.enter(RuntimeStage::Keyboard);collectInput();dispatchInput();runtimeDiagnostics.leave();
 #if !defined(P3A_DEVICE_GATE)
         session.observe(ui,player);
 #endif
@@ -183,8 +188,8 @@ void loop() {
     // Logging gets a fresh audio service boundary, not the tail of a render
     // burst. Actual logging and resource load remain inside PCM measurement.
     if(session.workDue() && !ui.nowPlaying().presentingLyrics() && !ui.settingsBusy()){
-        workAt=micros();player.serviceAudio();session.recordWork(micros()-workAt,0,0);
-        session.service(ui,player,burstUs);
+        runtimeDiagnostics.enter(RuntimeStage::Audio);workAt=micros();player.serviceAudio();session.recordWork(micros()-workAt,0,0);runtimeDiagnostics.leave();
+        runtimeDiagnostics.enter(RuntimeStage::Log);session.service(ui,player,burstUs);runtimeDiagnostics.leave();
     }else session.recordBurst(burstUs);
     if(ui.readyToReturn()){
         if(!returnCheckpointRequested){session.requestManualSave();returnCheckpointRequested=true;}

@@ -19,9 +19,14 @@ class ImageBand {
     uint32_t offset(uint32_t header)const{return header+start_+done_;}
     unsigned request()const{return std::min<uint32_t>(512,length_-done_);}
     void append(const uint8_t* bytes,unsigned count){
-        for(unsigned i=0;i<count;i+=2){
-            const unsigned pixel=(start_+done_+i)/2;
-            canvas_->drawPixel((135-width_)/2+pixel%width_,top_+pixel/width_-y_,mediaU16(bytes+i));
+        // Bulk scanline writes into the existing canvas instead of hundreds
+        // of per-pixel virtual calls. Source is little-endian RGB565.
+        lgfx::rgb565_t pixels[256];
+        for(unsigned i=0;i<count/2;++i)pixels[i].raw=mediaU16(bytes+i*2);
+        for(unsigned i=0;i<count/2;){
+            const unsigned pixel=(start_+done_)/2+i;
+            const unsigned n=std::min<unsigned>(count/2-i,width_-pixel%width_);
+            canvas_->pushImage((135-width_)/2+pixel%width_,top_+pixel/width_-y_,n,1,pixels+i);i+=n;
         }
         done_+=count;
     }

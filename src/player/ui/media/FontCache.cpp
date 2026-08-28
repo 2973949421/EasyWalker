@@ -6,7 +6,7 @@
 #include <cstdio>
 namespace adv_walkman { namespace player {
 namespace {
-const char* names[]={"cjk-12","cjk-14","cjk-16","cjk-18","latin-10","latin-12","latin-14"};
+const char* names[]={"cjk-12","cjk-14","cjk-16","cjk-18","latin-10","latin-12","latin-14","library-cjk-12","library-cjk-18","library-latin-14","library-latin-22"};
 uint16_t rgb565(uint32_t c){return ((c>>8)&0xF800)|((c>>5)&0x07E0)|((c>>3)&31);}
 uint16_t blend(uint16_t f,uint16_t b,uint8_t a){
     const unsigned r=(((f>>11)*a+(b>>11)*(255-a)+127)/255);
@@ -16,7 +16,7 @@ uint16_t blend(uint16_t f,uint16_t b,uint8_t a){
 }
 bool FontCache::begin(){if(!work_)work_=new(std::nothrow) Work{};return work_!=nullptr;}
 void FontCache::release(){index_.close();fontFile_.close();delete work_;work_=nullptr;phase_=0;currentFont_=255;pending_=-1;used_=clock_=0;presenting_=false;failure_=ResourceFailure{};stats_=FontCacheStats{};for(auto& i:indexes_)i={};}
-uint16_t FontCache::tick(){if(++clock_==0){for(auto& g:work_->metrics)g.age/=2;clock_=32768;}return clock_;}
+uint8_t FontCache::tick(){if(++clock_==0){for(auto& g:work_->metrics)g.age/=2;clock_=128;}return clock_;}
 const CachedGlyph* FontCache::find(uint32_t cp,uint8_t font)const{
     if(!work_ || cp>0xFFFF)return nullptr;for(const auto& g:work_->metrics)if(g.state && g.codepoint==cp && g.font==font)return &g;return nullptr;
 }
@@ -24,6 +24,11 @@ const uint8_t* FontCache::bitmap(const CachedGlyph& g)const{return work_&&g.stat
 void FontCache::clearPins(uint8_t mask){if(mask==All)presenting_=false;if(work_)for(auto& g:work_->metrics)g.pinned&=~mask;}
 void FontCache::promotePins(){if(work_)for(auto& g:work_->metrics)g.pinned=promoteFramePins(g.pinned);}
 void FontCache::suspend(){index_.close();fontFile_.close();currentFont_=255;indexPageAt_=UINT32_MAX;if(busy())phase_=1;}
+bool FontCache::suspendOne(){
+    if(index_){index_.close();return false;}
+    if(fontFile_){fontFile_.close();return false;}
+    currentFont_=255;indexPageAt_=UINT32_MAX;if(busy())phase_=1;return true;
+}
 bool FontCache::request(uint32_t cp,uint8_t font,uint8_t pin){
     if(!work_ || font>=FaceCount)return false;
     if(cp>0xFFFF){failureFont_=font;failureIndex_=true;failure_.set("font_non_bmp","lookup");++stats_.missing;return true;}
@@ -48,12 +53,12 @@ bool FontCache::requestMetric(uint32_t cp,uint8_t font){
     if(busy() || presenting_)return false;const bool ready=request(cp,font);if(!ready&&busy())metricOnly_=true;return ready;
 }
 bool FontCache::requestText(const char* text,uint8_t font){if(!text)return true;bool invalid=false;while(*text){const auto cp=mediaCodepoint(text,invalid);if(!request(cp,font))return false;}return true;}
-bool FontCache::requestUiWindow(const char* text,uint8_t font,int startPx,int widthPx,float size){
+bool FontCache::requestUiWindow(const char* text,uint8_t font,int startPx,int widthPx,float size,bool library){
     // pixels, not a Font0 scale. Metrics and drawing use the very same face.
     (void)size;if(!text)return true;bool invalid=false;int x=0;
     while(*text){const auto cp=mediaCodepoint(text,invalid);if(cp=='\n'){x=0;continue;}
-        const auto face=faceFor(cp,font);if(!requestMetric(cp,face))return false;
-        const auto* g=find(cp,face);const int advance=cp<256?latinAdvance(cp,face):(g?g->advance:font);
+        const auto face=library?libraryFace(cp,font):faceFor(cp,font);if(!requestMetric(cp,face))return false;
+        const auto* g=find(cp,face);const int advance=packedLatin(face)?latinAdvance(cp,face):(g?g->advance:font);
         if(x+advance>=startPx&&x<=startPx+widthPx&&!request(cp,face,Ui))return false;
         x+=advance;if(x>startPx+widthPx)break;}return true;
 }
@@ -83,7 +88,7 @@ bool FontCache::allocateBitmap(CachedGlyph& glyph){
 void FontCache::failurePath(char* output,size_t size)const{std::snprintf(output,size,"/ADVWalkman/fonts/%s.%s",names[failureFont_],failureIndex_?(indexFormat_==2?"idx2":"idx"):"vlw");}
 void FontCache::fail(bool io,const char* reason,const char* operation,int expected,int actual){
     failure_.set(reason,operation,errno,expected,actual);failureFont_=pending_>=0?work_->metrics[pending_].font:0;failureIndex_=phase_!=4&&phase_!=5&&phase_!=6;
-    if(pending_>=0){auto& g=work_->metrics[pending_];g.state=3;g.arena=0xFFFF;if(g.font>=Latin10&&g.codepoint<256)work_->latinAdvance[g.font-Latin10][g.codepoint]=0x88;}
+    if(pending_>=0){auto& g=work_->metrics[pending_];g.state=3;g.arena=0xFFFF;if(packedLatin(g.font)&&g.codepoint<256)work_->latinAdvance[g.font-Latin10][g.codepoint]=0x88;}
     if(io)++stats_.ioErrors;else++stats_.missing;phase_=0;pending_=-1;index_.close();fontFile_.close();currentFont_=255;
 }
 void FontCache::service(){
@@ -136,9 +141,9 @@ void FontCache::service(){
             }else std::memcpy(b,indexPage_+offset,24);
             if(mediaU32(b)<g.codepoint)lo_=middle+1;else if(mediaU32(b)>g.codepoint)hi_=middle;
             else{const unsigned w=mediaU16(b+8),h=mediaU16(b+10);const int dx=int16_t(mediaU16(b+14)),dy=int16_t(mediaU16(b+16));g.offset=mediaU32(b+4);
-                if(w>18||h>18||dx<-128||dx>127||dy<-128||dy>127||g.offset>vlwSize_||w*h>vlwSize_-g.offset){fail(true,"font_metric_bounds","validate");break;}
+                if(w>22||h>22||dx<-128||dx>127||dy<-128||dy>127||g.offset>vlwSize_||w*h>vlwSize_-g.offset){fail(true,"font_metric_bounds","validate");break;}
                 g.width=w;g.height=h;g.dx=dx;g.dy=dy;g.advance=std::max<int>(1,std::min<int>(255,int16_t(mediaU16(b+12))));
-                if(g.font>=Latin10&&g.codepoint<256){if(w>15||g.advance>15){fail(true,"latin_metric_bounds","validate");break;}work_->latinAdvance[g.font-Latin10][g.codepoint]=(w<<4)|g.advance;}
+                if(packedLatin(g.font)&&g.codepoint<256){if(w>15||g.advance>15){fail(true,"latin_metric_bounds","validate");break;}work_->latinAdvance[g.font-Latin10][g.codepoint]=(w<<4)|g.advance;}
                 if(metricOnly_){phase_=0;pending_=-1;}else phase_=4;
             }if(micros()-start>=750)break;
         }
@@ -148,7 +153,7 @@ void FontCache::service(){
         else if(!allocateBitmap(g)){fail(true,"font_frame_capacity","allocate");}
         else phase_=6;
     }else if(phase_==6){const unsigned length=g.width*g.height;++stats_.reads;
-            {uint8_t source[18*18];const int n=fontFile_.read(source,length);stats_.bytes+=n>0?n:0;
+            {uint8_t source[22*22];const int n=fontFile_.read(source,length);stats_.bytes+=n>0?n:0;
                 if(n!=int(length))fail(true,"font_bitmap_read","read",length,n);
                 else{for(unsigned i=0;i<length;i+=2){const unsigned a=(source[i]+8)/17,b=i+1<length?(source[i+1]+8)/17:0;work_->bitmaps[g.arena+i/2]=(a<<4)|b;}
                     g.state=2;phase_=0;pending_=-1;}}
@@ -162,19 +167,24 @@ void FontCache::draw(lgfx::LGFXBase& target,uint32_t cp,uint8_t font,int x,int y
     const int i0=std::max(0,clockwise?ct-y:cl-x-g->dx),i1=std::min<int>(g->width,clockwise?ct+ch-y:cl+cw-x-g->dx);
     const int j0=std::max(0,clockwise?x+g->height-(cl+cw):ct-y-g->dy),j1=std::min<int>(g->height,clockwise?x+g->height-cl:ct+ch-y-g->dy);
     uint16_t palette[16];for(unsigned a=0;a<16;++a)palette[a]=blend(fg,bg,a*17);
-    for(int j=j0;j<j1;++j)for(int i=i0;i<i1;++i){const unsigned p=j*g->width+i,a=(pixels[p/2]>>(p%2?0:4))&15;
-        if(a)target.drawPixel(clockwise?x+g->height-1-j:x+g->dx+i,clockwise?y+i:y+g->dy+j,palette[a]);}
+    for(int j=j0;j<j1;++j)for(int i=i0;i<i1;){
+        const unsigned p=j*g->width+i,a=(pixels[p/2]>>(p%2?0:4))&15;int end=i+1;
+        while(end<i1){const unsigned q=j*g->width+end;if(((pixels[q/2]>>(q%2?0:4))&15)!=a)break;++end;}
+        if(a){if(clockwise)target.drawFastVLine(x+g->height-1-j,y+i,end-i,palette[a]);
+            else target.drawFastHLine(x+g->dx+i,y+g->dy+j,end-i,palette[a]);}
+        i=end;
+    }
 }
 void CachedUiFont::getDefaultMetric(lgfx::FontMetrics* m)const{*m={};m->height=m->y_advance=pixels_;m->baseline=pixels_;m->width=m->x_advance=pixels_;}
 bool CachedUiFont::updateFontMetric(lgfx::FontMetrics* m,uint16_t cp)const{
     if(!cache_||!cache_->available())return fonts::Font0.updateFontMetric(m,cp);
-    getDefaultMetric(m);const auto face=FontCache::faceFor(cp,pixels_);const auto* g=cache_->find(cp,face);
-    m->x_advance=cp<256?cache_->latinAdvance(cp,face):(g?g->advance:pixels_);
+    getDefaultMetric(m);const auto font=face(cp);const auto* g=cache_->find(cp,font);
+    m->x_advance=FontCache::packedLatin(font)?cache_->latinAdvance(cp,font):(g?g->advance:pixels_);
     m->width=g?g->width:m->x_advance;m->x_offset=g?g->dx:0;return true;
 }
 size_t CachedUiFont::drawChar(lgfx::LGFXBase* gfx,int32_t x,int32_t y,uint16_t cp,const lgfx::TextStyle* style,lgfx::FontMetrics* metrics,int32_t& filled)const{
     if(!cache_||!cache_->available())return fonts::Font0.drawChar(gfx,x,y,cp,style,metrics,filled);
-    const int advance=metrics->x_advance;const uint8_t font=FontCache::faceFor(cp,pixels_);
+    const int advance=metrics->x_advance;const uint8_t font=face(cp);
     int cl,ct,cw,ch;gfx->getClipRect(&cl,&ct,&cw,&ch);
     if(x+pixels_<cl||x>=cl+cw||y+pixels_<=ct||y>=ct+ch)return advance;
     cache_->draw(*gfx,cp,font,x,y,rgb565(style->fore_rgb888),rgb565(style->back_rgb888));filled=x+advance;return advance;

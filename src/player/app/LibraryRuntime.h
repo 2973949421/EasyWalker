@@ -49,6 +49,8 @@ class LibraryRuntime final {
     // Reject aliases (.., ., empty components) rather than changing the key.
     LibraryResult requestMetadataPath(const char* path);
     bool metadataForPath(const char* path, Mp3Metadata& output) const;
+    // Cache-only: no reader cancellation or SD access on a hit.
+    bool cachedMetadataForPath(const char* path,Mp3Metadata& output,Mp3MetadataError* warning=nullptr){return metadataCache_.lookup(path,output,warning);}
     const char* metadataRequestPath() const;
     static bool isMetadataPath(const char* path);
     bool metadata(Mp3Metadata& output) const;

@@ -20,6 +20,11 @@ class LyricsTimeline final {
     bool cueReady(int cue)const;
     bool busy()const{return phase_!=0;}
     void suspend(){file_.close();directory_.close();windows_[0].close();windows_[1].close();lineLength_=0;lineStarted_=false;}
+    bool suspendOne(){
+        if(file_){file_.close();return false;}if(directory_){directory_.close();return false;}
+        if(windows_[0]){windows_[0].close();return false;}if(windows_[1]){windows_[1].close();return false;}
+        lineLength_=0;lineStarted_=false;return true;
+    }
     int current() const { return current_; }
     uint32_t revision() const { return revision_; }
     uint32_t startMs() const;

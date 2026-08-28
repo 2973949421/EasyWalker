@@ -26,6 +26,8 @@ class NowPlayingMedia final {
     void begin(FontCache& fonts){fonts_=&fonts;}
     void selectTrack(const char* path);void release();void service();
     void suspend();
+    bool serviceSuspension();
+    bool suspending()const{return suspendStep_!=0;}
     const char* bootSelfCheck(const char* track); // muted current resource check
     void updatePosition(uint32_t positionMs,uint32_t durationMs,bool paused);
     void resetDiagnostics();
@@ -51,6 +53,7 @@ class NowPlayingMedia final {
     char track_[512]{};
     bool frameFromPrepared_=false;
     bool preparationTurn_=false;
+    uint8_t suspendStep_=0;
     uint32_t preparedReadyAt_=0,lastDue_=0,lastPrepared_=0,lastSubmitted_=0;
     MediaView preferred_=MediaView::Lyrics,frameView_=MediaView::Cover;
     ViewTransition transition_;

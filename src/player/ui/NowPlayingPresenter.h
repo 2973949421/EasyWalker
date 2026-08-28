@@ -31,6 +31,8 @@ class NowPlayingPresenter final {
     const char* bootMediaSelfCheck(const char* track){return media_.bootSelfCheck(track);}
     const char* bootFontSelfCheck(M5GFX& display);
     void serviceMedia() { media_.service(); }
+    bool serviceSuspension(){return media_.serviceSuspension();}
+    bool suspending()const{return media_.suspending();}
     void setPreferredView(uint8_t view) { media_.setPreferred(view); }
     bool toggleView() { return media_.toggleView(); }
     NowPlayingMediaStatus mediaStatus() const { return media_.status(); }

@@ -14,6 +14,7 @@ class CoverRenderer final {
     void release();
     void finishFrame(){band_.cancel();}
     void suspend(){band_.cancel();file_.close();requestedRow_=-1;if(phase_)phase_=1;}
+    void cancelBand(){band_.cancel();requestedRow_=-1;}
     int top()const{return (188-height_)/2;}
     int height()const{return height_;}
     int stripeHeight()const{return 18;}
