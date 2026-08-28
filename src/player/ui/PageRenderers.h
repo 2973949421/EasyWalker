@@ -49,6 +49,7 @@ class LibraryPageRenderer final {
 class PlaylistPageRenderer final {
   public:
     static void render(M5GFX& display, const UiRenderContext& context);
+    static void renderRegion(M5GFX& display, const UiRenderContext& context, uint8_t region);
 };
 
 class SettingsPageRenderer final {

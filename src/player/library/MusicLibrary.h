@@ -56,6 +56,7 @@ struct LibraryEntry {
 };
 
 struct LibraryStats {
+    uint32_t scannedEntries = 0;
     uint32_t cacheHits = 0;
     uint32_t cacheMisses = 0;
     uint32_t cacheEvictions = 0;
@@ -115,6 +116,8 @@ class MusicLibrary final {
     // restore the parent folder of a persisted track without replaying every
     // path component. openDirectory() performs the root and traversal checks.
     LibraryResult openPath(const char* path);
+    // Cancel only transient browser work, never an immutable pinned Queue.
+    void cancelOpen();
     LibraryResult enter(size_t entryIndex);
     LibraryResult parent();
     LibraryResult refreshCurrent();

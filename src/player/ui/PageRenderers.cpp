@@ -91,26 +91,42 @@ UiTextLayoutResult LibraryPageRenderer::render(
         display.setCursor(11, 178);
         display.print("ENTER TO OPEN");
     }
-    footer(display, context.hint == nullptr ? "S: SETTINGS\nESC: STAY"
+    footer(display, context.error ? "ENTER: RETRY\nESC: STAY" : context.hint == nullptr ? "S: SETTINGS\nESC: STAY"
                                             : context.hint);
     return nameLayout;
 }
 
 void PlaylistPageRenderer::render(M5GFX& display,
                                   const UiRenderContext& context) {
-    beginPage(display, "PLAYLIST");
+    display.fillScreen(kBackground);
+    for(uint8_t region=0;region<kP3AVisibleRows+2;++region)renderRegion(display,context,region);
+}
+
+void PlaylistPageRenderer::renderRegion(M5GFX& display,
+                                        const UiRenderContext& context, uint8_t region) {
+    if(region==0) {
+    display.clearClipRect();
+    display.fillRect(0,0,display.width(),43,kBackground);
+    display.setTextWrap(false);display.setTextSize(1.0f);
+    display.setTextColor(kAccent,kBackground);
+    display.setCursor(7,7);display.print("PLAYLIST");
+    display.drawFastHLine(6,25,display.width()-12,kMuted);
     display.setTextSize(1.0f);
     display.setTextColor(kMuted, kBackground);
     UiTextLayout::draw(display,
                        context.libraryName[0] == '\0' ? "Loading..."
                                                        : context.libraryName,
                        textBox(6, 28, display.width() - 12, 13));
+    return;
+    }
 
     constexpr int rowTop = 43;
     constexpr int rowHeight = 25;
     for (size_t index = 0; index < kP3AVisibleRows; ++index) {
+        if(region!=index+1)continue;
         const PlaylistRenderRow& row = context.rows[index];
         const int y = rowTop + static_cast<int>(index) * rowHeight;
+        display.fillRect(0,y,display.width(),rowHeight,kBackground);
         if (!row.valid) {
             continue;
         }
@@ -131,13 +147,17 @@ void PlaylistPageRenderer::render(M5GFX& display,
                            textBox(7 + markerWidth, y + 7,
                                    display.width() - 14 - markerWidth, 15));
     }
+    if(region!=kP3AVisibleRows+1)return;
     if (context.playlistCount == 0 && context.error == nullptr) {
         display.setTextColor(kMuted, kBackground);
         UiTextLayout::draw(display, "No playable entries",
                            textBox(12, 90, display.width() - 24, 32, 2));
     }
-    footer(display, context.hint == nullptr ? "UP/DOWN + ENTER\nESC: BACK"
-                                            : context.hint);
+    if(context.error) {
+        display.setTextColor(TFT_ORANGE,kBackground);
+        UiTextLayout::draw(display,context.error,textBox(10,75,display.width()-20,72,4));
+    }
+    footer(display, context.error ? "ENTER: RETRY\nESC: BACK" : context.hint == nullptr ? "UP/DOWN + ENTER\nESC: BACK" : context.hint);
 }
 
 void SettingsPageRenderer::render(M5GFX& display,

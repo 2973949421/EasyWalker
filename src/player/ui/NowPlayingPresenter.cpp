@@ -31,18 +31,22 @@ void NowPlayingPresenter::begin() {
     row_.setTextWrap(false);
 }
 
-const char* NowPlayingPresenter::bootFontSelfCheck(){
+const char* NowPlayingPresenter::bootFontSelfCheck(M5GFX& display){
     if(!fonts_)return "font_cache_unbound";
     const uint32_t started=millis();
     while(!fonts_->requestUiWindow("ADVWalkmanBenchmark",12,0,220,1)){
         fonts_->service();if(millis()-started>5000)return "font_warmup_timeout";delay(1);
     }
     prepareRow(18,kBackground,1);CachedUiFont font(fonts_,12);row_.setFont(&font);
-    const auto layout=UiTextLayout::measure(row_,"ADVWalkmanBenchmark",{19,76,97,38,2,3,true});
+    const auto* previousFont=display.getFont();
+    display.setFont(&font);display.setTextSize(1);
+    const auto layout=UiTextLayout::measure(display,"ADVWalkmanBenchmark",{19,76,97,38,2,3,true});
+    display.setFont(previousFont);
+    const auto invalid=UiTextLayout::measure(row_,"ADVWalkmanBenchmark",{19,76,97,38,2,3,true});
     UiTextLayout::draw(row_,"ADVWalkman",{6,0,123,18,1,0,false});
     bool ink=false;for(unsigned i=0;i<G::width*18;++i)ink|=row_.readPixel(i%G::width,i/G::width)!=kBackground;
     row_.setFont(&fonts::Font0);
-    return layout.lineCount==2&&!layout.truncated&&!layout.layoutError&&layout.maxLineWidthPx<=97&&ink?nullptr:"actual_font_layout";
+    return layout.lineCount==2&&!layout.truncated&&!layout.layoutError&&layout.maxLineWidthPx<=97&&invalid.layoutError&&ink?nullptr:"actual_font_layout";
 }
 
 void NowPlayingPresenter::setActive(bool active, uint32_t nowMs) {
@@ -244,9 +248,9 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
         ++stats_.artistDraws;
         row_.setFont(&fonts::Font0);
     } else if (model_.dirty & (DirtyTime|DirtyStatus)) {
-        if(fonts_&&!fonts_->requestUiWindow("0123456789:/-?ASLOG VEDR",10,0,1000,1))return false;
+        if(fonts_&&!fonts_->requestUiWindow("0123456789:/-?ASLOG VEDR",14,0,1000,1))return false;
         prepareRow(18, kBackground, 1.0f);
-        CachedUiFont font(fonts_,10);if(fonts_)row_.setFont(&font);
+        CachedUiFont font(fonts_,14);if(fonts_)row_.setFont(&font);
         drawStateIcon(model_.state);
         // Only exceptional modes occupy an extra tiny marker. Normal/Original
         // are defaults, not two permanent words stealing a complete row.

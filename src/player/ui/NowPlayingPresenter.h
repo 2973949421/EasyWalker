@@ -29,7 +29,7 @@ class NowPlayingPresenter final {
     void begin();
     void bindMedia(FontCache& fonts) { fonts_=&fonts; media_.begin(fonts); }
     const char* bootMediaSelfCheck(){return media_.bootSelfCheck();}
-    const char* bootFontSelfCheck();
+    const char* bootFontSelfCheck(M5GFX& display);
     void serviceMedia() { media_.service(); }
     void setPreferredView(uint8_t view) { media_.setPreferred(view); }
     bool toggleView() { return media_.toggleView(); }

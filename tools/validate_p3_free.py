@@ -4,7 +4,7 @@ import re
 import zlib
 from pathlib import Path
 
-VERSION='0.7.5-p3c.closure'
+VERSION='0.7.6-p3c.navfix'
 
 def checkpoints(data):
     result=[]
@@ -31,6 +31,8 @@ def evaluate(record):
     problems=[]
     if record.get('result')=='FAIL':problems.append('device_reported_failure')
     if record.get('failure_reason')!='none':problems.append(record.get('failure_reason','missing_failure_field'))
+    if int(record.get('nav_errors',0)):problems.append('navigation_failure')
+    if record.get('display_self_failure','none')!='none':problems.append('display_selfcheck')
     level=int(record.get('volume',-1));raw=int(record.get('speaker_volume_raw',-1))
     if not 0<=level<=255 or int(record.get('speaker_volume_cap',-1))!=102 or raw!=(level*102+127)//255:
         problems.append('volume_policy')
@@ -39,6 +41,9 @@ def evaluate(record):
     if problems:return 'FAIL',sorted(set(problems))
     missing=[key for key in ('a_auto','b_auto','c_auto') if record.get(key)!='COVERED']
     if missing:return 'INCOMPLETE',missing
+    for key in ('playlist_frames','library_frames','different_track_selections'):
+        if int(record.get(key,0))<=0:return 'INCOMPLETE',[key]
+    if int(record.get('time_font_px',0))!=14:return 'FAIL',['time_font_px']
     # Recheck measured evidence, rather than trusting a result label.
     if int(record['longest_playing_ms'])<60000:return 'INCOMPLETE',['continuous_playback']
     for key in ('lyrics_frames','cover_frames','lyric_deadline_updates','view_events','volume_events','play_events','library_text_ok'):

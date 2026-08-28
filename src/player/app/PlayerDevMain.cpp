@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <M5Cardputer.h>
 #include <SD.h>
+#include <algorithm>
 
 #include "player/app/LibraryRuntime.h"
 #include "player/app/PlayerRuntime.h"
@@ -99,12 +100,12 @@ void loop() {
     if(!ready){delay(10);return;}
     // Audio remains first. Library, keyboard and a bounded UI burst
     // follow; title animation is capped at 20 fps, without a full framebuffer.
-    uint32_t workAt=micros();player.service();const uint32_t audioUs=micros()-workAt;
+    uint32_t workAt=micros();player.service();uint32_t audioUs=micros()-workAt;
     workAt=micros();libraryRuntime.service();const uint32_t libraryUs=micros()-workAt;
+    // A slow indivisible FS operation must not be followed by another whole
+    // input/render burst before the decoder gets its next service.
+    if(libraryUs>=6000){workAt=micros();player.service();audioUs=std::max<uint32_t>(audioUs,micros()-workAt);}
     workAt=micros();M5Cardputer.update();
-#if !defined(P3A_DEVICE_GATE)
-    session.recordWork(audioUs,libraryUs,micros()-workAt);
-#endif
 
     UiAction action = UiAction::None;
     RawKeyEvent raw;
@@ -124,6 +125,9 @@ void loop() {
                       uiPageName(ui.page()), uiActionName(action), raw.x, raw.y,
                       raw.fn ? 1 : 0, static_cast<unsigned>(raw.keyCount));
     }
+#if !defined(P3A_DEVICE_GATE)
+    session.recordWork(audioUs,libraryUs,micros()-workAt);
+#endif
 
 #if defined(P3A_DEVICE_GATE)
     gate.service(ui, player);
@@ -151,7 +155,8 @@ void loop() {
     // Logging gets a fresh audio service boundary, not the tail of a render
     // burst. Actual logging and resource load remain inside PCM measurement.
     if(session.workDue() && !ui.nowPlaying().presentingLyrics()){
-        player.service();session.service(ui,player,burstUs);
+        workAt=micros();player.service();session.recordWork(micros()-workAt,0,0);
+        session.service(ui,player,burstUs);
     }else session.recordBurst(burstUs);
 #endif
     delay(1);

@@ -40,6 +40,7 @@ class LibraryRuntime final {
     // the same directory. Navigating elsewhere safely cancels the selection.
     LibraryResult selectTrack(size_t entryIndex, bool autoplay = true);
     bool selectionPending() const;
+    void cancelSelection() { pendingSelection_ = false; }
 
     // Metadata requests are on demand. The latest successful result is copied
     // out by metadata(); warnings remain visible through metadataStatus().

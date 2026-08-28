@@ -36,6 +36,9 @@ class UiCoordinator final {
 
     UiPage page() const;
     UiStats stats() const;
+    const char* navigationTarget() const { return navigationTarget_; }
+    const char* navigationError() const { return navigationError_; }
+    const MusicLibrary& browser() const { return libraryRuntime_->library(); }
     bool currentTrackPath(char* output, size_t capacity) const;
     void notifyVolumeAdjusted(uint8_t volume, uint32_t nowMs);
     const NowPlayingPresenter& nowPlaying() const { return nowPlaying_; }
@@ -43,9 +46,7 @@ class UiCoordinator final {
   private:
     enum class PendingNavigation : uint8_t {
         None,
-        EnterLibrary,
         SelectTrack,
-        RestorePlaylist,
     };
 
     enum class PendingIntent : uint8_t {
@@ -61,6 +62,11 @@ class UiCoordinator final {
     void servicePendingNavigation();
     void serviceSelectedMetadata();
     void render();
+    bool openBrowser(const char* path, UiPage page, bool locateCurrent = false);
+    void cancelNavigation();
+    void navigationFailed(const char* reason);
+    void prepareBrowser();
+    void invalidateBrowser();
     void buildRenderContext(UiRenderContext& context);
     void buildPlaylistRows(UiRenderContext& context);
 
@@ -114,6 +120,15 @@ class UiCoordinator final {
     // Fixed six-row scratch, not an all-library cache. Keep complete UTF-8
     // names off the small Arduino loop stack and alive through render().
     UiRenderContext renderContext_{};
+    NavigationLoad navigation_{};
+    char navigationTarget_[kTrackPathCapacity] = {};
+    char navigationError_[64] = {};
+    uint32_t browserGeneration_ = 0, browserRequest_ = 0, browserProgress_ = 0;
+    uint32_t browserProgressAt_ = 0;
+    size_t savedPlaylistSelected_ = 0, locateIndex_ = 0;
+    bool locateCurrent_ = false, openRequested_ = false;
+    bool pageClearRequested_ = true, browserContextReady_ = false;
+    uint8_t prepareRow_ = 0, drawRegion_ = 0;
     NowPlayingPresenter nowPlaying_;
     FontCache fonts_;
 };

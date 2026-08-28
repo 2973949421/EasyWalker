@@ -20,7 +20,7 @@ class FreeSession final {
     void prepare(const UiCoordinator& ui,const PlayerRuntime& player);
     void append(const char* format,...);
     fs::File file_;
-    char buffer_[6144]{},track_[512]{},failure_[64]{},component_[24]{};
+    char buffer_[8192]{},track_[512]{},failure_[64]{},component_[24]{};
     char restoredTrack_[512]{};
     uint32_t bootId_=1,audioMax_=0,libraryMax_=0,inputMax_=0,restoredPosition_=0;
     uint32_t noLyricsView_=0,preferenceTransitions_=0,startupObservedMs_=0;
@@ -39,5 +39,6 @@ class FreeSession final {
     size_t length_=0,written_=0;
     bool playing_=false,loading_=false,requestSave_=true,manual_=false,writingManual_=false;
     bool inputCheck_=false,textSeen_=false,textOk_=false,lyricsReady_=false,coverReady_=false,overflow_=false;
+    uint32_t lastPageCount_=0,lastSelections_=0,lastNavigationErrors_=0;
 };
 } }

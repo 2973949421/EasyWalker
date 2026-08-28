@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "UiTextLayout.h"
+#include "NavigationLoad.h"
 
 namespace adv_walkman {
 namespace player {
@@ -39,6 +40,13 @@ struct RawKeyEvent {
 };
 
 struct UiStats {
+    NavigationState navigationState = NavigationState::Idle;
+    uint32_t navigationGeneration = 0, navigationErrors = 0;
+    uint32_t completedPages = 0, playlistFrames = 0, libraryFrames = 0;
+    uint32_t trackSelections = 0, differentTrackSelections = 0;
+    uint32_t lastQueueCount = 0, prepareMaxUs = 0, navigationMaxUs = 0;
+    uint32_t largestFreeBlock = 0, lastLibraryError = 0;
+    bool pageFirstFrameComplete = false;
     uint32_t renderCount = 0;
     uint32_t renderMaxUs = 0;
     uint32_t inputEvents = 0;

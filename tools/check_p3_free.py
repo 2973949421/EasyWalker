@@ -71,7 +71,9 @@ class FreeChecks(unittest.TestCase):
         self.assertLess(volume.index('player_->setVolume'),volume.index('notifyVolumeAdjusted'))
         self.assertIn('player_->pause():player_->play()',source)
         restore=source.split('bool UiCoordinator::restorePlaylistForCurrentTrack()')[1]
-        self.assertLess(restore.index('PendingNavigation::RestorePlaylist'),restore.index('.openPath('))
+        self.assertIn('openBrowser(lastPlaylistPath_',restore)
+        opening=source.split('bool UiCoordinator::openBrowser(')[1].split('void UiCoordinator::navigationFailed')[0]
+        self.assertLess(opening.index('setPage(page)'),opening.index('openRequested_ = true'))
         runtime=read('src/player/app/PlayerRuntime.cpp')
         self.assertLess(runtime.index('setVolume(VolumePolicy::initialLevel)'),runtime.index('engine_.begin()'))
         self.assertIn('engine_.setVolume(VolumePolicy::toRaw',read('src/player/app/PlayerRuntime.h'))

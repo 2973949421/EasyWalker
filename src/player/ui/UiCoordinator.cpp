@@ -26,7 +26,7 @@ bool UiCoordinator::begin(M5GFX& display, PlayerRuntime& player,
     }
     if(!fonts_.begin()) return false;
     nowPlaying_.bindMedia(fonts_);
-    const char* fontCheck=nowPlaying_.bootFontSelfCheck();stats_.displaySelfChecks+=2;
+    const char* fontCheck=nowPlaying_.bootFontSelfCheck(display);stats_.displaySelfChecks+=3;
     if(!stats_.displaySelfFailure)stats_.displaySelfFailure=fontCheck;
 #if !defined(P3A_DEVICE_GATE)
     // Real media parser/layout/cancellation, while Player remains restored
@@ -39,8 +39,6 @@ bool UiCoordinator::begin(M5GFX& display, PlayerRuntime& player,
     std::strcpy(libraryRoot_, MusicLibrary::kMusicRoot);
     std::strcpy(libraryName_, "Uncategorized");
 
-    MusicLibrary& library = libraryRuntime.library();
-    library.openRoot();
     const PlayerSnapshot snapshot = player.snapshot();
     if (snapshot.hasCurrent) {
         page_ = UiPage::Player;
@@ -55,6 +53,7 @@ bool UiCoordinator::begin(M5GFX& display, PlayerRuntime& player,
         }
     } else {
         page_ = UiPage::Library;
+        openBrowser(MusicLibrary::kMusicRoot, UiPage::Library);
     }
     stats_.minimumHeap = ESP.getFreeHeap();
     dirty_ = true;
@@ -66,9 +65,31 @@ void UiCoordinator::service() {
         return;
     }
     stats_.minimumHeap = std::min(stats_.minimumHeap, ESP.getFreeHeap());
-    servicePendingIntent();
+    stats_.navigationState = navigation_.state;
+    stats_.navigationGeneration = navigation_.generation;
+    // Establish a clean page before any directory or font I/O. No old media
+    // stripe may be submitted after setPage() released its generation.
+    if (pageClearRequested_) {
+        display_->clearClipRect();
+        display_->fillScreen(0x0861);
+        pageClearRequested_ = false;
+        stats_.pageFirstFrameComplete = false;
+        if (page_ != UiPage::Player) {
+            display_->drawFastHLine(6, 25, 123, 0x8410);
+            display_->drawRoundRect(8, 45, 119, 136, 5, 0x8410);
+        }
+        return;
+    }
+    const bool opening = openRequested_;
+    const uint32_t navStarted = micros();
     servicePendingNavigation();
-    serviceSelectedMetadata();
+    stats_.navigationMaxUs = std::max<uint32_t>(stats_.navigationMaxUs, micros()-navStarted);
+    if (opening) return;
+    if (page_ != UiPage::Player && navigation_.state != NavigationState::Error &&
+        (fonts_.stats().missing || fonts_.stats().ioErrors || fonts_.stats().capacityErrors)) {
+        navigationFailed(fonts_.failure().reason);
+        return;
+    }
 
     MusicLibrary& library = libraryRuntime_->library();
     if (page_ == UiPage::Library && library.state() == LibraryState::Ready &&
@@ -87,7 +108,10 @@ void UiCoordinator::service() {
     // uninterruptible UI slice. Ready lyric stripes do not access storage.
     resourceTurn_=!resourceTurn_;
     if(resourceTurn_ && !nowPlaying_.presentingLyrics()){
-        if(page_==UiPage::Player)nowPlaying_.serviceMedia();else fonts_.service();
+        if(page_==UiPage::Player)nowPlaying_.serviceMedia();
+        else if(fonts_.busy()) fonts_.service();
+        else if(pendingIntent_ != PendingIntent::None) servicePendingIntent();
+        else prepareBrowser();
         return;
     }
     const char* error = externalError_;
@@ -104,6 +128,7 @@ void UiCoordinator::service() {
         lastLibraryGeneration_ = library.currentGeneration();
         lastPlayerState_ = snapshot.state;
         setPath(lastCurrentTrack_, sizeof(lastCurrentTrack_), current);
+        if (page_ != UiPage::Player) invalidateBrowser();
         dirty_ = true;
     }
 
@@ -140,48 +165,57 @@ bool UiCoordinator::handleAction(UiAction action) {
         return false;
     }
     ++stats_.inputEvents;
-    externalError_[0] = '\0';
-    MusicLibrary& library = libraryRuntime_->library();
+    if (page_ != UiPage::Player && action == UiAction::Confirm &&
+        navigation_.state == NavigationState::Error) {
+        return openBrowser(navigationTarget_, page_);
+    }
 
     switch (page_) {
         case UiPage::Library:
             if (action == UiAction::Left) {
                 catalog_.move(-1);
-                dirty_ = true;
+                invalidateBrowser();
                 return true;
             }
             if (action == UiAction::Right) {
                 catalog_.move(1);
-                dirty_ = true;
+                invalidateBrowser();
                 return true;
             }
             if (action == UiAction::Confirm) {
-                return beginSelectedLibrary();
+                if (navigation_.state != NavigationState::Ready || !catalog_.count()) return false;
+                pendingIntent_ = PendingIntent::SelectLibrary;
+                return true;
             }
             if (action == UiAction::OpenSettings) {
+                cancelNavigation();
                 setPage(UiPage::Settings);
                 return true;
             }
             return action == UiAction::Back;
 
         case UiPage::Playlist: {
-            const size_t count = playlistCount();
+            const size_t count = navigation_.state == NavigationState::Ready ? playlistCount() : 0;
             if (action == UiAction::Up && count != 0) {
                 playlistSelected_ = playlistSelected_ == 0
                                         ? count - 1
                                         : playlistSelected_ - 1;
                 metadataRequested_ = false;
-                dirty_ = true;
+                locateCurrent_ = false;
+                invalidateBrowser();
                 return true;
             }
             if (action == UiAction::Down && count != 0) {
                 playlistSelected_ = (playlistSelected_ + 1) % count;
                 metadataRequested_ = false;
-                dirty_ = true;
+                locateCurrent_ = false;
+                invalidateBrowser();
                 return true;
             }
             if (action == UiAction::Confirm) {
-                return activatePlaylistEntry();
+                if (navigation_.state != NavigationState::Ready || locateCurrent_) return false;
+                pendingIntent_ = PendingIntent::ActivatePlaylistEntry;
+                return true;
             }
             if (action == UiAction::Back) {
                 return returnFromPlaylist();
@@ -210,8 +244,7 @@ bool UiCoordinator::handleAction(UiAction action) {
 
         case UiPage::Settings:
             if (action == UiAction::Back) {
-                library.openRoot();
-                setPage(UiPage::Library);
+                showLibrary();
                 return true;
             }
             return false;
@@ -223,10 +256,7 @@ void UiCoordinator::showLibrary() {
     if (libraryRuntime_ == nullptr) {
         return;
     }
-    pendingNavigation_ = PendingNavigation::None;
-    pendingIntent_ = PendingIntent::None;
-    libraryRuntime_->library().openRoot();
-    setPage(UiPage::Library);
+    openBrowser(MusicLibrary::kMusicRoot, UiPage::Library);
 }
 
 void UiCoordinator::servicePendingIntent() {
@@ -258,6 +288,7 @@ void UiCoordinator::setExternalError(const char* error) {
     const char* value = error == nullptr ? "" : error;
     std::strncpy(externalError_, value, sizeof(externalError_) - 1);
     externalError_[sizeof(externalError_) - 1] = '\0';
+    if (page_ != UiPage::Player) invalidateBrowser();
     dirty_ = true;
 }
 
@@ -293,24 +324,88 @@ void UiCoordinator::setPage(UiPage page) {
         // A visible Player may have replaced the shared Metadata request.
         if (page == UiPage::Playlist) metadataRequested_ = false;
     }
+    pageClearRequested_ = true;
+    stats_.pageFirstFrameComplete = false;
+    invalidateBrowser();
+}
+
+void UiCoordinator::invalidateBrowser() {
+    browserContextReady_ = false; prepareRow_ = 0; drawRegion_ = 0;
     dirty_ = true;
+    browserProgress_ = 0; browserProgressAt_ = millis();
+}
+
+void UiCoordinator::cancelNavigation() {
+    navigation_.cancel(); openRequested_ = false;
+    pendingNavigation_ = PendingNavigation::None;
+    pendingIntent_ = PendingIntent::None;
+    libraryRuntime_->cancelSelection();
+    libraryRuntime_->library().cancelOpen();
+}
+
+bool UiCoordinator::openBrowser(const char* path, UiPage page, bool locateCurrent) {
+    if (!path || !*path) return false;
+    if (navigation_.state == NavigationState::Loading && page_ == page &&
+        std::strcmp(path, navigationTarget_) == 0) return true;
+    // path may alias navigationTarget_ during an explicit retry.
+    char target[kTrackPathCapacity];
+    if (!setPath(target, sizeof(target), path)) return false;
+    cancelNavigation();
+    setPath(navigationTarget_, sizeof(navigationTarget_), target);
+    externalError_[0] = navigationError_[0] = '\0';
+    navigation_.begin(millis());
+    locateCurrent_ = locateCurrent; locateIndex_ = 0;
+    metadataRequested_ = false; selectedMetadataPath_[0] = selectedMetadataTitle_[0] = '\0';
+    setPage(page); // Release the media working set before opening a directory.
+    openRequested_ = true;
+    return true;
+}
+
+void UiCoordinator::navigationFailed(const char* reason) {
+    if (navigation_.state != NavigationState::Error) navigation_.state = NavigationState::Error;
+    ++stats_.navigationErrors;
+    stats_.lastLibraryError = static_cast<uint32_t>(libraryRuntime_->library().error());
+    stats_.largestFreeBlock = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+    std::snprintf(navigationError_, sizeof(navigationError_), "%s", reason);
+    setExternalError(reason);
+    openRequested_ = false; pendingIntent_ = PendingIntent::None;
+    pendingNavigation_ = PendingNavigation::None;
+    libraryRuntime_->cancelSelection();
+    libraryRuntime_->library().cancelOpen();
+    invalidateBrowser();
 }
 
 void UiCoordinator::servicePendingNavigation() {
     MusicLibrary& library = libraryRuntime_->library();
-    if (pendingNavigation_ == PendingNavigation::EnterLibrary) {
-        if (library.state() == LibraryState::Ready &&
-            std::strcmp(library.currentPath(), libraryRoot_) == 0) {
-            pendingNavigation_ = PendingNavigation::None;
-            playlistSelected_ = 0;
-            setPath(lastPlaylistPath_, sizeof(lastPlaylistPath_),
-                    library.currentPath());
-            setPage(UiPage::Playlist);
-        } else if (library.state() == LibraryState::Error) {
-            pendingNavigation_ = PendingNavigation::None;
-            setExternalError(libraryErrorName(library.error()));
+    if (openRequested_) {
+        openRequested_ = false;
+        const auto result = library.openPath(navigationTarget_);
+        browserGeneration_ = library.currentGeneration();
+        browserRequest_ = navigation_.generation;
+        if (result == LibraryResult::Error) navigationFailed(libraryErrorName(library.error()));
+        return;
+    }
+    if (navigation_.state == NavigationState::Loading) {
+        const auto s = library.stats();
+        const uint32_t progress = s.scannedEntries + s.sortMoves + s.scanBytesWritten +
+            static_cast<uint32_t>(library.state()) + s.pageMisses;
+        const bool matching = library.currentGeneration() == browserGeneration_ &&
+            std::strcmp(library.currentPath(), navigationTarget_) == 0;
+        navigation_.observe(browserRequest_, millis(), progress,
+            library.state() == LibraryState::Error ? NavigationObservation::Error :
+            matching && library.state() == LibraryState::Ready ? NavigationObservation::Ready :
+            NavigationObservation::Pending);
+        if (navigation_.state == NavigationState::Error) {
+            navigationFailed(navigation_.stalled ? "Directory stalled" : libraryErrorName(library.error()));
+        } else if (navigation_.state == NavigationState::Ready) {
+            if (page_ == UiPage::Playlist) {
+                setPath(lastPlaylistPath_, sizeof(lastPlaylistPath_), navigationTarget_);
+                playlistSelected_ = std::min(playlistSelected_, playlistCount() ? playlistCount()-1 : 0);
+            }
+            invalidateBrowser();
         }
-    } else if (pendingNavigation_ == PendingNavigation::SelectTrack) {
+    }
+    if (pendingNavigation_ == PendingNavigation::SelectTrack) {
         if (!libraryRuntime_->selectionPending()) {
             char current[kTrackPathCapacity] = {};
             const PlayerSnapshot snapshot = player_->snapshot();
@@ -318,21 +413,15 @@ void UiCoordinator::servicePendingNavigation() {
                 std::strcmp(current, pendingTrackPath_) == 0 &&
                 snapshot.state == PlayerState::Playing) {
                 pendingNavigation_ = PendingNavigation::None;
+                ++stats_.trackSelections;
+                if (std::strcmp(lastCurrentTrack_, current) != 0) ++stats_.differentTrackSelections;
+                stats_.lastQueueCount = snapshot.queueCount;
                 setPage(UiPage::Player);
             } else {
                 pendingNavigation_ = PendingNavigation::None;
                 setExternalError("Track selection failed");
+                navigationFailed("Track selection failed");
             }
-        }
-    } else if (pendingNavigation_ == PendingNavigation::RestorePlaylist) {
-        if (library.state() == LibraryState::Ready &&
-            std::strcmp(library.currentPath(), lastPlaylistPath_) == 0) {
-            pendingNavigation_ = PendingNavigation::None;
-            playlistSelected_ = 0;
-            setPage(UiPage::Playlist);
-        } else if (library.state() == LibraryState::Error) {
-            pendingNavigation_ = PendingNavigation::None;
-            setExternalError(libraryErrorName(library.error()));
         }
     }
 }
@@ -345,26 +434,9 @@ void UiCoordinator::serviceSelectedMetadata() {
     if (library.state() != LibraryState::Ready || playlistCount() == 0) {
         return;
     }
-    const size_t physical = physicalEntryIndex(playlistSelected_);
-    LibraryEntry entry;
-    if (library.entryAt(physical, entry) != LibraryResult::Ok ||
-        entry.type != LibraryEntryType::Track) {
-        selectedMetadataPath_[0] = '\0';
-        selectedMetadataTitle_[0] = '\0';
-        metadataRequested_ = false;
-        return;
-    }
-    char path[kTrackPathCapacity] = {};
-    if (library.entryPathAt(physical, path, sizeof(path)) != LibraryResult::Ok) {
-        return;
-    }
-    if (std::strcmp(path, selectedMetadataPath_) != 0) {
-        setPath(selectedMetadataPath_, sizeof(selectedMetadataPath_), path);
-        selectedMetadataTitle_[0] = '\0';
-        metadataRequested_ = false;
-    }
+    if (!selectedMetadataPath_[0]) return;
     if (!metadataRequested_) {
-        libraryRuntime_->requestMetadata(physical);
+        libraryRuntime_->requestMetadataPath(selectedMetadataPath_);
         metadataRequested_ = true;
         return;
     }
@@ -377,20 +449,45 @@ void UiCoordinator::serviceSelectedMetadata() {
             std::strcmp(selectedMetadataTitle_, metadata.title.value) != 0) {
             std::strncpy(selectedMetadataTitle_, metadata.title.value,
                          sizeof(selectedMetadataTitle_) - 1);
-            dirty_ = true;
+            const size_t row = playlistSelected_ % kP3AVisibleRows;
+            setPath(renderContext_.rows[row].label, sizeof(renderContext_.rows[row].label), selectedMetadataTitle_);
+            drawRegion_ = 0; dirty_ = true;
         }
     }
 }
 
 void UiCoordinator::render() {
     UiRenderContext& context = renderContext_;
-    buildRenderContext(context);
-    // Warm visible CJK only, before drawing. Retry later while the one-step
-    // worker loads the glyph. ASCII-only historical screens remain immediate.
-    for(unsigned cp=32;cp<127;++cp)if(!fonts_.request(cp,FontCache::Latin12)){renderRetryRequested_=true;return;}
-    if(!fonts_.requestUiWindow(context.libraryName,12,0,page_==UiPage::Library?194:123,1)) {renderRetryRequested_=true;return;}
-    for(const char* text:{context.hint,context.error})if(text&&!fonts_.requestUiWindow(text,12,0,123,1)){renderRetryRequested_=true;return;}
-    if(page_==UiPage::Playlist)for(const auto& item:context.rows) if(item.valid && !fonts_.requestUiWindow(item.label,12,0,110,1)) {renderRetryRequested_=true;return;}
+    renderRetryRequested_ = true;
+    if (navigation_.state == NavigationState::Error &&
+        (fonts_.stats().missing || fonts_.stats().ioErrors || fonts_.stats().capacityErrors)) {
+        // A broken SD font must not make recovery instructions unreadable.
+        // Normal pages never use this emergency font.
+        display_->setFont(&fonts::Font0);display_->setTextSize(1.2f);
+        display_->fillScreen(0x0861);display_->setTextColor(TFT_ORANGE,0x0861);
+        UiTextLayout::draw(*display_,navigationError_,{8,40,119,90,5,3,true});
+        UiTextLayout::draw(*display_,"ENTER: RETRY\nESC: BACK",{8,155,119,70,3,3,true});
+        renderRetryRequested_=false;return;
+    }
+    if (!browserContextReady_) {
+        if (!fonts_.requestUiWindow("Loading...",12,0,123,1)) return;
+        CachedUiFont loading(&fonts_); display_->setFont(&loading);
+        display_->setTextSize(1);display_->setTextColor(TFT_WHITE,0x0861);
+        UiTextLayout::draw(*display_,"Loading...",{12,58,111,18,1,0,true});
+        display_->setFont(&fonts::Font0);return;
+    }
+    // Only the current region's glyphs are prepared; this never reads SD.
+    const char* fixed = page_ == UiPage::Playlist ? "PLAYLIST UP/DOWN + ENTER ESC: BACK RETRY No playable entries > /0123456789" :
+        page_ == UiPage::Library ? "LIBRARY COLLECTION LEFT / RIGHT ENTER TO OPEN S: SETTINGS ESC: STAY RETRY0123456789" :
+        "SETTINGS P3A FOUNDATION Full settings UI arrives in P3D ESC BACK TO LIBRARY";
+    if (!fonts_.requestUiWindow(fixed,12,0,2000,1)) return;
+    if(!fonts_.requestUiWindow(context.libraryName,12,0,page_==UiPage::Library?194:123,1)) return;
+    for(const char* text:{context.hint,context.error})if(text&&!fonts_.requestUiWindow(text,12,0,2000,1))return;
+    if(page_==UiPage::Settings && !fonts_.requestUiWindow(ADV_WALKMAN_VERSION,12,0,123,1))return;
+    if(page_==UiPage::Playlist && drawRegion_>=1 && drawRegion_<=kP3AVisibleRows) {
+        const auto& row=context.rows[drawRegion_-1];
+        if(row.valid && !fonts_.requestUiWindow(row.label,12,0,123,1))return;
+    }
     CachedUiFont font(&fonts_);display_->setFont(&font);
     const uint32_t started = micros();
     switch (page_) {
@@ -400,7 +497,7 @@ void UiCoordinator::render() {
                 std::strcmp(context.libraryName, "ADVWalkmanBenchmark") == 0;
             break;
         case UiPage::Playlist:
-            PlaylistPageRenderer::render(*display_, context);
+            PlaylistPageRenderer::renderRegion(*display_, context, drawRegion_++);
             break;
         case UiPage::Player:
             // Player is handled by the bounded NowPlayingPresenter path.
@@ -413,9 +510,34 @@ void UiCoordinator::render() {
     display_->setFont(&fonts::Font0);
     ++stats_.renderCount;
     stats_.renderMaxUs = std::max(stats_.renderMaxUs, elapsed);
+    renderRetryRequested_ = page_ == UiPage::Playlist && drawRegion_ < kP3AVisibleRows+2;
+    if (!renderRetryRequested_) {
+        stats_.pageFirstFrameComplete = true; ++stats_.completedPages;
+        if(page_==UiPage::Playlist && navigation_.state==NavigationState::Ready)++stats_.playlistFrames;
+        if(page_==UiPage::Library && navigation_.state==NavigationState::Ready)++stats_.libraryFrames;
+    }
+}
+
+void UiCoordinator::prepareBrowser() {
+    const uint32_t started = micros();
+    if (page_ == UiPage::Player) return;
+    if (navigation_.state == NavigationState::Loading) return;
+    if (!browserContextReady_) {
+        buildRenderContext(renderContext_);
+        browserContextReady_ = !renderRetryRequested_;
+        const uint32_t progress=static_cast<uint32_t>(prepareRow_+locateIndex_);
+        if(progress!=browserProgress_){browserProgress_=progress;browserProgressAt_=millis();}
+        if(!browserContextReady_ && millis()-browserProgressAt_>=5000 && navigation_.state==NavigationState::Ready)
+            navigationFailed("Page load stalled");
+        if(browserContextReady_) {dirty_=true;drawRegion_=0;}
+    } else if (page_ == UiPage::Playlist && navigation_.state==NavigationState::Ready) {
+        serviceSelectedMetadata();
+    }
+    stats_.prepareMaxUs = std::max<uint32_t>(stats_.prepareMaxUs, micros()-started);
 }
 
 void UiCoordinator::buildRenderContext(UiRenderContext& context) {
+    renderRetryRequested_ = false;
     context.page = page_;
     context.hint = hint_[0] == '\0' ? nullptr : hint_;
     context.error = externalError_[0] == '\0' ? nullptr : externalError_;
@@ -427,7 +549,7 @@ void UiCoordinator::buildRenderContext(UiRenderContext& context) {
     if (library.state() == LibraryState::Error && context.error == nullptr) {
         context.error = libraryErrorName(library.error());
     }
-    if (page_ == UiPage::Library && library.state() == LibraryState::Ready &&
+    if (page_ == UiPage::Library && navigation_.state == NavigationState::Ready && catalog_.count() && library.state() == LibraryState::Ready &&
         std::strcmp(library.currentPath(), MusicLibrary::kMusicRoot) == 0) {
         LibraryDescriptor descriptor;
         if (catalog_.selected(library, descriptor) == LibraryResult::Ok) {
@@ -447,39 +569,52 @@ void UiCoordinator::buildRenderContext(UiRenderContext& context) {
     context.directoryPath = library.currentPath();
     context.playlistSelected = playlistSelected_;
     context.playlistCount = playlistCount();
-    if (page_ == UiPage::Playlist) {
+    if (page_ == UiPage::Playlist && navigation_.state == NavigationState::Ready) {
         buildPlaylistRows(context);
+    } else {
+        for(auto& row:context.rows)row.valid=false;
     }
 }
 
 void UiCoordinator::buildPlaylistRows(UiRenderContext& context) {
-    for (auto& row : context.rows) {
-        row.valid = false;
-        row.playing = false;
-    }
     MusicLibrary& library = libraryRuntime_->library();
     if (library.state() != LibraryState::Ready) {
         return;
     }
     const size_t count = playlistCount();
+    if (locateCurrent_) {
+        if (locateIndex_ < count) {
+            LibraryEntry entry;
+            if (library.entryAt(physicalEntryIndex(locateIndex_),entry)!=LibraryResult::Ok) {renderRetryRequested_=true;return;}
+            const char* basename=std::strrchr(lastCurrentTrack_,'/');
+            if (entry.type==LibraryEntryType::Track && basename && std::strcmp(entry.name,basename+1)==0) {
+                playlistSelected_=locateIndex_;locateCurrent_=false;context.playlistSelected=playlistSelected_;
+            } else ++locateIndex_;
+            renderRetryRequested_=true;return;
+        }
+        locateCurrent_=false;
+    }
     const size_t windowStart = (playlistSelected_ / kP3AVisibleRows) *
                                kP3AVisibleRows;
-    for (size_t rowIndex = 0; rowIndex < kP3AVisibleRows; ++rowIndex) {
+    if (prepareRow_ == 0) for(auto& row:context.rows) row.valid=false;
+    if (prepareRow_ < kP3AVisibleRows) {
+        const size_t rowIndex = prepareRow_;
         const size_t logical = windowStart + rowIndex;
         if (logical >= count) {
-            break;
+            prepareRow_=kP3AVisibleRows;return;
         }
         const size_t physical = physicalEntryIndex(logical);
         LibraryEntry entry;
         const LibraryResult result = library.entryAt(physical, entry);
         if (result == LibraryResult::Pending) {
             renderRetryRequested_ = true;
-            continue;
+            return;
         }
         if (result != LibraryResult::Ok) {
-            continue;
+            navigationFailed(libraryErrorName(library.error()));return;
         }
         PlaylistRenderRow& row = context.rows[rowIndex];
+        row.playing = false;
         row.valid = true;
         row.selected = logical == playlistSelected_;
         row.type = entry.type;
@@ -487,14 +622,22 @@ void UiCoordinator::buildPlaylistRows(UiRenderContext& context) {
 
         char path[kTrackPathCapacity] = {};
         if (entry.type == LibraryEntryType::Track &&
-            library.entryPathAt(physical, path, sizeof(path)) == LibraryResult::Ok) {
+            std::snprintf(path,sizeof(path),"%s/%s",library.currentPath(),entry.name)<int(sizeof(path))) {
             row.playing = lastCurrentTrack_[0] != '\0' &&
                           std::strcmp(path, lastCurrentTrack_) == 0;
             if (row.selected && std::strcmp(path, selectedMetadataPath_) == 0 &&
                 selectedMetadataTitle_[0] != '\0') {
                 setPath(row.label, sizeof(row.label), selectedMetadataTitle_);
             }
+            if (row.selected && std::strcmp(path,selectedMetadataPath_)!=0) {
+                setPath(selectedMetadataPath_,sizeof(selectedMetadataPath_),path);
+                selectedMetadataTitle_[0]='\0';metadataRequested_=false;
+            }
+        } else if(row.selected) {
+            selectedMetadataPath_[0]=selectedMetadataTitle_[0]='\0';metadataRequested_=false;
         }
+        ++prepareRow_;
+        renderRetryRequested_=prepareRow_<kP3AVisibleRows;
     }
 }
 
@@ -508,7 +651,7 @@ bool UiCoordinator::beginSelectedLibrary() {
         return true;
     }
     if (selected != LibraryResult::Ok) {
-        setExternalError("Library unavailable");
+        navigationFailed("Library unavailable");
         return false;
     }
     setPath(libraryName_, sizeof(libraryName_), descriptor.name);
@@ -519,22 +662,7 @@ bool UiCoordinator::beginSelectedLibrary() {
     selectedMetadataTitle_[0] = '\0';
     metadataRequested_ = false;
 
-    const LibraryResult result = descriptor.uncategorized
-                                     ? library.openRoot()
-                                     : library.enter(descriptor.rootEntryIndex);
-    if (result == LibraryResult::Error) {
-        setExternalError(libraryErrorName(library.error()));
-        return false;
-    }
-    if (result == LibraryResult::Ok) {
-        setPath(lastPlaylistPath_, sizeof(lastPlaylistPath_),
-                library.currentPath());
-        setPage(UiPage::Playlist);
-    } else {
-        pendingNavigation_ = PendingNavigation::EnterLibrary;
-        dirty_ = true;
-    }
-    return true;
+    return openBrowser(descriptor.path, UiPage::Playlist);
 }
 
 bool UiCoordinator::activatePlaylistEntry() {
@@ -551,34 +679,31 @@ bool UiCoordinator::activatePlaylistEntry() {
         return true;
     }
     if (entryResult != LibraryResult::Ok) {
-        setExternalError("Entry unavailable");
+        navigationFailed("Entry unavailable");
         return false;
     }
     if (entry.type == LibraryEntryType::Directory) {
-        const LibraryResult result = library.enter(physical);
-        if (result == LibraryResult::Error) {
-            setExternalError(libraryErrorName(library.error()));
-            return false;
-        }
+        char target[kTrackPathCapacity];
+        if(std::snprintf(target,sizeof(target),"%s/%s",library.currentPath(),entry.name)>=int(sizeof(target)))return false;
         playlistSelected_ = 0;
-        selectedMetadataPath_[0] = '\0';
-        metadataRequested_ = false;
-        dirty_ = true;
-        return true;
+        return openBrowser(target,UiPage::Playlist);
     }
 
-    if (library.entryPathAt(physical, pendingTrackPath_,
-                            sizeof(pendingTrackPath_)) != LibraryResult::Ok) {
+    if (std::snprintf(pendingTrackPath_,sizeof(pendingTrackPath_),"%s/%s",library.currentPath(),entry.name)>=int(sizeof(pendingTrackPath_))) {
         setExternalError("Track path unavailable");
         return false;
     }
     setPath(lastPlaylistPath_, sizeof(lastPlaylistPath_), library.currentPath());
+    savedPlaylistSelected_ = playlistSelected_;
     const LibraryResult result = libraryRuntime_->selectTrack(physical, true);
     if (result == LibraryResult::Error) {
-        setExternalError("Track selection failed");
+        navigationFailed("Track selection failed");
         return false;
     }
     if (result == LibraryResult::Ok) {
+        ++stats_.trackSelections;
+        if(std::strcmp(lastCurrentTrack_,pendingTrackPath_)!=0)++stats_.differentTrackSelections;
+        stats_.lastQueueCount = player_->snapshot().queueCount;
         setPage(UiPage::Player);
     } else {
         pendingNavigation_ = PendingNavigation::SelectTrack;
@@ -587,31 +712,17 @@ bool UiCoordinator::activatePlaylistEntry() {
 }
 
 bool UiCoordinator::returnFromPlaylist() {
-    MusicLibrary& library = libraryRuntime_->library();
-    if (library.state() != LibraryState::Ready) {
-        return false;
+    if (std::strcmp(navigationTarget_, libraryRoot_) == 0 ||
+        std::strcmp(navigationTarget_, MusicLibrary::kMusicRoot) == 0) {
+        showLibrary();return true;
     }
-    if (std::strcmp(library.currentPath(), libraryRoot_) == 0) {
-        library.openRoot();
-        setPage(UiPage::Library);
-        return true;
-    }
-    const LibraryResult result = library.parent();
-    if (result == LibraryResult::Error) {
-        setExternalError(libraryErrorName(library.error()));
-        return false;
-    }
+    char parent[kTrackPathCapacity];
+    if(!parentDirectoryOfTrack(navigationTarget_,parent,sizeof(parent))) {showLibrary();return true;}
     playlistSelected_ = 0;
-    selectedMetadataPath_[0] = '\0';
-    metadataRequested_ = false;
-    dirty_ = true;
-    return true;
+    return openBrowser(parent,UiPage::Playlist);
 }
 
 bool UiCoordinator::restorePlaylistForCurrentTrack() {
-    // Repeated Esc while the directory is loading must not cancel/reopen the
-    // same SD scan. Let the existing asynchronous navigation finish.
-    if (pendingNavigation_ == PendingNavigation::RestorePlaylist) return true;
     char current[kTrackPathCapacity] = {};
     if (!player_->currentPath(current, sizeof(current))) {
         setExternalError("No current track");
@@ -629,19 +740,8 @@ bool UiCoordinator::restorePlaylistForCurrentTrack() {
         return false;
     }
     displayNameFromPath(libraryRoot_, libraryName_, sizeof(libraryName_));
-    const LibraryResult result =
-        libraryRuntime_->library().openPath(lastPlaylistPath_);
-    if (result == LibraryResult::Error) {
-        setExternalError(libraryErrorName(libraryRuntime_->library().error()));
-        return false;
-    }
-    if (result == LibraryResult::Ok) {
-        playlistSelected_ = 0;
-        setPage(UiPage::Playlist);
-    } else {
-        pendingNavigation_ = PendingNavigation::RestorePlaylist;
-    }
-    return true;
+    playlistSelected_ = savedPlaylistSelected_;
+    return openBrowser(lastPlaylistPath_,UiPage::Playlist,true);
 }
 
 size_t UiCoordinator::playlistCount() const {

@@ -28,7 +28,9 @@ bool FontCache::request(uint32_t cp,uint8_t font,bool pin){
         old->age=tick();if(pin)old->pinned=1;
         if(old->state==2 || old->state==3){++stats_.hits;return true;}
         if(busy() || presenting_)return false;pending_=int(old-work_->metrics);metricOnly_=false;
-        phase_=old->offset?4:(currentFont_==font&&index_&&fontFile_?3:1);lo_=0;hi_=count_;return false;
+        // A metric can outlive its evicted bitmap. Its offset belongs to its
+        // own VLW file, never whichever font was opened most recently.
+        phase_=currentFont_==font&&index_&&fontFile_?(old->offset?4:3):1;lo_=0;hi_=count_;return false;
     }
     if(busy() || presenting_)return false;int candidate=-1;
     for(unsigned i=0;i<kMetrics;++i){const auto& g=work_->metrics[i];if(!g.state){candidate=i;break;}

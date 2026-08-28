@@ -73,6 +73,15 @@ LibraryResult MusicLibrary::openPath(const char* path) {
     return openDirectory(path, false);
 }
 
+void MusicLibrary::cancelOpen() {
+    closeWorkFiles();
+    if (workSlot_ >= 0 && slots_[workSlot_].pinCount == 0) resetSlot(workSlot_);
+    workSlot_ = -1;
+    pageRequestPending_ = false;
+    state_ = currentSlot_ >= 0 ? LibraryState::Ready : LibraryState::Idle;
+    error_ = LibraryError::None;
+}
+
 LibraryResult MusicLibrary::enter(size_t entryIndex) {
     if (state_ != LibraryState::Ready) {
         error_ = LibraryError::NotReady;
@@ -687,6 +696,7 @@ void MusicLibrary::serviceScan() {
         return;
     }
 
+    ++stats_.scannedEntries;
     const char* basename = nullptr;
     LibraryEntryType type = LibraryEntryType::Track;
     const uint32_t acceptStartedAt = micros();

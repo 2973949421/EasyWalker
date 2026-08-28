@@ -64,11 +64,22 @@ void FreeSession::observe(const UiCoordinator& ui,const PlayerRuntime& player){
     if(pcmGapMaxUs_>70000)fail("audio","pcm_gap_over_70ms");
     if(playing_ && now-playingAt_>2000 && s.pcmLastSubmitAgeUs>2000000)fail("audio","pcm_stalled");
     const auto u=ui.stats();
+    if(u.completedPages!=lastPageCount_ || u.trackSelections!=lastSelections_ || u.navigationErrors!=lastNavigationErrors_){
+        requestSave_=true;lastPageCount_=u.completedPages;lastSelections_=u.trackSelections;lastNavigationErrors_=u.navigationErrors;
+    }
+    if(u.navigationErrors){
+        if(!failure_[0])std::snprintf(resourcePath_,sizeof(resourcePath_),"%s",ui.navigationTarget());
+        fail("navigation",ui.navigationError());
+    }
     if(u.displaySelfFailure)fail("display_selfcheck",u.displaySelfFailure);
     if(u.libraryTextIsBenchmark){textSeen_=true;libraryWidth_=u.libraryText.maxLineWidthPx;
         textOk_=u.libraryText.lineCount==2 && libraryWidth_<=u.libraryText.availableWidthPx &&
             !u.libraryText.truncated && !u.libraryText.invalidUtf8 && !u.libraryText.layoutError;
         if(!textOk_)fail("layout","library_text_layout");
+    }
+    if(font.stats().missing||font.stats().ioErrors||font.stats().capacityErrors||font.stats().drawMisses){
+        if(!failure_[0]){font.failurePath(resourcePath_,sizeof(resourcePath_));resourceErrno_=font.failure().systemError;resourceExpected_=font.failure().expected;resourceActual_=font.failure().actual;std::snprintf(resourceOperation_,sizeof(resourceOperation_),"%s",font.failure().operation);}
+        fail("font",font.stats().drawMisses?"glyph_draw_missing":font.stats().capacityErrors?"glyph_cache_capacity":font.failure().reason);
     }
     if(ui.page()!=UiPage::Player){loading_=false;return;}
     lyricFrames_=std::max(lyricFrames_,m.lyricsFrames);coverFrames_=std::max(coverFrames_,m.coverFrames);
@@ -79,10 +90,6 @@ void FreeSession::observe(const UiCoordinator& ui,const PlayerRuntime& player){
     if(m.presentIoViolations)fail("media","io_during_lyric_present");
     if(m.presentMaxUs>100000)fail("media","lyric_present_over_100ms");
     if(m.lyricLateMaxMs>200 || m.missedDeadlines)fail("media","lyric_deadline_over_200ms");
-    if(font.stats().missing||font.stats().ioErrors||font.stats().capacityErrors||font.stats().drawMisses){
-        if(!failure_[0]){font.failurePath(resourcePath_,sizeof(resourcePath_));resourceErrno_=font.failure().systemError;resourceExpected_=font.failure().expected;resourceActual_=font.failure().actual;std::snprintf(resourceOperation_,sizeof(resourceOperation_),"%s",font.failure().operation);}
-        fail("font",font.stats().drawMisses?"glyph_draw_missing":font.stats().capacityErrors?"glyph_cache_capacity":font.failure().reason);
-    }
     if(m.lyrics==MediaState::Error || m.cover==MediaState::Error){
         const bool lyric=m.lyrics==MediaState::Error;
         const auto& f=lyric?ui.nowPlaying().lyrics().failure():ui.nowPlaying().cover().failure();
@@ -103,7 +110,8 @@ void FreeSession::append(const char* fmt,...){
 void FreeSession::prepare(const UiCoordinator& ui,const PlayerRuntime& player){
     length_=written_=0;overflow_=false;++sequence_;
     const auto s=player.snapshot();const auto m=ui.nowPlaying().mediaStatus();const auto& r=ui.nowPlaying().stats();
-    const bool a=textSeen_&&textOk_&&nav_==127;
+    const auto u=ui.stats();const auto library=ui.browser().stats();
+    const bool a=textSeen_&&textOk_&&u.playlistFrames&&u.libraryFrames&&u.differentTrackSelections;
     const bool b=longestPlaying_>=60000 && volumeEvents_ && playEvents_ && r.titleDraws && r.timeDraws;
     const bool c=lyricsReady_&&coverReady_&&lyricFrames_&&coverFrames_&&deadlineUpdates_&&viewEvents_;
     append("BEGIN sequence=%lu\n",(unsigned long)sequence_);
@@ -112,6 +120,16 @@ void FreeSession::prepare(const UiCoordinator& ui,const PlayerRuntime& player){
     append("effective_view=%u\nheader_visible=%u\nno_lyrics_view_noop=%lu\npreference_track_transitions=%lu\nui_latin_font=Times_New_Roman\nui_cjk_font=KaiTi\nlatin_lyric_px=14\nfont_coverage_bits=4\n",unsigned(m.view),ui.nowPlaying().model().headerVisible,(unsigned long)noLyricsView_,(unsigned long)preferenceTransitions_);
     append("audio_service_max_us=%lu\nlibrary_service_max_us=%lu\ninput_work_max_us=%lu\nfont_service_max_us=%lu\nmedia_service_max_us=%lu\n",(unsigned long)audioMax_,(unsigned long)libraryMax_,(unsigned long)inputMax_,(unsigned long)ui.fonts().stats().serviceMaxUs,(unsigned long)m.serviceMaxUs);
     append("schema=1\nversion=%s\nmode=free\nresult=%s\nhuman_review=PENDING\na_auto=%s\nb_auto=%s\nc_auto=%s\n",ADV_WALKMAN_VERSION,failure_[0]?"FAIL":a&&b&&c?"READY_FOR_REVIEW":"INCOMPLETE",a?"COVERED":"INCOMPLETE",b?"COVERED":"INCOMPLETE",c?"COVERED":"INCOMPLETE");
+    append("nav_state=%u\nnav_generation=%lu\nnav_target=%s\nnav_error=%s\nnav_errors=%lu\npage_frame_complete=%u\nplaylist_frames=%lu\nlibrary_frames=%lu\ntrack_selections=%lu\ndifferent_track_selections=%lu\nqueue_count=%u\nselected_queue_count=%lu\ncurrent_index=%u\ntime_font_px=14\n",
+        unsigned(u.navigationState),(unsigned long)u.navigationGeneration,ui.navigationTarget(),ui.navigationError()[0]?ui.navigationError():"none",(unsigned long)u.navigationErrors,u.pageFirstFrameComplete,
+        (unsigned long)u.playlistFrames,(unsigned long)u.libraryFrames,(unsigned long)u.trackSelections,(unsigned long)u.differentTrackSelections,unsigned(s.queueCount),(unsigned long)u.lastQueueCount,unsigned(s.currentIndex));
+    append("browser_path=%s\nbrowser_state=%u\nbrowser_error=%u\nlast_browser_error=%lu\nscanned_entries=%lu\nscratch_allocation_failures=%lu\nlargest_block_at_nav_error=%lu\nbrowser_prepare_max_us=%lu\nbrowser_draw_max_us=%lu\nscan_max_us=%lu\nentry_read_max_us=%lu\n",
+        ui.browser().currentPath(),unsigned(ui.browser().state()),unsigned(ui.browser().error()),(unsigned long)u.lastLibraryError,(unsigned long)library.scannedEntries,(unsigned long)library.scratchAllocationFailures,
+        (unsigned long)u.largestFreeBlock,(unsigned long)u.prepareMaxUs,(unsigned long)u.renderMaxUs,(unsigned long)library.scanMaxUs,(unsigned long)library.entryReadMaxUs);
+    // Independent evidence survives a prior self-check/navigation failure.
+    append("audio_limits_ok=%u\nmedia_limits_ok=%u\n",!audioErrors_&&!backpressure_&&pcmGapMaxUs_<=70000,presentMaxUs_<=100000&&lateMaxMs_<=200);
+    append("navigation_work_max_us=%lu\n",(unsigned long)u.navigationMaxUs);
+    append("media_track=%s\nmedia_generation=%lu\nmedia_active=%u\nfont_io_errors=%lu\nfont_draw_misses=%lu\n",ui.nowPlaying().model().path,(unsigned long)m.generation,ui.nowPlaying().model().active,(unsigned long)ui.fonts().stats().ioErrors,(unsigned long)ui.fonts().stats().drawMisses);
     append("coverage_scope=free_main_path\nnot_exercised=playing_seek;manual_reboot_requires_host_comparison\ndisplay_selfchecks=%u\ndisplay_self_failure=%s\n",ui.stats().displaySelfChecks,ui.stats().displaySelfFailure?ui.stats().displaySelfFailure:"none");
     append("resource_expected=%ld\nresource_actual=%ld\nrepeat_raw=%u\nshuffle_raw=%u\n",(long)resourceExpected_,(long)resourceActual_,unsigned(s.repeatMode),s.shuffleEnabled);
     append("speaker_volume_raw=%u\nspeaker_volume_cap=%u\nheap_free=%lu\n",player.rawSpeakerVolume(),VolumePolicy::maximumRaw,(unsigned long)ESP.getFreeHeap());
