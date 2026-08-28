@@ -741,8 +741,7 @@ drawable rect + active font + text size + UTF-8 text + max lines + overflow poli
 - 使用当前字体的实际像素度量计算每行可用宽度，并扣除页面 margin / padding；
 - 只在合法 UTF-8 字符边界断行或截断，不拆开中文、日文等多字节字符；
 - 不能假设文本含空格；无空格长名称也要在能容纳的字符边界断行；
-- P3A Library 曲库名最多两行，最后一行仍超限时显示省略号；旧 Player 两行占位在
-  P3B 替换为单行 Title 滚动；
+- P3A历史Library骨架最多两行；当前0.8.4正式Library固定单行滚动，布局见下方LibraryVisual章节。Player使用单行Title滚动；
 - Playlist 顶部曲库名及各歌曲 / 目录行使用单行省略，播放 / 目录标记先测量并预留宽度；
 - 状态、Footer 每条显式提示、版本和固定数值区默认单行，超限时省略；Now Playing 的长 Title
   在 P3B 使用规定的 Marquee；
@@ -757,7 +756,7 @@ drawable rect + active font + text size + UTF-8 text + max lines + overflow poli
 UTF-8 字符边界。末行省略使用 ASCII `...`；无效 UTF-8 字节仅在显示副本中替换为
 `?` 并报告 `invalidUtf8`，源文本不变。
 
-Library名称框为`(19,76,97,38)`、12px实际SD字模、最多两行。PC实际Times字模检查和
+历史Library名称框`(19,76,97,38)`、12px最多两行，现仅保留为布局回归Fixture，不是正式轮盘的标题区域。PC实际Times字模检查和
 无声启动字体检查要求`ADVWalkmanBenchmark`完整两行、每行≤97px；旧Font0宽度不再适用，
 最终仍须真机确认可读性和裁剪。
 Renderer 返回 `UiTextLayoutResult`（行数、最大行宽、可用宽度、截断 / UTF-8 / 布局
@@ -1016,7 +1015,15 @@ V1 只有四个实际页面：播放器、播放列表、曲库、设置；不�
 
 播放列表采用低复杂度标准列表：Up / Down 选择、Enter 播放并进入播放器、Esc 返回曲库；至少显示序号、Title、选择高亮和可选的正在播放标识。底层可以复用 P1 Queue，但 UI 不改变 Queue / Session 语义。
 
-Library绘制交给`LibraryVisual`：顶部174px独立封面，y174起一行22px/两行44px居中名称，其余高度显示重叠轮盘。唱片半径26px，圆心沿半径60px的共同圆弧、相邻40度布置（横向约38.6px）；按远近从后向前绘制，中央最高。160ms/最多4帧，重定向最新选择，不排队。弧形短名按实际advance、46px弧长及完整旋转字形边界计算。复用135×18行缓冲；退出Library分步关句柄但保留同库CRC成功状态，真正换库才失效。新选择取消未提交条带，不能画入下一页。
+Library绘制交给`LibraryVisual`：固定顶部174px独立封面、y174高22px单行名称、y196至240轮盘。名称按实际advance与斜体墨迹边界居中/裁剪，超长复用Player的5秒/24px每秒/5秒循环和50ms刷新间隔，离页暂停，进入/唤醒重置。只重画名称区。唱片半径26px，圆心沿半径60px共同圆弧、相邻40度布置，按远近绘制、中央最高。约160ms/最多4帧，重定向最新选择，不排队；静止完成状态不得因重入又从动画第0帧开始。
+
+`wheelIndex`将非空目录映射为三个独立绘制位置；count=1三同名，count=2两侧同为另一项，>=3首尾循环。`LibraryCatalog::at`不改变选择；三份44byte有界UTF-8短名绑定本次catalog刷新，重复邻项只查一次、不复制路径。三个弧形短名分别按实际advance、46px弧长及完整旋转字形边界计算，随唱片真实遮挡。四字体离线4倍栅格MaxFilter(3)加粗后缩小，重算墨迹边界，VLW/IDX/IDX2同源，不增设备叠画。复用135×18行缓冲；同库CRC有效结果保留，新选择取消未提交条带。
+
+0.8.4共享条带：`RenderStep`区分Idle/Waiting/Submitted/Failed，实际Presenter调用`dispatchContent`，必须在content调用后再次检查占用，阻止新开始的Pending条带落入chrome路径。Canvas始终135×18，局部有效高度由clip和push目标clip共同限定；借用接口不再setBuffer。`ImageBand`验证canvas/clip/y/height与owner，提交后才释放。`FrameCommit`固定代次/id/起止行，只有同代次连续已提交行可推进；全帧、浮层局部修复、资源占位分开统计。Cover Header在新帧前准备并提交；完整View成功后才保存偏好。取消与一次受控重建不触碰transport，再失败停止错误内容重试但保留导航/错误底栏。实际显示API返回不等于物理LCD读回证明，真机观感仍需人工确认。
+
+暖路径保留六行正式Title和metadataReady标志，缓存最终省略文本的字节边界/标记宽度，仅绘制旧新高亮。字体请求按face分组；已知位图地址及配对验证可复用时，仅重开VLW，不再次打开/查询索引。标题度量不因同曲返回重做。当前图片条带先推进读取，准备完直接提交，避免资源与无效绘制调用机械轮转；保持6ms软预算和音频优先，不豁免SD/日志负载。
+
+0.8.4渲染日志：render_contract、render_pixel_selfcheck、frame预期/提交行数、full/patch/fallback、取消/拒绝/受控重建、请求/准备/首条带/完成及等待/CPU绘制/提交峰值；分Lyrics/Cover/Playlist/Library/Settings睡醒计数，仅新完整画面记唤醒完成。字段沿原16KiB缓冲落盘；相同当前曲目路径使用media_track_ref=track避免重复大字段。无声启动使用实际M5GFX行缓冲与ImageBand做逐像素图案/末条带/坏canvas检查，编译通过不能代替设备执行。
 
 0.8.3显示生命周期：`ScreenPowerController`仅处理物理活动、时限和整组唤醒吞键；`DisplayLifecycle`为Cancel→Drain→Apply，Drain中新的睡醒请求只更新最终目标，不跳过清理。Coordinator的Cancel释放显示固定状态和未提交条带，Drain每次至多关闭一个字体/歌词/图片句柄，Apply恢复亮度并重画。Player在非活动状态先更新真实路径，再激活媒体，避免睡眠跨自然换歌后恢复旧资源。输入代次在页面、睡眠及唤醒变化时更新。暂停状态不因显示生命周期改变。
 

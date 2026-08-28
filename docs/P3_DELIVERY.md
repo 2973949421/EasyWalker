@@ -4,7 +4,15 @@
 > `TECH_DESIGN.md`、任务状态以 `TASKS.md` 为准。P3 不重新选择 Audio Backend，
 > 不改变 P1 Queue / Session 或 P2 Library Engine 语义。
 
-## 当前验收方式 — 0.8.3（覆盖下方历史 Gate 操作顺序）
+## 当前验收方式 — 0.8.4（覆盖下方历史 Gate 操作顺序）
+
+详见`P3_RENDER_FIX.md`。先修共享条带占用/实际连续提交/取消，再优化暖返回和字模准备；曲库固定单行滚动名称、三唱片各自短名、四套字体加粗。封面文件已完整，不再生成或复制歌曲封面。本轮只交付同名联合BIN和四套字体三格式，音乐/歌词/标签/Queue/Session不改。
+
+自由操作往返列表/曲库，长时间离页后Tab返回；有歌词歌曲Cover/Lyrics单次View、准备中重复View及音量浮层，检查完整图面与继续操作。暗黒天国保持Cover-only。检查三唱片重叠、短名及长名不挤轮盘；Lyrics/Cover/Playlist各两次15秒睡醒，约20分钟耳机听歌后返回，再T保存/手动重启。设置/Launcher与历史唤醒停音问题分别保留待验证。
+
+0.8.3输入74ms、选择880ms、暖返回2655ms、暖View1643ms、歌词完整呈现135.300ms继续作为失败证据。0.8.4编译期/PC检查和设备像素自检编译不能代替真机运行。A/B/C/D保持DEVICE TEST；不自动进入P4。
+
+## 历史验收方式 — 0.8.3
 
 详见`P3_REFINEMENT.md`：显示生命周期分步排空、短按唤醒与代次隔离；六行官方标题、暖窗口保留；华文行楷/Kunstler大名称及弧形重叠黑胶轮盘。四首MP3只改Title，路径/歌词/封面/Queue/Session不变。扬声器破音DEFERRED，耳机验收。
 
@@ -179,10 +187,7 @@ Gate 使用真实 Library / Playlist / Player，不依赖串口命令。屏幕�
 P3A。功能 Gate 即使为 `PASS`，若仍存在可见文字越界，P3A 仍保持 `DEVICE TEST`。
 
 `0.5.1-p3a.gate` 已完成上述功能步骤并产生 `PASS` 日志；后续不再要求用户单独安装
-一个只修换行的 P3A 固件。Gate A-fix+B+C 必须先执行 P3A 回归项：显示真实
-`ADVWalkmanBenchmark` 曲库名、确认两行布局 / 末行省略和画布裁剪正常，再继续验收
-P3B Header / Footer 以及 P3C 字体、歌词、Cover 和 View Selector。任一 P3A 回归项
-失败时，P3A 继续保持 `DEVICE TEST`，但日志必须将其与 B/C 失败分开归因。
+一个只修换行的 P3A 固件。历史Gate曾要求显示真实`ADVWalkmanBenchmark`并先验两行布局；该顺序已由本文顶部自由验收替代，SD不再要求旧测试目录。两行长名作为独立自动布局Fixture保留，正式Library使用固定单行滚动。任一P3A回归失败时继续`DEVICE TEST`，与B/C失败分开归因。
 
 ## 7. Stop Conditions
 

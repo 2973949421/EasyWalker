@@ -1,5 +1,17 @@
 # Changelog
 
+## V0.8.4 — Owned image stripes, verified frame commits and three-record wheel
+
+Date: 2026-08-29
+
+- 修复content调用中新占用条带后仍落入Title/Footer的确定缺陷；唯一135×18 canvas保持尺寸，实际提交裁剪有效高度，等待时独占。
+- 帧代次/起始行/连续提交合同，完整帧与局部浮层/占位分开；取消归还条带，错误一次受控重建。完整View后才保存偏好，唤醒必须由新完整画面证明。
+- 暖返回保留正式Title和六行metadata标志；最终省略文本缓存、按字体分组请求、已知位图地址避免重复打开查询索引；优先实际待办，不机械交替空绘制。
+- 曲库固定174px图/22px单行名/44px轮盘，长名复用Player滚动；非空固定三唱片，每张自己的蓝色弧形短名，1/2/多库映射正确；静止不重新播放动画。
+- 四套曲库华文行楷/Kunstler字体离线轻加粗，44张实际字模预览；不改其他字体、歌曲封面、音乐、歌词和存档。
+- 89项本地检查、生产C++旧缺陷负例、M5GFX实际行缓冲像素自检（仅编入，待真机执行）；分阶段/提交/睡醒日志仍使用16KiB。详细构建与交付见`docs/P3_RENDER_FIX.md`。
+- A/B/C/D仍DEVICE TEST，严格性能未取得0.8.4真机数据；历史停音/失去输入UNVERIFIED，扬声器破音DEFERRED。不push、不烧录、不改分区/eFuse。
+
 ## V0.8.3 — Cooperative wake recovery, official titles and vinyl wheel
 
 Date: 2026-08-29
