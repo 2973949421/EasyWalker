@@ -1,5 +1,17 @@
 # Changelog
 
+## V0.8.2 — Reliable View requests and bounded media/storage work
+
+Date: 2026-08-28
+
+- 捕获式16项输入队列保留短按；View按最后完整视图请求目标，重复待完成请求合并，无加载提示，完成后保存偏好。
+- Cover期间预备歌词，FIDX v2直接索引和配对验证，兼容旧索引；18px图像条带填充/提交互斥，暖曲库不重校CRC。
+- 列表逐区准备、选中行优先、去掉冷字模查询20ms节流；音频/存档分离，同长度非当前槽原位写，写/Flush/关/回读各自分步。
+- 新增输入/View冷热/存档阶段/音频源读取诊断；严格保留70ms/100ms/200ms要求。
+- 全宽完整五人曲库图、居中名称和紧凑唱片；10首中文译文逐句复核，298组原文时间记录不改；Crucifix X无重编码迁入AveMujica，旧benchmark退役但PCFixture保留。
+- 本地检查与六环境交付记录见`docs/P3_PERFORMANCE_FIX.md`。P3A/B/C/D保持DEVICE TEST，不以编译声称真机性能已通过；不push、不烧录、不改分区。
+- 71项PC检查及编译期回归通过，六环境BIN均≤0x140000；媒体加输入48436 / 49152 bytes。SD核对交付23项，联合BIN778528bytes；旧benchmark5文件退役可从PC恢复，19个存档/日志文件Hash未变。
+
 ## V0.8.1 — P3 navigation, media prefetch and stable redraw
 
 Date: 2026-08-28

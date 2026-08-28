@@ -143,6 +143,8 @@ def make_font(name: str, size: int, codepoints, sources, target: Path):
     stem = target / name
     stem.with_suffix('.vlw').write_bytes(vlw)
     stem.with_suffix('.idx').write_bytes(struct.pack('<4sHHII', b'FIDX', 1, 24, len(glyphs), len(vlw)) + index)
+    from font_index_v2 import generate
+    generate(stem.with_suffix('.idx'))
     return {'name': name, 'glyphs': len(glyphs), 'bytes': len(vlw), 'missing': missing, 'fallbacks': fallbacks}
 
 

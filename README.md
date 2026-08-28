@@ -1,10 +1,12 @@
 # ADV Walkman
 
 > 工作名：ADV Walkman  
-> 当前阶段：P3 修复 `0.8.1-p3d.fix`，Tab导航、媒体预取和稳定刷新；A/B/C/D仍待真机收口
+> 当前阶段：P3 修复 `0.8.2-p3d.perf`，可靠View请求、字体直索引、条带/存档分步；A/B/C/D仍待真机收口
 > 平台：M5Stack Cardputer ADV
 
 ## 1. 项目是什么
+
+本轮实施与交付记录见 [P3_PERFORMANCE_FIX.md](docs/P3_PERFORMANCE_FIX.md)。View按最后完整画面确定目标，等待中重复按不反向取消；Tab仍只导航，Enter仍重播。曲库合图全宽、名称居中；Crucifix X正式迁入AveMujica，旧benchmark仅保留PC测试Fixture。现有298组歌词的10首中文译文已复核，原文/时间戳不变。构建或PC检查不代表70ms音频指标已获真机通过。
 
 ADV Walkman 是一个基于 M5Stack Cardputer ADV 的个人化复古随身音乐播放器固件。
 
@@ -71,9 +73,16 @@ V1 不以以下内容为目标：
 
 ## 5. 当前最重要的技术任务
 
-### 当前交付入口 — 0.8.1 Tab导航与媒体修复
+### 当前交付入口 — 0.8.2 性能与可靠切换修复
 
-本轮实现与交付证据见 [`P3_OPTIMIZATION_FIX.md`](docs/P3_OPTIMIZATION_FIX.md)。
+71项PC检查、C++编译期回归和六环境构建通过；同名联合BIN（778528 bytes）及22项变化资源已同步SD并核对。
+媒体加输入队列48436 / 49152 bytes；严格时序仍待真机验证，不能把构建成功当性能通过。
+AveMujica现有11首，Crucifix X已正式入库；旧benchmark的5个受管文件已退役，PC可恢复副本保留，存档及日志未变。
+交付明细与自由验收见 [P3_PERFORMANCE_FIX.md](docs/P3_PERFORMANCE_FIX.md)。
+
+### 历史入口 — 0.8.1 Tab导航与媒体修复
+
+当时的实现与交付证据见 [`P3_OPTIMIZATION_FIX.md`](docs/P3_OPTIMIZATION_FIX.md)。
 67项本地检查与六环境构建通过；SD已更新同名联合BIN及11张全宽歌曲ASCII封面。
 性能和手感尚待新版真机日志，A/B/C/D不提前标记DONE。
 Player单键Tab打开当前歌曲目录并定位；Playlist/Library单键Tab回Player，保持歌曲、

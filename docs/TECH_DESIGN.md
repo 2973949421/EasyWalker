@@ -800,7 +800,13 @@ Tab只改变页面：Player→当前歌曲目录、Playlist/Library→Player；E
 列表六行窗口区分数据失效与高亮变化；最终排版文本（包括省略号/标记）准备后再绘制。
 资源prepare/current及UI使用独立pin；LyricsTimeline仅current+next文本，Renderer双布局，
 当前帧完成立即预取，显示阶段无SD读取。512byte索引页缓存、200项metrics、15KiB位图，
-含LibraryVisual与文件开销预算总计47896bytes，不突破48KiB。盖住浮层后恢复已显示帧。
+媒体与LibraryVisual、文件系统预留仍受48KiB断言限制；0.8.2另将新输入事件队列加入联合断言。具体ELF尺寸记录在`P3_PERFORMANCE_FIX.md`，不沿用旧47896bytes估计。P3B原有4860byte行缓冲、其余UI模型和日志静态内存另列，不冒充免费空间。盖住浮层后恢复已显示帧。
+
+0.8.2采用`ViewTransition`区分displayed/requested/generation；在endFrame发布实际视图和Header状态后才更新偏好。同目标合并，不改变开始时间。Cover可见时也准备当前/下一歌词，独立Current/Next/Ui固定标记保证双帧不互相淘汰。
+
+`.idx2`为FIDX v2：512byte头、16byte码点直索引记录（BMP65536槽，Latin256槽），不存在记录全零；单次冷查询只需一个512byte索引页。头保留VLW长度和前24字节CRC用于字体配对检查；PC逐记录比较旧索引，运行时检查头、边界和配对。缺.idx2才退旧.idx，坏文件不静默fallback；按字体缓存已验证头，位图仍为4bit，15KiB/200metrics不扩。
+
+主循环音频优先，公开键盘接口每片最多8次更新/2ms，16项固定事件队列保留短按、组按键抑制和页面代次。后台6ms软预算不是可抢占SD承诺。PlayerRuntime分serviceAudio/servicePersistence；存档每步最多一个文件API操作或路径取得，r+原位重写非当前同长度槽，长度变更才重建；Flush、关闭、回读、发布分开。A/B配对恢复与Queue先发布、Session后关联不变。日志写、Flush、关也分开。不可分割SDK调用超时据实记录，不修改70ms标准。
 
 Cover Title / Artist能完整显示时居中、保持静态。超长 Title：
 
@@ -1010,7 +1016,7 @@ V1 只有四个实际页面：播放器、播放列表、曲库、设置；不�
 
 播放列表采用低复杂度标准列表：Up / Down 选择、Enter 播放并进入播放器、Esc 返回曲库；至少显示序号、Title、选择高亮和可选的正在播放标识。底层可以复用 P1 Queue，但 UI 不改变 Queue / Session 语义。
 
-P3D（0.8.0）将Library绘制交给`LibraryVisual`：120×120独立封面、两行名称和最多三张唱片；160ms/最多4帧选择动画，不常驻旋转。弧形短名按实际advance计算角度与容量，完整标题仍使用`UiTextLayout`。只复用`NowPlayingPresenter::sharedRow()`的135×18缓冲，每次借用重设其高度；按目标条带裁剪后`pushSprite`，不分配全屏图像。退出Library或息屏释放封面文件，新的选择取消旧请求。
+Library绘制交给`LibraryVisual`：顶部174px独立封面，y177起两行居中名称，y210起紧凑唱片，160ms/最多4帧选择动画。弧形短名按实际advance及可见弧长计算。复用135×18行缓冲；退出Library关句柄但保留同库CRC成功状态，真正换库才失效。新选择取消未提交条带，不能画入下一页。
 
 独立`LibraryCoverReader`按下列入口取普通彩色图，绝不从歌曲封面推断：
 
@@ -1019,7 +1025,7 @@ P3D（0.8.0）将Library绘制交给`LibraryVisual`：120×120独立封面、两
 /ADVWalkman/library-covers/root.cover.adv   # 未分类
 ```
 
-LCOV v1头24bytes，小端：magic[4]、version/headerLength/width/height/format/reserved各u16、payloadLength/CRC32各u32；固定120×120、RGB565、payload28800bytes。先分块校验CRC，准备阶段每次最多512bytes，绘制只消费RAM中的2行480bytes；只保留当前图片句柄。缺失/损坏显示占位并记录原因。合计媒体预算用`kP3DMediaBudgetBytes`编译断言≤48KiB（包含原工作集、文件系统预留与新增LibraryVisual）。
+LCOV v1头24bytes，小端：magic[4]、version/headerLength/width/height/format/reserved各u16、payloadLength/CRC32各u32；按实际宽高读取RGB565，宽≤135/高≤174，兼容旧120×120及新135×173。歌曲ACOV头不变。`ImageBand`每次≤512bytes，填满18px条带再一次提交；共享缓冲占有期间不得绘制Header/Footer，条带边界公平轮转。顺序读取不重复Seek，呈现不访问SD；同资源重绘不重算CRC。缺失/损坏占位并记录具体原因。
 
 设置仅包含屏幕亮度、息屏时间、关于、返回Launcher。SettingsPanel内部子面板不是第五个页面。独立`DisplaySettingsStore`保存显示偏好，不改Player Session：
 
