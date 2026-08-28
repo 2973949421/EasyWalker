@@ -63,15 +63,14 @@ def render(original,chinese,fonts,page=0,intro=False):
     draw.text((33,218),'0:00/4:59' if intro else '2:24/4:59',fill='white')
     draw.rectangle((6,220,8,229),fill='#ffcc00');draw.rectangle((11,220,13,229),fill='#ffcc00')
     draw.line((6,237,128,237),fill='#888888')
-    if intro:return image,1
-    glyphs,pages=layout(original,chinese,fonts,page)
+    glyphs,pages=layout(original,chinese,fonts,0 if intro else page)
     for char,x,y in glyphs:
         mask,dx,dy,_=fonts.glyph(char)
         if ord(char)<256 or char in '《》「」『』“”‘’（）—':mask=mask.transpose(Image.Transpose.ROTATE_270);dx=dy=0
         elif char in '，、。':dx,dy=18-mask.width,0
         assert 6<=x+dx and x+dx+mask.width<=129,(char,x,dx,mask.width)
         assert 6<=y+dy and y+dy+mask.height<=208,(char,y,dy,mask.height)
-        image.paste((255,255,255),(x+dx,y+dy),mask)
+        image.paste((132,130,132) if intro else (255,255,255),(x+dx,y+dy),mask)
     return image,pages
 
 if __name__=='__main__':

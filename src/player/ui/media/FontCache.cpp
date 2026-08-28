@@ -1,4 +1,5 @@
 #include "FontCache.h"
+#include "FrameCachePolicy.h"
 #include <algorithm>
 #include <new>
 #include <cstring>
@@ -20,12 +21,14 @@ const CachedGlyph* FontCache::find(uint32_t cp,uint8_t font)const{
     if(!work_ || cp>0xFFFF)return nullptr;for(const auto& g:work_->metrics)if(g.state && g.codepoint==cp && g.font==font)return &g;return nullptr;
 }
 const uint8_t* FontCache::bitmap(const CachedGlyph& g)const{return work_&&g.state==2&&g.arena<kBitmapBytes?work_->bitmaps+g.arena:nullptr;}
-void FontCache::clearPins(){presenting_=false;if(work_)for(auto& g:work_->metrics)g.pinned=0;}
-bool FontCache::request(uint32_t cp,uint8_t font,bool pin){
+void FontCache::clearPins(uint8_t mask){if(mask==All)presenting_=false;if(work_)for(auto& g:work_->metrics)g.pinned&=~mask;}
+void FontCache::promotePins(){if(work_)for(auto& g:work_->metrics)g.pinned=promoteFramePins(g.pinned);}
+void FontCache::suspend(){index_.close();fontFile_.close();currentFont_=255;indexPageAt_=UINT32_MAX;if(busy())phase_=1;}
+bool FontCache::request(uint32_t cp,uint8_t font,uint8_t pin){
     if(!work_ || font>=FaceCount)return false;
     if(cp>0xFFFF){failureFont_=font;failureIndex_=true;failure_.set("font_non_bmp","lookup");++stats_.missing;return true;}
     if(auto* old=const_cast<CachedGlyph*>(find(cp,font))){
-        old->age=tick();if(pin)old->pinned=1;
+        old->age=tick();old->pinned|=pin;
         if(old->state==2 || old->state==3){++stats_.hits;return true;}
         if(busy() || presenting_)return false;pending_=int(old-work_->metrics);metricOnly_=false;
         // A metric can outlive its evicted bitmap. Its offset belongs to its
@@ -51,7 +54,7 @@ bool FontCache::requestUiWindow(const char* text,uint8_t font,int startPx,int wi
     while(*text){const auto cp=mediaCodepoint(text,invalid);if(cp=='\n'){x=0;continue;}
         const auto face=faceFor(cp,font);if(!requestMetric(cp,face))return false;
         const auto* g=find(cp,face);const int advance=cp<256?latinAdvance(cp,face):(g?g->advance:font);
-        if(x+advance>=startPx&&x<=startPx+widthPx&&!request(cp,face))return false;
+        if(x+advance>=startPx&&x<=startPx+widthPx&&!request(cp,face,Ui))return false;
         x+=advance;if(x>startPx+widthPx)break;}return true;
 }
 int FontCache::textWidth(const char* text,uint8_t pixels)const{
@@ -83,20 +86,32 @@ void FontCache::fail(bool io,const char* reason,const char* operation,int expect
 }
 void FontCache::service(){
     if(!work_||!busy()||pending_<0||presenting_)return;const uint32_t start=micros();auto& g=work_->metrics[pending_];uint8_t b[32]{};char path[64];errno=0;
-    if(phase_==1){index_.close();fontFile_.close();currentFont_=g.font;std::snprintf(path,sizeof(path),"/ADVWalkman/fonts/%s.idx",names[g.font]);
+    if(phase_==1){index_.close();fontFile_.close();indexPageAt_=UINT32_MAX;++stats_.opens;currentFont_=g.font;std::snprintf(path,sizeof(path),"/ADVWalkman/fonts/%s.idx",names[g.font]);
         const auto opened=openResource(index_,path,128,failure_);if(opened!=MediaState::Loading)fail(true,"font_index_open","open");else phase_=2;
     }else if(phase_==2){++stats_.reads;const int n=index_.read(b,16);stats_.bytes+=n>0?n:0;
         if(n!=16)fail(true,"font_index_read","read",16,n);
         else if(std::memcmp(b,"FIDX",4)||mediaU16(b+4)!=1||mediaU16(b+6)!=24)fail(true,"font_index_header","validate");
         else{count_=mediaU32(b+8);vlwSize_=mediaU32(b+12);lo_=0;hi_=count_;if(count_>65536||index_.size()!=16+count_*24)fail(true,"font_index_length","validate");else phase_=5;}
-    }else if(phase_==5){std::snprintf(path,sizeof(path),"/ADVWalkman/fonts/%s.vlw",names[g.font]);const auto opened=openResource(fontFile_,path,256,failure_);
+    }else if(phase_==5){++stats_.opens;std::snprintf(path,sizeof(path),"/ADVWalkman/fonts/%s.vlw",names[g.font]);const auto opened=openResource(fontFile_,path,256,failure_);
         if(opened!=MediaState::Loading)fail(true,"font_bitmap_open","open");else if(fontFile_.size()!=vlwSize_)fail(true,"font_bitmap_length","validate");else phase_=3;
     }else if(phase_==3){
         // At most four small index reads / 750us soft CPU slice.
         for(unsigned attempt=0;attempt<4 && phase_==3;++attempt){
             if(lo_>=hi_){fail(false,"font_glyph_missing","lookup");break;}
-            const uint32_t middle=lo_+(hi_-lo_)/2;++stats_.reads;if(!index_.seek(16+middle*24)){fail(true,"font_index_seek","seek");break;}
-            const int n=index_.read(b,24);stats_.bytes+=n>0?n:0;if(n!=24){fail(true,"font_record_read","read",24,n);break;}
+            const uint32_t middle=lo_+(hi_-lo_)/2;
+            // 21 whole records (504 bytes). A miss is one bounded I/O step;
+            // the next service call searches RAM before requesting more I/O.
+            const uint32_t page=16+(middle/21)*504,offset=(middle%21)*24;
+            if(indexPageAt_!=page){
+                if(index_.position()!=page&&!index_.seek(page)){fail(true,"font_index_seek","seek");break;}
+                const unsigned wanted=std::min<uint32_t>(504,index_.size()-page);
+                ++stats_.reads;const int n=index_.read(indexPage_,wanted);stats_.bytes+=n>0?n:0;
+                if(n!=int(wanted)){fail(true,"font_record_read","read",wanted,n);break;}
+                indexPageAt_=page;indexPageSize_=n;break;
+            }
+            ++stats_.indexPageHits;
+            if(offset+24>indexPageSize_){fail(true,"font_record_bounds","validate");break;}
+            std::memcpy(b,indexPage_+offset,24);
             if(mediaU32(b)<g.codepoint)lo_=middle+1;else if(mediaU32(b)>g.codepoint)hi_=middle;
             else{const unsigned w=mediaU16(b+8),h=mediaU16(b+10);const int dx=int16_t(mediaU16(b+14)),dy=int16_t(mediaU16(b+16));g.offset=mediaU32(b+4);
                 if(w>18||h>18||dx<-128||dx>127||dy<-128||dy>127||g.offset>vlwSize_||w*h>vlwSize_-g.offset){fail(true,"font_metric_bounds","validate");break;}
@@ -116,7 +131,7 @@ void FontCache::service(){
     }stats_.serviceMaxUs=std::max<uint32_t>(stats_.serviceMaxUs,micros()-start);
 }
 void FontCache::draw(lgfx::LGFXBase& target,uint32_t cp,uint8_t font,int x,int y,uint16_t fg,uint16_t bg,bool clockwise)const{
-    const auto* g=find(cp,font);const auto* pixels=g?bitmap(*g):nullptr;if(!pixels){++stats_.drawMisses;target.drawRect(x+2,y+2,8,10,TFT_ORANGE);return;}
+    const auto* g=find(cp,font);const auto* pixels=g?bitmap(*g):nullptr;if(!pixels){if(!stats_.drawMisses){stats_.firstDrawCodepoint=cp;stats_.firstDrawFont=font;}++stats_.drawMisses;target.drawRect(x+2,y+2,8,10,TFT_ORANGE);return;}
     int cl,ct,cw,ch;target.getClipRect(&cl,&ct,&cw,&ch);
     // Intersect once, then visit only pixels in this stripe. Coverage is packed
     // on load; SD remains VLW 8-bit so old resources stay readable.

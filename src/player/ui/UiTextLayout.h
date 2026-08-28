@@ -41,6 +41,9 @@ class UiTextLayout final {
     static UiTextLayoutResult measure(lgfx::LovyanGFX& display, const char* text,
                                       const UiTextBox& box,
                                       size_t byteLength = SIZE_MAX);
+    using LineVisitor = void (*)(const char*,void*);
+    static UiTextLayoutResult visitLines(lgfx::LovyanGFX& display,const char* text,
+        const UiTextBox& box,LineVisitor visitor,void* context);
     // Whole single-line text, processed in UTF-8-safe fixed chunks. Unlike
     // draw(), this never ellipsizes at the 128-byte scratch boundary.
     static int32_t singleLineWidth(lgfx::LovyanGFX& display, const char* text);

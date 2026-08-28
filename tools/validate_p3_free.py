@@ -4,7 +4,7 @@ import re
 import zlib
 from pathlib import Path
 
-VERSION='0.8.0-p3d.ui'
+VERSION='0.8.1-p3d.fix'
 
 def evaluate_p3d(record):
     failures=[k for k in ('settings_errors','launcher_errors','library_cover_errors') if int(record.get(k,0))]
@@ -48,6 +48,9 @@ def evaluate(record):
     if record.get('result')=='FAIL':problems.append('device_reported_failure')
     if record.get('failure_reason')!='none':problems.append(record.get('failure_reason','missing_failure_field'))
     if int(record.get('nav_errors',0)):problems.append('navigation_failure')
+    if int(record.get('tab_state_errors',0)):problems.append('tab_changed_transport')
+    for key in ('cover_failure','lyrics_failure','font_failure','navigation_failure'):
+        if record.get(key,'none')!='none':problems.append(key)
     if record.get('display_self_failure','none')!='none':problems.append('display_selfcheck')
     level=int(record.get('volume',-1));raw=int(record.get('speaker_volume_raw',-1))
     if not 0<=level<=255 or int(record.get('speaker_volume_cap',-1))!=102 or raw!=(level*102+127)//255:
@@ -57,7 +60,7 @@ def evaluate(record):
     if problems:return 'FAIL',sorted(set(problems))
     missing=[key for key in ('a_auto','b_auto','c_auto') if record.get(key)!='COVERED']
     if missing:return 'INCOMPLETE',missing
-    for key in ('playlist_frames','library_frames','different_track_selections'):
+    for key in ('playlist_frames','library_frames','different_track_selections','tab_playing','tab_paused'):
         if int(record.get(key,0))<=0:return 'INCOMPLETE',[key]
     if int(record.get('time_font_px',0))!=14:return 'FAIL',['time_font_px']
     # Recheck measured evidence, rather than trusting a result label.

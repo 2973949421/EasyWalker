@@ -157,7 +157,7 @@ void PlaylistPageRenderer::renderRegion(M5GFX& display,
         display.setTextColor(TFT_ORANGE,kBackground);
         UiTextLayout::draw(display,context.error,textBox(10,75,display.width()-20,72,4));
     }
-    footer(display, context.error ? "Enter 重试\nEsc 返回" : context.hint == nullptr ? "上下选择 Enter播放\nEsc 返回" : context.hint);
+    footer(display, context.error ? "Enter 重试\nEsc 返回" : context.hint == nullptr ? "上下选择 Enter播放\nEsc 返回 Tab当前" : context.hint);
 }
 
 void SettingsPageRenderer::render(M5GFX& display,

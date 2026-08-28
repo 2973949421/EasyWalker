@@ -146,14 +146,16 @@ def make_font(name: str, size: int, codepoints, sources, target: Path):
     return {'name': name, 'glyphs': len(glyphs), 'bytes': len(vlw), 'missing': missing, 'fallbacks': fallbacks}
 
 
-def cover_ascii(source: Path, columns: int, rows: int):
+def cover_ascii(source: Path, columns: int, rows: int, canvas_size=(120,144)):
     # Each source tile is approximated by a rasterized character mask. Colour
     # comes from the source, while coverage/shape comes ONLY from the glyph.
     original = Image.open(source).convert('RGB')
-    canvas = Image.new('RGB', (120, 144), '#080c08')
-    fitted = ImageOps.contain(original, (120, 144), Image.Resampling.LANCZOS)
+    width,height=canvas_size
+    if not (0<width<=135 and 0<height<=188):raise ValueError('cover_dimensions')
+    canvas = Image.new('RGB', canvas_size, '#080c08')
+    fitted = ImageOps.contain(original, canvas_size, Image.Resampling.LANCZOS)
     fitted = ImageEnhance.Contrast(fitted).enhance(1.08).filter(ImageFilter.UnsharpMask(radius=.7,percent=110,threshold=3))
-    ox, oy = (120-fitted.width)//2, (144-fitted.height)//2
+    ox, oy = (width-fitted.width)//2, (height-fitted.height)//2
     original_canvas = canvas.copy()
     original_canvas.paste(fitted, (ox, oy))
     font = ImageFont.truetype('C:/Windows/Fonts/times.ttf', 12)
@@ -173,8 +175,8 @@ def cover_ascii(source: Path, columns: int, rows: int):
     for row in range(rows):
         line = ''
         for col in range(columns):
-            x0, x1 = col*120//columns, (col+1)*120//columns
-            y0, y1 = row*144//rows, (row+1)*144//rows
+            x0, x1 = col*width//columns, (col+1)*width//columns
+            y0, y1 = row*height//rows, (row+1)*height//rows
             if x1 <= ox or x0 >= ox+fitted.width or y1 <= oy or y0 >= oy+fitted.height:
                 line += ' '
                 continue
@@ -201,7 +203,7 @@ def cover_ascii(source: Path, columns: int, rows: int):
             canvas.paste(rgb, (x0, y0, x1, y1), mask)
         chars.append(line)
     payload = b''.join(struct.pack('<H', ((r>>3)<<11)|((g>>2)<<5)|(b>>3)) for r,g,b in canvas.get_flattened_data())
-    header = struct.pack('<4sHHHHHHHHII', b'ACOV', 1, 28, 120, 144, columns, rows, 1, 0,
+    header = struct.pack('<4sHHHHHHHHII', b'ACOV', 1, 28, width, height, columns, rows, 1, 0,
                          len(payload), zlib.crc32(payload))
     return canvas, header+payload, '\n'.join(chars)
 
@@ -210,7 +212,7 @@ def validate_cover(data: bytes):
     if len(data) < 28:
         raise ValueError('cover_header')
     magic, version, header, w, h, cols, rows, pixel_format, reserved, length, crc = struct.unpack('<4sHHHHHHHHII', data[:28])
-    if (magic, version, header, w, h, pixel_format, reserved) != (b'ACOV', 1, 28, 120, 144, 1, 0) or (cols, rows) not in GRIDS:
+    if (magic, version, header, pixel_format, reserved) != (b'ACOV', 1, 28, 1, 0) or not (0<w<=135 and 0<h<=188) or (cols, rows) not in GRIDS:
         raise ValueError('cover_format')
     if length != w*h*2 or len(data) != 28+length or zlib.crc32(data[28:]) != crc:
         raise ValueError('cover_payload')

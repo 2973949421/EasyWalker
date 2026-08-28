@@ -51,6 +51,8 @@ class PlayerRuntime final {
     // job can still read it. Dirty/blocked state alone does not retain the
     // source and must not permanently block selecting a replacement Queue.
     bool queueSourceReleaseSafe() const;
+    uint32_t transportServiceMaxUs()const{return transportServiceMaxUs_;}
+    uint32_t persistenceServiceMaxUs()const{return persistenceServiceMaxUs_;}
     void setPersistenceSuspended(bool suspended);
 
   private:
@@ -88,6 +90,7 @@ class PlayerRuntime final {
 
     PlayerSnapshot previousSnapshot_{};
     bool havePreviousSnapshot_ = false;
+    uint32_t transportServiceMaxUs_=0,persistenceServiceMaxUs_=0;
 };
 
 }  // namespace player

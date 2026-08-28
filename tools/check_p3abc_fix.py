@@ -69,15 +69,17 @@ class FixChecks(unittest.TestCase):
         worker = media.split('void NowPlayingMedia::service()')[1].split('bool NowPlayingMedia::wantsFrame')[0]
         self.assertIn('presentingLyrics())return', worker)
         stripe = media.split('bool NowPlayingMedia::prepareStripe')[1].split('void NowPlayingMedia::drawStripe')[0]
-        self.assertIn('MediaView::Lyrics)return glyphsReady_', stripe)
+        self.assertIn('MediaView::Lyrics)return true;', stripe)
+        self.assertIn('displayedRenderer_=renderer_;fonts_->promotePins()',media)
+        self.assertIn('frameFromPrepared_=glyphsReady_',media)
         self.assertNotIn('fonts_->request', stripe)
         self.assertIn('layoutReady_&&positionMs_>=preparedUntil_', media)
         self.assertIn('fonts_->setPresenting(true)', media)
-        self.assertIn('positionMs_+2000', media)
+        self.assertNotIn('positionMs_+2000', media)
         self.assertIn('++missedDeadlines_', media)
         renderer = source('src/player/ui/media/LyricsRenderer.cpp')
         self.assertNotIn('"前奏"', renderer)
-        self.assertIn('fonts.request(cp,face,true)', renderer)
+        self.assertIn('fonts.request(cp,face,pin)', renderer)
 
     def test_cards_do_not_overlay_real_media(self):
         ui = source('src/player/ui/UiCoordinator.cpp')

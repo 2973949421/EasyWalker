@@ -10,20 +10,23 @@ struct NowPlayingMediaStatus {
     uint32_t lyricsFrames=0,coverFrames=0;
     uint32_t generation=0,prepareMaxUs=0,presentMaxUs=0,lyricLateMaxMs=0,presentIoViolations=0;
     uint32_t frameId=0,deadlineUpdates=0,missedDeadlines=0;
+    uint32_t lyricDueMs=0,lyricPreparedMs=0,lyricSubmittedMs=0,coverOpens=0;
     uint8_t page=0,pages=1;bool layoutError=false,invalidUtf8=false;
+    uint8_t peakWork=0;
     const char* error="none";
 };
 class NowPlayingMedia final {
   public:
     void begin(FontCache& fonts){fonts_=&fonts;}
     void selectTrack(const char* path);void release();void service();
+    void suspend();
     const char* bootSelfCheck(); // muted resource/model check, never Player seek
     void updatePosition(uint32_t positionMs,uint32_t durationMs,bool paused);
     void resetDiagnostics();
     void setPreferred(uint8_t value);bool toggleView();void requestRedraw();
     bool wantsFrame(uint32_t nowMs)const;bool beginFrame(uint32_t nowMs);
     bool prepareStripe(int y,int height);void drawStripe(lgfx::LGFXBase& canvas,int y,int height);void endFrame();
-    int stripeHeight()const{return frameView_==MediaView::Cover?2:18;}
+    int stripeHeight()const{return frameView_==MediaView::Cover?cover_.stripeHeight():18;}
     NowPlayingMediaStatus status()const;
     const LyricsTimeline& timeline()const{return timeline_;}
     const CoverRenderer& cover()const{return cover_;}
@@ -33,9 +36,15 @@ class NowPlayingMedia final {
     bool presentingLyrics()const{return frameInProgress_&&frameView_==MediaView::Lyrics;}
   private:
     FontCache* fonts_=nullptr;LyricsTimeline timeline_;CoverRenderer cover_;LyricsRenderer renderer_;
+    LyricsRenderer displayedRenderer_;
+    char track_[512]{};
+    bool frameFromPrepared_=false;
+    bool preparationTurn_=false;
+    uint32_t preparedReadyAt_=0,lastDue_=0,lastPrepared_=0,lastSubmitted_=0;
     MediaView preferred_=MediaView::Lyrics,frameView_=MediaView::Cover;
     uint32_t positionMs_=0,durationMs_=0,shownCoverRevision_=UINT32_MAX,generation_=0,shownGeneration_=UINT32_MAX;
     unsigned workerTurn_=0;
+    uint8_t peakWork_=0;
     uint32_t frames_=0,viewChanges_=0,cancellations_=0,serviceMaxUs_=0;
     uint32_t lyricsFrames_=0,coverFrames_=0;
     uint32_t prepareAt_=0,presentAt_=0,prepareMaxUs_=0,presentMaxUs_=0,lyricLateMaxMs_=0,ioAt_=0,presentIoViolations_=0;

@@ -10,8 +10,11 @@ struct MediaLayout {
 };
 // A ready cover must never monopolize the cooperative resource worker.
 enum class MediaWork : uint8_t { None, Font, Lyrics, Cover };
-constexpr MediaWork chooseMediaWork(unsigned turn,bool font,bool lyrics,bool cover) {
-    return turn%3==0 ? (font?MediaWork::Font:lyrics?MediaWork::Lyrics:cover?MediaWork::Cover:MediaWork::None)
+constexpr MediaWork chooseMediaWork(unsigned turn,bool font,bool lyrics,bool cover,bool dueLyrics=false) {
+    // Due lyrics get three slots; the fourth still advances cover validation.
+    return dueLyrics && turn%4!=3 ? (font?MediaWork::Font:lyrics?MediaWork::Lyrics:cover?MediaWork::Cover:MediaWork::None)
+         : dueLyrics && cover ? MediaWork::Cover
+         : turn%3==0 ? (font?MediaWork::Font:lyrics?MediaWork::Lyrics:cover?MediaWork::Cover:MediaWork::None)
          : turn%3==1 ? (lyrics?MediaWork::Lyrics:cover?MediaWork::Cover:font?MediaWork::Font:MediaWork::None)
          : (cover?MediaWork::Cover:font?MediaWork::Font:lyrics?MediaWork::Lyrics:MediaWork::None);
 }

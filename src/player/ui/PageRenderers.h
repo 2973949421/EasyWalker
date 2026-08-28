@@ -22,6 +22,8 @@ struct PlaylistRenderRow {
     // Keep the full bounded source; pixel layout, not a byte cap, decides
     // where to truncate it. Only six visible rows are resident.
     char label[kTrackPathCapacity] = {};
+    // Retain filename independently of asynchronous display metadata.
+    char basename[kTrackPathCapacity] = {};
 };
 
 struct UiRenderContext {

@@ -41,6 +41,7 @@ const char* uiActionName(UiAction action) {
         case UiAction::VolumeUp:return "VOLUME_UP";
         case UiAction::VolumeDown:return "VOLUME_DOWN";
         case UiAction::SaveDiagnostics:return "SAVE_LOG";
+        case UiAction::ToggleCurrentPlaybackPage:return "TAB_CURRENT";
     }
     return "UNKNOWN";
 }

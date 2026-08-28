@@ -33,7 +33,8 @@ void LyricsRenderer::place(const char* text,unsigned first,unsigned capacity,int
             if(stats_.glyphs>=kMaxGlyphs){stats_.layoutError=true;return;}
             const int x=right-int(col-first)*kPitch-kCell;
             if(x<6 || x+kCell>129 || y+advance>kHeight){stats_.layoutError=true;return;}
-            glyphs_[stats_.glyphs++]={cp,color,uint8_t(x),uint8_t(kTop+y)};
+            if(cp>0xFFFF){stats_.layoutError=true;return;}
+            glyphs_[stats_.glyphs++]={uint16_t(cp),uint8_t(x),uint8_t(kTop+y)};
         }y+=advance;
     }
     stats_.invalidUtf8|=invalid;
@@ -41,12 +42,9 @@ void LyricsRenderer::place(const char* text,unsigned first,unsigned capacity,int
 bool LyricsRenderer::prepare(const LyricsTimeline& timeline,FontCache& fonts,uint32_t positionMs,int target){
     if(target==-999)target=timeline.current();
     stats_=LyricsLayoutStats{};stats_.intro=target<0;
-    if(!timeline.windowReady())return false;
-    // No current cue before the first timestamp: clean Content Stage, not a
-    // preview of the next lyric. Preparation of future cues remains invisible.
-    if(stats_.intro)return true;
+    if(!timeline.cueReady(std::max(0,target)))return false;
     bool ready=true;
-    const int relative=target-timeline.current();
+    const int relative=std::max(0,target)-timeline.current();
     const int current=relative;
     const char* original=timeline.text(current,0);const char* chinese=timeline.text(current,1);
     if(!*original && !*chinese)return true;
@@ -64,22 +62,22 @@ bool LyricsRenderer::prepare(const LyricsTimeline& timeline,FontCache& fonts,uin
     const unsigned pages=std::max(leftPages,rightPages);
     const uint32_t duration=std::max<uint32_t>(1,timeline.cueEnd(target)-timeline.cueStart(target));
     const uint32_t elapsed=positionMs>timeline.cueStart(target)?positionMs-timeline.cueStart(target):0;
-    const unsigned page=std::min<unsigned>(pages-1,uint64_t(elapsed)*pages/duration);
+    const unsigned page=stats_.intro?0:std::min<unsigned>(pages-1,uint64_t(elapsed)*pages/duration);
     stats_.pages=std::min<unsigned>(255,pages);stats_.page=page;
     stats_.columns=leftSlots+rightSlots;
     const int width=(leftSlots+rightSlots)*kPitch+(leftSlots&&rightSlots?6:0)-(kPitch-kCell);
     const int rightEdge=67+std::max(0,width)/2;
-    const uint16_t color=0xFFFF;
+    const uint16_t color=stats_.intro?0x8410:0xFFFF;color_=color;
     place(chinese,rightPages>1?std::min(page,rightPages-1)*rightSlots:0,rightSlots,rightEdge,color,fonts);
     place(original,leftPages>1?std::min(page,leftPages-1)*leftSlots:0,leftSlots,
           rightEdge-int(rightSlots)*kPitch-(rightSlots?6:0),color,fonts);
     return ready;
 }
-bool LyricsRenderer::prepareFrame(FontCache& fonts){
+bool LyricsRenderer::prepareFrame(FontCache& fonts,uint8_t pin){
     // One font group at a time. Pins accumulate while preparing and are held
     // until the whole frame has reached the display.
     for(uint8_t face:{MediaLayout::cjkFace,MediaLayout::latinFace})for(unsigned i=0;i<stats_.glyphs;++i){
-        const auto cp=glyphs_[i].cp;if((cp<0x100?MediaLayout::latinFace:MediaLayout::cjkFace)==face && !fonts.request(cp,face,true))return false;
+        const auto cp=glyphs_[i].cp;if((cp<0x100?MediaLayout::latinFace:MediaLayout::cjkFace)==face && !fonts.request(cp,face,pin))return false;
     }
     return !fonts.busy() && !fonts.stats().missing && !fonts.stats().ioErrors && !fonts.stats().capacityErrors;
 }
@@ -97,7 +95,7 @@ void LyricsRenderer::drawStripe(lgfx::LGFXBase& canvas,const FontCache& fonts,in
         if(smallVerticalPunctuation(g.cp))if(const auto* m=fonts.find(g.cp,face)){
             x+=kCell-m->width-m->dx;py-=m->dy;
         }
-        fonts.draw(canvas,g.cp,face,x,py,g.color,kBg,g.cp<0x100||rotateVerticalPunctuation(g.cp));
+        fonts.draw(canvas,g.cp,face,x,py,color_,kBg,g.cp<0x100||rotateVerticalPunctuation(g.cp));
     }
     canvas.clearClipRect();
 }

@@ -1,15 +1,22 @@
 #pragma once
+#include <algorithm>
 #include <SD.h>
 #include <M5GFX.h>
 #include "MediaTypes.h"
 #include "ResourceIo.h"
 #include "MediaLayout.h"
+#include "CoverPolicy.h"
 namespace adv_walkman { namespace player {
 class CoverRenderer final {
   public:
     void selectTrack(const char* track);
     void release();
-    void finishFrame(){file_.close();requestedRow_=-1;}
+    void finishFrame(){if(mayCloseCoverAfterFrame(phase_))file_.close();requestedRow_=-1;}
+    void suspend(){file_.close();requestedRow_=-1;if(phase_)phase_=1;}
+    int top()const{return (188-height_)/2;}
+    int height()const{return height_;}
+    int stripeHeight()const{return top()%2?1:std::min<unsigned>(2,coverRowsPerRead(width_));}
+    uint32_t opens()const{return opens_;}
     void service();
     bool busy()const{return phase_!=0 || (state_==MediaState::Ready && requestedRow_>=0 && readyRow_!=requestedRow_);}
     void requestRow(int y);
@@ -31,5 +38,7 @@ class CoverRenderer final {
     uint8_t phase_=0;
     uint32_t revision_=0,expectedCrc_=0,crc_=~0U,remaining_=0,bytesRead_=0;
     int requestedRow_=-1,readyRow_=-1;
+    uint16_t width_=120,height_=144;
+    uint32_t opens_=0;
 };
 } }

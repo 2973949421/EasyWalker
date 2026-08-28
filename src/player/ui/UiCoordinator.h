@@ -82,6 +82,8 @@ class UiCoordinator final {
     void navigationFailed(const char* reason);
     void prepareBrowser();
     void invalidateBrowser();
+    void movePlaylistSelection(size_t next);
+    void selectVisibleMetadata();
     void buildRenderContext(UiRenderContext& context);
     void buildPlaylistRows(UiRenderContext& context);
 
@@ -143,6 +145,12 @@ class UiCoordinator final {
     size_t savedPlaylistSelected_ = 0, locateIndex_ = 0;
     bool locateCurrent_ = false, openRequested_ = false;
     bool pageClearRequested_ = true, browserContextReady_ = false;
+    bool retainedPlaylist_ = false, loadingDrawn_ = false;
+    uint8_t dirtyRegions_ = 255;
+    uint32_t pageRequestedAt_ = 0;
+    uint32_t selectionRequestedAt_ = 0;
+    uint8_t feedbackRegions_ = 0;
+    bool warmReturnPending_ = false;
     uint8_t prepareRow_ = 0, drawRegion_ = 0;
     NowPlayingPresenter nowPlaying_;
     FontCache fonts_;

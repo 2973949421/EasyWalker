@@ -26,7 +26,14 @@ class FreeSession final {
     fs::File file_;
     // P3D fields plus five maximum-length paths need >8 KiB; bounded host
     // capacity test covers the complete checkpoint including twelve events.
-    char buffer_[9216]{},track_[512]{},failure_[64]{},component_[24]{};
+    char buffer_[14336]{},track_[512]{},failure_[64]{},component_[24]{};
+    struct MediaError { ResourceFailure failure;char path[560]{};uint32_t generation=0,at=0,count=0; } mediaErrors_[4];
+    char firstNavigationReason_[64]{};
+    uint32_t lastErrorGeneration_[2]={UINT32_MAX,UINT32_MAX};
+    uint32_t pcmPeakAt_=0,pcmPeakGeneration_=0;
+    UiPage pcmPeakPage_=UiPage::Library;
+    char pcmPeakTrack_[512]{},lyricPeakTrack_[512]{};
+    uint32_t lyricPeakGeneration_=0,lyricPeakDue_=0,lyricPeakPrepared_=0,lyricPeakSubmitted_=0;
     char restoredTrack_[512]{};
     uint32_t bootId_=1,audioMax_=0,libraryMax_=0,inputMax_=0,restoredPosition_=0;
     uint32_t noLyricsView_=0,preferenceTransitions_=0,startupObservedMs_=0;

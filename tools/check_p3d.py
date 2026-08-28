@@ -37,7 +37,7 @@ class P3DChecks(unittest.TestCase):
         self.assertLess(len(set(fixed)),170)
         data=(PACKAGE/'ADVWalkman/fonts/latin-12.idx').read_bytes()
         metrics={r[0]:r for r in (struct.unpack_from('<IIHHhhhHI',data,i) for i in range(16,len(data),24))}
-        for text in ('0.8.0-p3d.ui','Cardputer ADV','ADVWalkman','Benchmark'):
+        for text in ('0.8.1-p3d.fix','Cardputer ADV','ADVWalkman','Benchmark'):
             self.assertLessEqual(sum(metrics[ord(c)][4] for c in text),123)
     def test_settings_binary_reference(self):
         # Exact production DSPL v1 wire format, independently parsed.
@@ -76,13 +76,17 @@ class P3DChecks(unittest.TestCase):
         code=source('src/player/p3abc/FreeSession.cpp')
         body=code.split('void FreeSession::prepare(')[1].split('void FreeSession::service(')[0]
         strings=re.findall(r'append\("((?:\\.|[^"\\])*)"',body)
-        paths={'restored_track':511,'nav_target':511,'browser_path':511,'media_track':511,'track':511,'resource_path':559}
+        paths={'restored_track':511,'nav_target':511,'browser_path':511,'media_track':511,'track':511,'resource_path':559,'pcm_peak_track':511,'lyric_peak_track':511}
         bounds={'version':32,'mode':4,'result':16,'a_auto':10,'b_auto':10,'c_auto':10,'d_auto':10,
             'launcher_error':64,'nav_error':64,'display_self_failure':64,'failure_component':23,'failure_reason':63,
             'resource_operation':23,'player_state':16,'page':16}
         total=0
         for encoded in strings:
             fmt=encoded.replace('\\n','\n')
+            if fmt.startswith('%s_'):
+                # Four independent components, each retaining its own full path.
+                total+=4*(len(fmt)+559+64+64+6*10)
+                continue
             if fmt.startswith('event_'):
                 total+=12*90;continue
             for line in fmt.splitlines(keepends=True):

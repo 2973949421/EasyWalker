@@ -30,6 +30,7 @@ enum class UiAction : uint8_t {
     VolumeUp,
     VolumeDown,
     SaveDiagnostics,
+    ToggleCurrentPlaybackPage,
 };
 
 struct RawKeyEvent {
@@ -46,6 +47,11 @@ struct UiStats {
     uint32_t trackSelections = 0, differentTrackSelections = 0;
     uint32_t lastQueueCount = 0, prepareMaxUs = 0, navigationMaxUs = 0;
     uint32_t largestFreeBlock = 0, lastLibraryError = 0;
+    uint32_t tabEvents = 0, tabStateErrors = 0, windowBuilds = 0, highlightUpdates = 0;
+    uint32_t tabPlaying = 0, tabPaused = 0, tabBeforeMs = 0, tabAfterMs = 0;
+    uint8_t tabState = 0;
+    uint32_t firstFrameMaxMs = 0;
+    uint32_t warmReturnMaxMs = 0, selectionFeedbackMaxMs = 0, warmReturns = 0;
     bool pageFirstFrameComplete = false;
     uint32_t renderCount = 0;
     uint32_t renderMaxUs = 0;

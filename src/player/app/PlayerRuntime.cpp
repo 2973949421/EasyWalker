@@ -131,7 +131,10 @@ void PlayerRuntime::setPreferredNowPlayingView(uint8_t view) {
 
 void PlayerRuntime::service() {
     // Audio always receives service before a bounded storage step.
+    const uint32_t transportAt=micros();
     controller_.service();
+    transportServiceMaxUs_=std::max<uint32_t>(transportServiceMaxUs_,micros()-transportAt);
+    const uint32_t persistenceAt=micros();
     detectPlayerChanges();
 
     const PlayerSnapshot current = controller_.snapshot();
@@ -175,6 +178,7 @@ void PlayerRuntime::service() {
         !stateStore_.pending()) {
         startPendingSave();
     }
+    persistenceServiceMaxUs_=std::max<uint32_t>(persistenceServiceMaxUs_,micros()-persistenceAt);
 }
 
 PlayerSnapshot PlayerRuntime::snapshot() const {

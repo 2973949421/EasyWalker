@@ -158,7 +158,8 @@ void appendEllipsis(lgfx::LovyanGFX& display, char* line, size_t& bytes, int32_t
 }
 
 UiTextLayoutResult layout(lgfx::LovyanGFX& display, const char* text,
-                           const UiTextBox& box, size_t byteLength, bool paint) {
+                           const UiTextBox& box, size_t byteLength, bool paint,
+                           UiTextLayout::LineVisitor visitor=nullptr,void* context=nullptr) {
     UiTextLayoutResult result;
     result.availableWidthPx = std::max<int16_t>(0, box.width);
     if (text == nullptr) {
@@ -259,6 +260,7 @@ UiTextLayoutResult layout(lgfx::LovyanGFX& display, const char* text,
         result.maxLineWidthPx = static_cast<int16_t>(
             std::max<int32_t>(result.maxLineWidthPx, width));
         result.layoutError |= width > box.width;
+        if(visitor)visitor(line,context);
         if (paint) {
             display.setCursor(box.x, box.y + row * step);
             display.drawString(line, box.x, box.y + row * step);
@@ -287,6 +289,10 @@ UiTextLayoutResult UiTextLayout::draw(lgfx::LovyanGFX& display, const char* text
 UiTextLayoutResult UiTextLayout::measure(lgfx::LovyanGFX& display, const char* text,
                                         const UiTextBox& box, size_t byteLength) {
     return layout(display, text, box, byteLength, false);
+}
+UiTextLayoutResult UiTextLayout::visitLines(lgfx::LovyanGFX& display,const char* text,
+    const UiTextBox& box,LineVisitor visitor,void* context){
+    return layout(display,text,box,SIZE_MAX,false,visitor,context);
 }
 
 namespace {

@@ -16,7 +16,10 @@ class LyricsTimeline final {
     const ResourceFailure& failure() const { return failure_; }
     void failurePath(char* output,size_t size) const;
     bool hasLyrics() const { return state_==MediaState::Ready && count_[0]>0; }
-    bool windowReady() const { return windowReady_; }
+    bool windowReady() const { return cueReady(std::max(0,current_)); }
+    bool cueReady(int cue)const;
+    bool busy()const{return phase_!=0;}
+    void suspend(){file_.close();directory_.close();lineLength_=0;}
     int current() const { return current_; }
     uint32_t revision() const { return revision_; }
     uint32_t startMs() const;
@@ -32,7 +35,7 @@ class LyricsTimeline final {
     struct Cue { uint32_t time, offset; };
     struct Work {
         Cue cues[2][512];
-        char text[3][2][1025];
+        char text[2][2][1025];
         char line[1025];
         uint8_t io[512];
     };
@@ -54,6 +57,8 @@ class LyricsTimeline final {
     uint32_t positionMs_=0,durationMs_=0;
     bool translationHant_=false,windowReady_=false,eof_=false;
     bool hasText_[2]{};
+    int slotCue_[2]={-2,-2};
+    uint8_t slotReady_[2]{},currentSlot_=0;
     void fail(const char* reason);
     bool parseLine(bool index);
     void openLanguage(bool original);

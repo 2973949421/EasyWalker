@@ -17,7 +17,7 @@ class FreeChecks(unittest.TestCase):
         old=subprocess.run(cmd+['-DREPRODUCE_OLD_COVER_PRIORITY'],cwd=ROOT,capture_output=True,text=True)
         self.assertNotEqual(old.returncode,0)
         self.assertIn('cold lyrics starvation regression',old.stderr)
-    def test_current_cue_complete_and_intro_blank(self):
+    def test_current_cue_complete_and_intro_gray_first_page(self):
         fonts=Fonts();ja=parse_lrc((LOCAL/'crucifix-x.user.ja.lrc').read_bytes());zh=parse_lrc((LOCAL/'crucifix-x.zh-Hans.lrc').read_bytes())
         _,original,chinese=pair_cues(ja,zh)[0]
         glyphs,pages=layout(original,chinese,fonts)
@@ -25,9 +25,12 @@ class FreeChecks(unittest.TestCase):
         self.assertEqual(len(glyphs),len(original)+len(chinese))
         self.assertGreater(len(set(g[1] for g in glyphs)),1)
         intro,_=render(original,chinese,fonts,intro=True)
-        self.assertEqual(len(set(intro.crop((0,28,135,216)).get_flattened_data())),1)
+        pixels=set(intro.crop((0,0,135,216)).get_flattened_data())
+        self.assertGreater(len(pixels),1)
+        self.assertLessEqual(max(max(p) for p in pixels),132)
         source=read('src/player/ui/media/LyricsRenderer.cpp')
-        self.assertIn('if(stats_.intro)return true;',source)
+        self.assertIn('page=stats_.intro?0:',source)
+        self.assertIn('color=stats_.intro?0x8410:0xFFFF',source)
         self.assertNotIn('timeline.text(0',source)
         self.assertNotIn('timeline.text(2',source)
         self.assertNotIn('y+16<=164',source)

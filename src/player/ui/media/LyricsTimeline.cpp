@@ -1,4 +1,5 @@
 #include "LyricsTimeline.h"
+#include "FrameCachePolicy.h"
 #include <algorithm>
 #include <new>
 #include <cstring>
@@ -27,6 +28,7 @@ bool timestamp(const char* p,const char*& end,uint32_t& time) {
 void LyricsTimeline::release() {
     file_.close();directory_.close();delete work_;work_=nullptr;state_=MediaState::Idle;phase_=0;
     count_[0]=count_[1]=0;current_=-2;windowReady_=false;alternative_[0]=0;
+    slotCue_[0]=slotCue_[1]=-2;slotReady_[0]=slotReady_[1]=0;currentSlot_=0;
 }
 bool LyricsTimeline::selectTrack(const char* track) {
     release();error_="none";failure_=ResourceFailure{};failureDirectory_=false;alternativeCount_=0;offsetMs_[0]=offsetMs_[1]=0;translationHant_=false;
@@ -36,7 +38,7 @@ bool LyricsTimeline::selectTrack(const char* track) {
     work_=new(std::nothrow) Work{};if(!work_){fail("lyrics_memory");return false;}
     state_=MediaState::Loading;phase_=1;language_=0;++revision_;return true;
 }
-void LyricsTimeline::fail(const char* reason) { failure_.set(reason,"parse",errno);error_=reason;state_=MediaState::Error;phase_=0;file_.close();directory_.close();windowReady_=false;++revision_; }
+void LyricsTimeline::fail(const char* reason) { if(std::strcmp(failure_.reason,reason))failure_.set(reason,"parse",errno);error_=reason;state_=MediaState::Error;phase_=0;file_.close();directory_.close();windowReady_=false;++revision_; }
 void LyricsTimeline::openLanguage(bool original) {
     char path[576];
     if(original && alternative_[0])std::snprintf(path,sizeof(path),"%s",alternative_);
@@ -67,7 +69,7 @@ bool LyricsTimeline::parseLine(bool index) {
     }
     if(!index) {
         while(*p==' '||*p=='\t')++p;
-        std::snprintf(work_->text[loadSlot_/2][loadSlot_%2],1025,"%s",found?p:"");
+        std::snprintf(work_->text[(currentSlot_+loadSlot_/2)%2][loadSlot_%2],1025,"%s",found?p:"");
     } else if(!found && p[0]=='[' && p[1]>='0' && p[1]<='9') { fail("lrc_timestamp");return false; }
     else if(index && found){while(*p==' '||*p=='\t')++p;if(*p)hasText_[language_]=true;}
     return true;
@@ -142,15 +144,26 @@ void LyricsTimeline::updatePosition(uint32_t positionMs,uint32_t durationMs) {
     if(target!=current_){current_=target;windowReady_=false;startWindow();}
 }
 void LyricsTimeline::startWindow() {
-    file_.close();loadCurrent_=current_;loadSlot_=0;lineLength_=0;eof_=false;std::memset(work_->text,0,sizeof(work_->text));phase_=9;
+    file_.close();loadCurrent_=current_;loadSlot_=0;lineLength_=0;eof_=false;
+    const int wanted=std::max(0,current_);
+    currentSlot_=currentTextSlot(slotCue_[0],slotCue_[1],wanted);
+    for(unsigned i=0;i<2;++i){const unsigned slot=(currentSlot_+i)%2;
+        if(slotCue_[slot]!=wanted+int(i)){
+            slotCue_[slot]=wanted+i;slotReady_[slot]=0;
+            std::memset(work_->text[slot],0,sizeof(work_->text[slot]));
+        }
+    }
+    phase_=9;
 }
 void LyricsTimeline::loadWindowSlice() {
-    if(loadSlot_>=6) {file_.close();phase_=0;windowReady_=true;++revision_;return;}
-    const int cueIndex=loadCurrent_+int(loadSlot_/2)-1;
+    if(loadSlot_>=4) {file_.close();phase_=0;windowReady_=true;++revision_;return;}
+    const unsigned slot=(currentSlot_+loadSlot_/2)%2;
+    const int cueIndex=slotCue_[slot];
     const unsigned lang=loadSlot_%2;
-    if(cueIndex<0 || cueIndex>=count_[0]){++loadSlot_;return;}
+    if(slotReady_[slot]&(1U<<lang)){++loadSlot_;return;}
+    if(cueIndex<0 || cueIndex>=count_[0]){slotReady_[slot]|=1U<<lang;++loadSlot_;return;}
     const auto& original=work_->cues[0][cueIndex];const int pair=int(original.offset>>18)-1;
-    if(lang && pair<0){++loadSlot_;return;}
+    if(lang && pair<0){slotReady_[slot]|=1U<<lang;++loadSlot_;return;}
     if(!file_) {
         char path[576];
         if(!lang && alternative_[0])std::snprintf(path,sizeof(path),"%s",alternative_);
@@ -164,7 +177,7 @@ void LyricsTimeline::loadWindowSlice() {
     const size_t wanted=std::min<size_t>(512,file_.size()-file_.position());errno=0;
     const int n=file_.read(work_->io,wanted);if(n!=int(wanted)){failure_.set("lrc_window_read","read",errno,wanted,n);fail("lrc_window_read");return;}bytesRead_+=n;bool done=n==0;
     for(int i=0;i<n;++i){const char c=work_->io[i];if(c==0){fail("lrc_nul");return;}if(c=='\n'){done=true;break;}if(c!='\r'){if(lineLength_>=1024){fail("lrc_line_limit");return;}work_->line[lineLength_++]=c;}}
-    if(done || file_.position()>=file_.size()){if(!parseLine(false))return;file_.close();++loadSlot_;}
+    if(done || file_.position()>=file_.size()){if(!parseLine(false))return;file_.close();slotReady_[slot]|=1U<<lang;++loadSlot_;++revision_;}
 }
 uint32_t LyricsTimeline::startMs() const {return current_>=0 && work_ ? work_->cues[0][current_].time : 0;}
 uint32_t LyricsTimeline::cueStart(int index) const {return index>=0 && index<count_[0] && work_?work_->cues[0][index].time:0;}
@@ -180,6 +193,14 @@ uint32_t LyricsTimeline::endMs() const {
     return durationMs_>startMs()?durationMs_:startMs()+10000;
 }
 const char* LyricsTimeline::text(int relative,unsigned language) const {
-    return work_ && relative>=-1 && relative<=1 && language<2 ? work_->text[relative+1][language] : "";
+    const int cue=current_+relative;
+    if(work_&&language<2)for(unsigned i=0;i<2;++i)
+        if(slotCue_[i]==cue&&(slotReady_[i]&(1U<<language)))return work_->text[i][language];
+    return "";
+}
+bool LyricsTimeline::cueReady(int cue)const{
+    if(!work_)return false;
+    for(unsigned i=0;i<2;++i)if(slotCue_[i]==cue)return slotReady_[i]==3;
+    return false;
 }
 } }

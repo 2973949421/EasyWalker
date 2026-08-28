@@ -9,21 +9,24 @@ struct CachedGlyph {
     uint16_t codepoint=0,age=0,arena=0xFFFF;
     uint8_t width=0,height=0;
     int8_t dx=0,dy=0;
-    uint8_t font:3,state:2,pinned:1,reserved:2;
+    uint8_t font:3,state:2,pinned:3;
     uint8_t advance=0;
-    CachedGlyph():font(0),state(0),pinned(0),reserved(0){}
+    CachedGlyph():font(0),state(0),pinned(0){}
 };
 static_assert(sizeof(CachedGlyph)==16,"compact glyph metrics");
 struct FontCacheStats {
     uint32_t reads=0,bytes=0,hits=0,misses=0,missing=0,ioErrors=0;
     uint32_t serviceMaxUs=0,drawMisses=0,capacityErrors=0;
+    uint32_t opens=0,indexPageHits=0,firstDrawCodepoint=0;
+    uint8_t firstDrawFont=255;
 };
 class FontCache final {
   public:
     enum Face : uint8_t { Cjk12, Cjk14, Cjk16, Cjk18, Latin10, Latin12, Latin14, FaceCount };
     static constexpr unsigned kBitmapBytes=15*1024,kMetrics=200;
     bool begin();void release();~FontCache(){release();}
-    bool request(uint32_t cp,uint8_t font,bool pin=false);
+    enum Pin : uint8_t { Next=1, Current=2, Ui=4, All=7 };
+    bool request(uint32_t cp,uint8_t font,uint8_t pin=0);
     bool requestMetric(uint32_t cp,uint8_t font);
     uint8_t latinAdvance(uint32_t cp,uint8_t face=Latin14)const{return work_&&cp<256&&face>=Latin10&&face<=Latin14?(work_->latinAdvance[face-Latin10][cp]&15):8;}
     uint8_t verticalAdvance(uint32_t cp)const{const uint8_t v=work_&&cp<256?work_->latinAdvance[Latin14-Latin10][cp]:0x88;return std::max<uint8_t>(v>>4,v&15);}
@@ -36,7 +39,8 @@ class FontCache final {
     void draw(lgfx::LGFXBase& target,uint32_t cp,uint8_t font,int x,int y,uint16_t fg,uint16_t bg,bool clockwise=false)const;
     bool busy()const{return phase_!=0;}
     bool available()const{return work_!=nullptr;}
-    void clearPins();void setPresenting(bool value){presenting_=value;}
+    void clearPins(uint8_t mask=All);void promotePins();void suspend();
+    void setPresenting(bool value){presenting_=value;}
     bool presenting()const{return presenting_;}
     static uint8_t fontForPixels(int px){return px<=12?0:(px<=14?1:2);}
     static uint8_t faceFor(uint32_t cp,int px){return cp<256?(px<=10?Latin10:px<=12?Latin12:Latin14):(px<=12?Cjk12:px<=14?Cjk14:px<=16?Cjk16:Cjk18);}
@@ -53,6 +57,9 @@ class FontCache final {
     int pending_=-1;uint16_t used_=0,clock_=0;
     uint32_t count_=0,lo_=0,hi_=0,vlwSize_=0;
     ResourceFailure failure_{};mutable FontCacheStats stats_{};
+    uint8_t indexPage_[512]{};
+    uint32_t indexPageAt_=UINT32_MAX;
+    uint16_t indexPageSize_=0;
     void fail(bool io,const char* reason,const char* operation,int expected=-1,int actual=-1);
     bool allocateBitmap(CachedGlyph& glyph);void compact();uint16_t tick();
 };

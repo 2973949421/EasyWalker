@@ -35,7 +35,8 @@ class NavigationChecks(unittest.TestCase):
         for forbidden in ('entryAt(', 'entryPathAt(', 'buildRenderContext(', 'cp<127'):
             self.assertNotIn(forbidden,render)
         presenter=source('src/player/ui/NowPlayingPresenter.cpp')
-        self.assertIn('media_.release();',presenter)
+        self.assertIn('media_.suspend();',presenter)
+        self.assertNotIn('media_.release();',presenter)
         self.assertIn('if (!model_.active) return false;',presenter)
         region=source('src/player/ui/PageRenderers.cpp').split('void PlaylistPageRenderer::renderRegion')[1].split('void SettingsPageRenderer')[0]
         self.assertNotIn('fillScreen(',region)
@@ -48,7 +49,7 @@ class NavigationChecks(unittest.TestCase):
         records={r[0]:r for r in (struct.unpack_from('<IIHHhhhHI',raw,i) for i in range(16,len(raw),24))}
         advances={cp:r[4] for cp,r in records.items()}
         for text in ('0:00/--:--','59:59/59:59','999:59/999:59','LOG SAVED','LOG ERROR'):
-            self.assertLessEqual(sum(advances[ord(c)] for c in text),96,text)
+            self.assertLessEqual(sum(advances[ord(c)] for c in text),84,text)
             for c in text:
                 g=records[ord(c)]
                 self.assertGreaterEqual(2+g[6],0,c)
@@ -79,6 +80,7 @@ class NavigationChecks(unittest.TestCase):
 
     def test_failure_and_coverage_evidence(self):
         r=dict(version=VERSION,mode='free',result='READY_FOR_REVIEW',failure_reason='none',volume='80',speaker_volume_raw='32',speaker_volume_cap='102',audio_errors='0',backpressure='0',pcm_gap_max_us='40000',present_max_us='90000',lyric_late_max_ms='90',a_auto='COVERED',b_auto='COVERED',c_auto='COVERED',longest_playing_ms='61000',lyrics_frames='2',cover_frames='2',lyric_deadline_updates='1',view_events='1',volume_events='1',play_events='1',library_text_ok='1',playlist_frames='1',library_frames='1',different_track_selections='1',time_font_px='14')
+        r.update(tab_playing='2',tab_paused='2')
         self.assertEqual(evaluate(r)[0],'READY_FOR_REVIEW')
         for key,value,expected in [('playlist_frames','0','INCOMPLETE'),('different_track_selections','0','INCOMPLETE'),('nav_errors','1','FAIL'),('display_self_failure','actual_font_layout','FAIL'),('pcm_gap_max_us','154195','FAIL'),('present_max_us','109328','FAIL'),('lyric_late_max_ms','687','FAIL')]:
             self.assertEqual(evaluate(dict(r,**{key:value}))[0],expected,key)

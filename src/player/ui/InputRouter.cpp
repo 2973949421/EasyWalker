@@ -16,6 +16,7 @@ bool InputRouter::pollMask(uint64_t mask,uint32_t now,UiAction& action,RawKeyEve
     raw.x=key%14;raw.y=key/14;raw.fn=false;raw.keyCount=1;
     const auto at=[&](int x,int y){return raw.x==x&&raw.y==y;};
     if(at(0,0))action=UiAction::Back;
+    else if(at(0,1))action=UiAction::ToggleCurrentPlaybackPage;
     else if(at(5,1))action=UiAction::SaveDiagnostics; // T: development log checkpoint, not a product shortcut.
     else if(playerPage){
         switch(playerKeyAt(raw.x,raw.y)){
