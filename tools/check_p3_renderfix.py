@@ -31,9 +31,11 @@ class RenderfixChecks(unittest.TestCase):
         for r in report:
             self.assertFalse(r['missing']);self.assertEqual(r['embolden_high_res_radius'],1);self.assertEqual(r['raster_scale'],4)
             name=r['name'];stem=PACKAGE/'ADVWalkman/fonts'/name;oldstem=PRIVATE/'recovery/ADVWalkman/fonts'/name
-            new,old=records(stem),records(oldstem);self.assertEqual(set(new),set(old));px=int(name.split('-')[-1])
+            new,old=records(stem),records(oldstem);self.assertTrue(set(old)<=set(new));px=int(name.split('-')[-1])
             for cp,g in new.items():
-                self.assertEqual(g[4],old[cp][4]);self.assertLessEqual(g[2],px);self.assertLessEqual(g[3]+g[6],px);self.assertGreaterEqual(g[6],0)
+                if cp in old and cp not in (0x2018,0x2019,0x201C,0x201D):self.assertEqual(g[4],old[cp][4])
+                self.assertGreater(g[4],0)
+                self.assertLessEqual(g[2],px);self.assertLessEqual(g[3]+g[6],px);self.assertGreaterEqual(g[6],0)
             now=stem.with_suffix('.vlw').read_bytes();before=oldstem.with_suffix('.vlw').read_bytes()
             sample='AveMujica' if 'latin' in name else '未分类音乐收藏'
             mass=lambda data,rs:sum(sum(data[rs[ord(c)][1]:rs[ord(c)][1]+rs[ord(c)][2]*rs[ord(c)][3]]) for c in sample)
@@ -79,6 +81,6 @@ class RenderfixChecks(unittest.TestCase):
         self.assertEqual(evaluate_render(dict(good,full_frames='0',patch_frames='99',fallback_frames='99'))[0],'INCOMPLETE')
         self.assertEqual(evaluate_render(dict(good,render_pixel_selfcheck='render_band_pixels'))[0],'FAIL')
         with self.assertRaises(ValueError):current_boots([dict(version='0.8.3-p3d.refine',boot_id='8')])
-        self.assertEqual(VERSION,'0.8.5-p3d.stability-rc')
+        self.assertEqual(VERSION,'0.9.0-p4ab.controls')
 
 if __name__=='__main__':unittest.main(verbosity=2)

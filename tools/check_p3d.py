@@ -22,15 +22,15 @@ class P3DChecks(unittest.TestCase):
         self.assertNotEqual(bad.returncode,0)
         self.assertIn('old five-second timer',bad.stderr)
     def test_cover_roundtrip_and_corruption(self):
-        data=(PACKAGE/DEST).read_bytes();self.assertEqual(validate_cover(data),(135,173))
+        data=(PACKAGE/DEST).read_bytes();self.assertEqual(validate_cover(data),(135,154))
         for offset in (0,4,6,8,10,12,14,16,20,100):
             broken=bytearray(data);broken[offset]^=1
             with self.assertRaises(ValueError):validate_cover(broken)
         with self.assertRaises(ValueError):validate_cover(data[:-1])
         source_image=io.BytesIO();Image.new('RGB',(80,160),(255,0,0)).save(source_image,format='PNG');source_image.seek(0)
         image,data=compile_cover(source_image)
-        self.assertEqual(image.size,(87,174));self.assertEqual(image.getpixel((0,60)),(255,0,0))
-        self.assertEqual(struct.unpack_from('<H',data,24+(60*87+60)*2)[0],0xf800)
+        self.assertEqual(image.size,(135,154));self.assertEqual(image.getpixel((0,60)),(255,0,0))
+        self.assertEqual(struct.unpack_from('<H',data,24+(60*135+60)*2)[0],0xf800)
     def test_ui_fonts_and_arc_capacity(self):
         self.assertGreater(font_coverage(),50)
         fixed=source('src/player/ui/SettingsPanel.cpp').split('const char* fixed="')[1].split('";')[0]

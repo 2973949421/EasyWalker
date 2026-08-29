@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstring>
 #include "PlayerKeys.h"
+#include "P4Controls.h"
 #include "P3BChecks.h"
 #include "PlaybackPageRoute.h"
 
@@ -198,6 +199,14 @@ void UiCoordinator::service() {
             stats_.renderMaxUs = std::max(stats_.renderMaxUs,
                                           nowPlaying_.stats().renderMaxUs);
         }
+        if(modeFeedbackPending_ &&
+           nowPlaying_.stats().statusDraws>modeStatusDrawBaseline_ &&
+           nowPlaying_.model().repeat==expectedModeRepeat_ &&
+           nowPlaying_.model().shuffle==expectedModeShuffle_){
+            stats_.modeFeedbackMaxMs=std::max(stats_.modeFeedbackMaxMs,
+                                              uint32_t(millis()-modeRequestedAt_));
+            modeFeedbackPending_=false;
+        }
         if(wakeFramePending_&&nowPlaying_.mediaStatus().frames>wake_.frames&&nowPlaying_.displayComplete()){
             wake_.firstFrame=millis();wakeFramePending_=false;
             const auto scene=powerScene();if(scene==wakePage_&&wakesByPage_[scene]<255)++wakesByPage_[scene];}
@@ -314,6 +323,38 @@ bool UiCoordinator::handleAction(UiAction action) {
             if(action==UiAction::ToggleView) {
                 const bool changed=nowPlaying_.toggleView();
                 return changed;
+            }
+            if(action==UiAction::PreviousTrack){
+                const bool changed=player_->previous();
+                if(changed)++stats_.previousActions;
+                else ++stats_.transportActionFailures;
+                return changed;
+            }
+            if(action==UiAction::NextTrack){
+                const bool changed=player_->next();
+                if(changed)++stats_.nextActions;
+                else ++stats_.transportActionFailures;
+                return changed;
+            }
+            if(action==UiAction::CyclePlayMode){
+                const auto before=player_->snapshot();
+                const auto next=nextPlaybackMode(before.repeatMode,before.shuffleEnabled);
+                stats_.modeBeforeRepeat=static_cast<uint8_t>(before.repeatMode);
+                stats_.modeBeforeShuffle=before.shuffleEnabled;
+                if(!player_->setPlaybackMode(next.repeat,next.shuffle)){
+                    ++stats_.transportActionFailures;
+                    return false;
+                }
+                const auto after=player_->snapshot();
+                stats_.modeAfterRepeat=static_cast<uint8_t>(after.repeatMode);
+                stats_.modeAfterShuffle=after.shuffleEnabled;
+                ++stats_.playModeActions;
+                expectedModeRepeat_=after.repeatMode;
+                expectedModeShuffle_=after.shuffleEnabled;
+                modeRequestedAt_=millis();
+                modeStatusDrawBaseline_=nowPlaying_.stats().statusDraws;
+                modeFeedbackPending_=true;
+                return true;
             }
             if (action == UiAction::Back) {
                 return restorePlaylistForCurrentTrack();
@@ -448,6 +489,7 @@ void UiCoordinator::setPage(UiPage page,bool retainBrowser) {
         libraryPage_.pageChanged();
         ++stats_.pageTransitions;
         ++inputEpoch_;power_.pageChanged(millis(),page==UiPage::Player);
+        if(page!=UiPage::Player)modeFeedbackPending_=false;
         if(page!=UiPage::Player)nowPlaying_.setActive(false,millis());
         if(page!=UiPage::Library){libraryVisual_.release();fonts_.clearPins(FontCache::Library);}
         else libraryVisualDirty_=true;

@@ -208,6 +208,21 @@ void PlayerController::setShuffleEnabled(bool enabled) {
     queue_.setShuffleEnabled(enabled);
 }
 
+bool PlayerController::setPlaybackMode(RepeatMode mode, bool shuffle) {
+    if (!validRepeatMode(mode)) {
+        return false;
+    }
+    if (repeatMode_ == mode && queue_.shuffleEnabled() == shuffle) {
+        return false;
+    }
+    // PlayerController is serviced cooperatively, so these two assignments
+    // form one externally observable action. No checkpoint or UI snapshot is
+    // taken between them.
+    repeatMode_ = mode;
+    queue_.setShuffleEnabled(shuffle);
+    return true;
+}
+
 bool PlayerController::shuffleEnabled() const {
     return queue_.shuffleEnabled();
 }

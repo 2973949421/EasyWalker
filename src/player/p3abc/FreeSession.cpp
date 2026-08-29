@@ -37,11 +37,27 @@ void FreeSession::fail(const char* component,const char* reason){
     std::snprintf(failure_,sizeof(failure_),"%s",reason);
     requestSave_=true;
 }
-void FreeSession::action(UiAction action,const RawKeyEvent& raw,UiPage page,bool accepted){
+void FreeSession::action(UiAction action,const RawKeyEvent& raw,UiPage page,bool accepted,
+                         uint32_t pcmBefore,const PlayerSnapshot& after){
     events_[eventCount_%32]={millis()-started_,action,page,raw.x,raw.y,accepted,raw.capturedAtMs};++eventCount_;++actions_;
+    if(action==UiAction::PreviousTrack)++previousRequests_;
+    else if(action==UiAction::NextTrack)++nextRequests_;
+    else if(action==UiAction::CyclePlayMode)++playModeRequests_;
     if(action==UiAction::SaveDiagnostics)return;
     if(action==UiAction::ToggleView&&!accepted&&page==UiPage::Player)noLyricsPending_=true;
     if(!accepted)return;
+    if(action==UiAction::PreviousTrack||action==UiAction::NextTrack){
+        lastTransportIndex_=after.currentIndex;lastTransportState_=uint8_t(after.state);
+        if(after.state==PlayerState::Playing){
+            if(transportPcmPending_)++transportPcmSuperseded_;
+            if(after.pcmBuffersSinceReset!=pcmBefore){
+                transportPcmPending_=false;++transportPcmCompleted_;
+            }else{
+                transportPcmPending_=true;transportPcmBaseline_=after.pcmBuffersSinceReset;
+                transportAcceptedAt_=millis();
+            }
+        }else{transportPcmPending_=false;++transportPaused_;}
+    }
     switch(action){
         case UiAction::Left:nav_|=1;break;case UiAction::Right:nav_|=2;break;
         case UiAction::Up:nav_|=4;break;case UiAction::Down:nav_|=8;break;
@@ -55,6 +71,10 @@ void FreeSession::action(UiAction action,const RawKeyEvent& raw,UiPage page,bool
 void FreeSession::observe(const UiCoordinator& ui,const PlayerRuntime& player){
     const uint32_t now=millis();const auto s=player.snapshot();const auto m=ui.nowPlaying().mediaStatus();
     const auto& font=ui.fonts();
+    if(transportPcmPending_&&s.state==PlayerState::Playing&&s.pcmBuffersSinceReset!=transportPcmBaseline_){
+        transportFirstPcmMaxMs_=std::max(transportFirstPcmMaxMs_,now-transportAcceptedAt_);
+        transportPcmPending_=false;++transportPcmCompleted_;
+    }
     if(!startupCaptured_){startupCaptured_=true;player.currentPath(restoredTrack_,sizeof(restoredTrack_));restoredPosition_=s.positionMs;
         restoredView_=previousPreferred_=player.preferredNowPlayingView();startupPaused_=s.state==PlayerState::Paused||s.state==PlayerState::Empty;}
     if(!actions_){startupObservedMs_=std::min<uint32_t>(3000,now-started_);if(s.pcmBuffersSinceReset)startupSilent_=false;}
@@ -185,10 +205,15 @@ void FreeSession::prepareNext(const UiCoordinator& ui,const PlayerRuntime& playe
                 append("library_requests=%lu\nlibrary_stalls=%lu\nlibrary_recoveries=%lu\nlibrary_failures=%lu\nlibrary_stale_rejects=%lu\nlibrary_transaction_state=%u\n",
                     (unsigned long)u.libraryRequests,(unsigned long)u.libraryStalls,(unsigned long)u.libraryRecoveries,
                     (unsigned long)u.libraryFailures,(unsigned long)u.libraryStaleRejects,unsigned(visual.transaction().state()));
-                append("save_requested_ticket=%lu\nsave_completed_ticket=%lu\nsave_status=%u\ninput_accept_max_ms=%lu\nwarm_return_max_ms=%lu\nview_warm_max_ms=%lu\nselection_feedback_max_ms=%lu\nminimum_heap=%lu\n",
+                append("save_requested_ticket=%lu\nsave_completed_ticket=%lu\nsave_status=%u\ninput_accept_max_ms=%lu\nwarm_return_max_ms=%lu\nview_warm_max_ms=%lu\nselection_feedback_max_ms=%lu\nmode_feedback_max_ms=%lu\nprevious=%lu/%lu\nnext=%lu/%lu\nplay_mode=%lu/%lu\ntransport_failures=%lu\ntransport_first_pcm_max_ms=%lu\ntransport_pcm_pending=%u\nminimum_heap=%lu\n",
                     (unsigned long)save_.requested(),(unsigned long)save_.completed(),unsigned(save_.status()),
                     (unsigned long)ui.inputLatencyMaxMs(),(unsigned long)u.warmReturnMaxMs,(unsigned long)m.viewWarmMaxMs,
-                    (unsigned long)u.selectionFeedbackMaxMs,(unsigned long)minimumHeap_);return;
+                    (unsigned long)u.selectionFeedbackMaxMs,(unsigned long)u.modeFeedbackMaxMs,
+                    (unsigned long)previousRequests_,(unsigned long)u.previousActions,
+                    (unsigned long)nextRequests_,(unsigned long)u.nextActions,
+                    (unsigned long)playModeRequests_,(unsigned long)u.playModeActions,
+                    (unsigned long)u.transportActionFailures,(unsigned long)transportFirstPcmMaxMs_,transportPcmPending_,
+                    (unsigned long)minimumHeap_);return;
             default:
                 streamFinalChunk_=true;append("END sequence=%lu crc=%08lx\n",(unsigned long)sequence_,(unsigned long)(streamCrc_^~0U));return;
         }
@@ -244,8 +269,16 @@ void FreeSession::prepareNext(const UiCoordinator& ui,const PlayerRuntime& playe
             for(unsigned i=0;i<5;++i)append("sleep_%s=%u\nwake_%s=%u\n",scenes[i],ui.sleepsOn(i),scenes[i],ui.wakesOn(i));return;}
         case 8:{
             static const char* phases[]={"idle","queue_path_prepare","open_target","write_header","write_payload","close_target","open_verify","read_verify","check_size","close_resize","create_target","flush_target","read_header","queue_path_fetch","publish","cleanup_close"};
-            append("save_requested_ticket=%lu\nsave_active_ticket=%lu\nsave_completed_ticket=%lu\nsave_status=%u\nstate_writes=%lu\n",
-                (unsigned long)save_.requested(),(unsigned long)save_.activeThrough(),(unsigned long)save_.completed(),unsigned(save_.status()),(unsigned long)player.stateWriteCount());
+            append("save_requested_ticket=%lu\nsave_active_ticket=%lu\nsave_completed_ticket=%lu\nsave_status=%u\nstate_writes=%lu\ncheckpoint_revision=%lu\npersisted_checkpoint_revision=%lu\nprevious_requests=%lu\nprevious_accepted=%lu\nnext_requests=%lu\nnext_accepted=%lu\nplay_mode_requests=%lu\nplay_mode_accepted=%lu\ntransport_action_failures=%lu\nlast_transport_index=%u\nlast_transport_state=%u\ntransport_first_pcm_max_ms=%lu\ntransport_pcm_completed=%lu\ntransport_pcm_pending=%u\ntransport_pcm_superseded=%lu\ntransport_paused=%lu\nmode_before_repeat=%u\nmode_before_shuffle=%u\nmode_after_repeat=%u\nmode_after_shuffle=%u\nmode_footer_max_ms=%lu\n",
+                (unsigned long)save_.requested(),(unsigned long)save_.activeThrough(),(unsigned long)save_.completed(),unsigned(save_.status()),(unsigned long)player.stateWriteCount(),
+                (unsigned long)player.checkpointRevision(),(unsigned long)player.persistedCheckpointRevision(),
+                (unsigned long)previousRequests_,(unsigned long)u.previousActions,
+                (unsigned long)nextRequests_,(unsigned long)u.nextActions,
+                (unsigned long)playModeRequests_,(unsigned long)u.playModeActions,
+                (unsigned long)u.transportActionFailures,unsigned(lastTransportIndex_),unsigned(lastTransportState_),
+                (unsigned long)transportFirstPcmMaxMs_,(unsigned long)transportPcmCompleted_,transportPcmPending_,
+                (unsigned long)transportPcmSuperseded_,(unsigned long)transportPaused_,u.modeBeforeRepeat,u.modeBeforeShuffle,
+                u.modeAfterRepeat,u.modeAfterShuffle,(unsigned long)u.modeFeedbackMaxMs);
             for(unsigned i=1;i<16;++i)append("store_%s_max_us=%lu\n",phases[i],(unsigned long)player.persistencePhasePeakUs(i));return;}
         case 9:
             append("failure_component=%s\nfailure_reason=%s\nresource_operation=%s\nresource_errno=%d\nresource_expected=%ld\nresource_actual=%ld\nlyrics_failure=%s\ncover_failure=%s\nfont_failure=%s\nnavigation_failure=%s\ndisplay_selfchecks=%u\ndisplay_self_failure=%s\nfont_io_errors=%lu\nfont_draw_misses=%lu\nmetadata_fallbacks=%lu\nmetadata_fallback_cause=%u\n",

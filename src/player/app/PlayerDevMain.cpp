@@ -45,19 +45,20 @@ void collectInput() {
 void dispatchInput() {
     ui.recordInputQueue(input.overflow(),input.stale());
     UiAction action=UiAction::None;RawKeyEvent raw;
-    for(unsigned n=0;n<8&&input.pop(ui.inputEpoch(),action,raw,ui.page()==UiPage::Player);++n){
+    for(unsigned n=0;n<8&&input.pop(ui.inputEpoch(),action,raw,ui.page());++n){
         ui.recordInputLatency(millis()-raw.capturedAtMs);
 #if defined(P3A_DEVICE_GATE)
         if(!gate.beforeAction(action,raw,ui.page()))ui.handleAction(action);
 #else
         const auto page=ui.page();
+        const uint32_t pcmBefore=player.snapshot().pcmBuffersSinceReset;
         const bool accepted=action==UiAction::SaveDiagnostics||ui.handleAction(action);
         if(action==UiAction::SaveDiagnostics){
             player.requestCheckpoint();
             const uint32_t ticket=session.requestManualSave(player.checkpointRevision(),ui.settings().store.revision(),millis());
             ui.notifySavePending(ticket);
         }
-        session.action(action,raw,page,accepted);
+        session.action(action,raw,page,accepted,pcmBefore,player.snapshot());
 #endif
     }
 }

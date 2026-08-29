@@ -66,7 +66,9 @@ def render(original,chinese,fonts,page=0,intro=False):
     glyphs,pages=layout(original,chinese,fonts,0 if intro else page)
     for char,x,y in glyphs:
         mask,dx,dy,_=fonts.glyph(char)
-        if ord(char)<256 or char in '《》「」『』“”‘’（）—':mask=mask.transpose(Image.Transpose.ROTATE_270);dx=dy=0
+        if ord(char)<256 or char in '《》「」『』“”‘’（）—':
+            rotate_270=getattr(getattr(Image,'Transpose',Image),'ROTATE_270')
+            mask=mask.transpose(rotate_270);dx=dy=0
         elif char in '，、。':dx,dy=18-mask.width,0
         assert 6<=x+dx and x+dx+mask.width<=129,(char,x,dx,mask.width)
         assert 6<=y+dy and y+dy+mask.height<=208,(char,y,dy,mask.height)

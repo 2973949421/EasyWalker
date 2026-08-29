@@ -46,7 +46,7 @@ class OptimizationChecks(unittest.TestCase):
         for forbidden in ('selectTrack(', 'replaceQueue(', '->play(', '->stop(', 'seekToMs('):self.assertNotIn(forbidden,tab)
         move=ui.split('if(browserContextReady_ && old/kP3AVisibleRows==next/kP3AVisibleRows)')[1].split('}else invalidateBrowser();')[0]
         for forbidden in ('entryAt(', 'entryPathAt(', 'invalidateBrowser(', 'buildRenderContext('):self.assertNotIn(forbidden,move)
-        self.assertIn('at(0,1)',source('src/player/ui/InputRouter.cpp'))
+        self.assertIn('routedActionAt(page,raw.x,raw.y)',source('src/player/ui/InputRouter.cpp'))
         self.assertIn('UiTextLayout::visitLines',ui)
         self.assertIn('250',ui)
     def test_all_full_width_covers_and_source_ownership(self):

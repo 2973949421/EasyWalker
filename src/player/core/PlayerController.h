@@ -65,6 +65,7 @@ class PlayerController {
     void setRepeatMode(RepeatMode mode);
     RepeatMode repeatMode() const;
     void setShuffleEnabled(bool enabled);
+    bool setPlaybackMode(RepeatMode mode, bool shuffle);
     bool shuffleEnabled() const;
     void setShuffleSeed(uint32_t seed);
 

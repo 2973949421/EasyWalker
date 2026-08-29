@@ -97,7 +97,7 @@ class P3CChecks(unittest.TestCase):
             with self.assertRaises(ValueError):validate_cover(malformed)
         self.assertEqual(struct.unpack_from('<HH',data,12),(40,32))
         preview=Image.open(LOCAL/'previews/p3d-fix/ADVWalkmanBenchmark/benchmark.png').convert('RGB')
-        for i,(r,g,b) in enumerate(preview.get_flattened_data()):
+        for i,(r,g,b) in enumerate(preview.getdata()):
             self.assertEqual(struct.unpack_from('<H',data,28+i*2)[0],((r>>3)<<11)|((g>>2)<<5)|(b>>3))
 
     def test_five_grids_are_glyphs_not_thumbnail(self):

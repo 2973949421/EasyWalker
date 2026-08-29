@@ -19,7 +19,7 @@ def compile_cover(source):
     # Cantopop library. Crop only the excess height after fitting the width.
     picture=ImageOps.fit(picture,(135,154),Image.Resampling.LANCZOS,centering=(.5,.5))
     canvas=picture
-    pixels=b''.join(struct.pack('<H',((r>>3)<<11)|((g>>2)<<5)|(b>>3)) for r,g,b in canvas.get_flattened_data())
+    pixels=b''.join(struct.pack('<H',((r>>3)<<11)|((g>>2)<<5)|(b>>3)) for r,g,b in canvas.getdata())
     return canvas,struct.pack('<4s6H2I',b'LCOV',1,24,canvas.width,canvas.height,1,0,len(pixels),zlib.crc32(pixels))+pixels
 
 def validate_cover(data):

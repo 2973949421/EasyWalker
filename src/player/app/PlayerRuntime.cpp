@@ -94,13 +94,13 @@ void PlayerRuntime::stop() {
 
 bool PlayerRuntime::next() {
     const bool result = controller_.next();
-    requestCheckpoint();
+    if (result) requestCheckpoint();
     return result;
 }
 
 bool PlayerRuntime::previous() {
     const bool result = controller_.previous();
-    requestCheckpoint();
+    if (result) requestCheckpoint();
     return result;
 }
 
@@ -120,6 +120,12 @@ void PlayerRuntime::setRepeatMode(RepeatMode mode) {
 void PlayerRuntime::setShuffleEnabled(bool enabled) {
     controller_.setShuffleEnabled(enabled);
     requestCheckpoint();
+}
+
+bool PlayerRuntime::setPlaybackMode(RepeatMode mode, bool shuffle) {
+    const bool changed = controller_.setPlaybackMode(mode, shuffle);
+    if (changed) requestCheckpoint();
+    return changed;
 }
 
 void PlayerRuntime::setPreferredNowPlayingView(uint8_t view) {

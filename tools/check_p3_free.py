@@ -25,7 +25,7 @@ class FreeChecks(unittest.TestCase):
         self.assertEqual(len(glyphs),len(original)+len(chinese))
         self.assertGreater(len(set(g[1] for g in glyphs)),1)
         intro,_=render(original,chinese,fonts,intro=True)
-        pixels=set(intro.crop((0,0,135,216)).get_flattened_data())
+        pixels=set(intro.crop((0,0,135,216)).getdata())
         self.assertGreater(len(pixels),1)
         self.assertLessEqual(max(max(p) for p in pixels),132)
         source=read('src/player/ui/media/LyricsRenderer.cpp')

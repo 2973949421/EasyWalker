@@ -29,6 +29,7 @@ class PlayerRuntime final {
     bool seekToMs(uint32_t targetMs);
     void setRepeatMode(RepeatMode mode);
     void setShuffleEnabled(bool enabled);
+    bool setPlaybackMode(RepeatMode mode, bool shuffle);
     uint8_t preferredNowPlayingView() const { return preferredNowPlayingView_; }
     void setPreferredNowPlayingView(uint8_t view);
 

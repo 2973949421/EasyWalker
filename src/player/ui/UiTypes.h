@@ -29,6 +29,9 @@ enum class UiAction : uint8_t {
     TogglePlayback,
     VolumeUp,
     VolumeDown,
+    PreviousTrack,
+    NextTrack,
+    CyclePlayMode,
     SaveDiagnostics,
     ToggleCurrentPlaybackPage,
 };
@@ -57,6 +60,10 @@ struct UiStats {
     uint32_t renderCount = 0;
     uint32_t renderMaxUs = 0;
     uint32_t inputEvents = 0;
+    uint32_t previousActions = 0, nextActions = 0, playModeActions = 0;
+    uint32_t transportActionFailures = 0, modeFeedbackMaxMs = 0;
+    uint8_t modeBeforeRepeat = 0, modeAfterRepeat = 0;
+    bool modeBeforeShuffle = false, modeAfterShuffle = false;
     uint32_t pageTransitions = 0;
     uint32_t libraryRequests = 0, libraryStalls = 0, libraryRecoveries = 0;
     uint32_t libraryFailures = 0, libraryStaleRejects = 0;

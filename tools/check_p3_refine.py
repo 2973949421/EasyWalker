@@ -96,5 +96,5 @@ class RefineChecks(unittest.TestCase):
         self.assertEqual(evaluate_wake(record)[0],'READY_FOR_REVIEW')
         self.assertEqual(evaluate_wake(dict(record,wake_complete='PENDING'))[0],'INCOMPLETE')
         self.assertEqual(evaluate_wake(dict(record,wake_first_frame_ms='90'))[0],'FAIL')
-        self.assertEqual(VERSION,'0.8.5-p3d.stability-rc')
+        self.assertEqual(VERSION,'0.9.0-p4ab.controls')
 if __name__=='__main__':unittest.main(verbosity=2)

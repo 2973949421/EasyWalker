@@ -40,6 +40,9 @@ const char* uiActionName(UiAction action) {
         case UiAction::TogglePlayback:return "PLAY_PAUSE";
         case UiAction::VolumeUp:return "VOLUME_UP";
         case UiAction::VolumeDown:return "VOLUME_DOWN";
+        case UiAction::PreviousTrack:return "PREVIOUS";
+        case UiAction::NextTrack:return "NEXT";
+        case UiAction::CyclePlayMode:return "PLAY_MODE";
         case UiAction::SaveDiagnostics:return "SAVE_LOG";
         case UiAction::ToggleCurrentPlaybackPage:return "TAB_CURRENT";
     }

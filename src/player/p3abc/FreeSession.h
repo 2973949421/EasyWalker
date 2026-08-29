@@ -10,7 +10,8 @@ namespace adv_walkman { namespace player {
 class FreeSession final {
  public:
     void begin();
-    void action(UiAction action,const RawKeyEvent& raw,UiPage page,bool accepted);
+    void action(UiAction action,const RawKeyEvent& raw,UiPage page,bool accepted,
+                uint32_t pcmBefore,const PlayerSnapshot& after);
     void observe(const UiCoordinator& ui,const PlayerRuntime& player);
     void service(UiCoordinator& ui,const PlayerRuntime& player,uint32_t uiBurstUs);
     bool workDue()const{return bool(file_)||logPrepared_||requestSave_||save_.pending()||millis()-lastSaved_>=15000;}
@@ -48,6 +49,12 @@ class FreeSession final {
     struct Event {uint32_t ms;UiAction action;UiPage page;int8_t x,y;bool accepted;uint32_t captured;};
     Event events_[32]{};
     uint32_t eventCount_=0,actions_=0,nav_=0,volumeEvents_=0,playEvents_=0,viewEvents_=0;
+    uint32_t previousRequests_=0,nextRequests_=0,playModeRequests_=0;
+    uint32_t transportFirstPcmMaxMs_=0,transportPcmBaseline_=0,transportAcceptedAt_=0;
+    uint32_t transportPcmCompleted_=0,transportPcmSuperseded_=0,transportPaused_=0;
+    size_t lastTransportIndex_=0;
+    uint8_t lastTransportState_=uint8_t(PlayerState::Empty);
+    bool transportPcmPending_=false;
     uint32_t started_=0,lastSaved_=0,sequence_=0,playingAt_=0,longestPlaying_=0;
     uint32_t loadAt_=0,loadingGeneration_=0,uiBurstMaxUs_=0,writeMaxUs_=0,minimumHeap_=UINT32_MAX;
     uint32_t pcmGapMaxUs_=0,backpressure_=0,audioErrors_=0,lyricFrames_=0,coverFrames_=0,deadlineUpdates_=0;

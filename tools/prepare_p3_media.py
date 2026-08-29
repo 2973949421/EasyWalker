@@ -19,6 +19,11 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageEnhance, ImageFilter
 
+# Pillow <9.1 exposes these filters directly on Image. Keep the checked-in
+# preparation tools usable with the project's existing host runtime.
+if not hasattr(Image, 'Resampling'):
+    Image.Resampling = Image
+
 ROOT = Path(__file__).resolve().parents[1]
 LOCAL = ROOT / 'test-data/local/p3-media'
 PACKAGE = LOCAL / 'package'
@@ -182,7 +187,7 @@ def cover_ascii(source: Path, columns: int, rows: int, canvas_size=(120,144)):
         # Remove unused font-cell margins, not per-character bounding boxes:
         # punctuation stays small while glyph strokes use the limited pixels.
         masks.append(mask.crop((0,1,8,13)))
-    samples=[list(mask.resize((4,6),Image.Resampling.LANCZOS).get_flattened_data()) for mask in masks]
+    samples=[list(mask.resize((4,6),Image.Resampling.LANCZOS).getdata()) for mask in masks]
     densities=[sum(small)/len(small)/255 for small in samples]
     # Long rules/underscores should represent an actual edge, not win every
     # bright flat tile and turn the picture into horizontal scanlines.
@@ -197,7 +202,7 @@ def cover_ascii(source: Path, columns: int, rows: int, canvas_size=(120,144)):
                 line += ' '
                 continue
             tile = original_canvas.crop((x0, y0, x1, y1))
-            luminance = list(tile.convert('L').resize((4, 6)).get_flattened_data())
+            luminance = list(tile.convert('L').resize((4, 6)).getdata())
             level = sum(luminance)/len(luminance)/255
             candidate_scores = []
             for n, mask in enumerate(masks):
@@ -218,7 +223,7 @@ def cover_ascii(source: Path, columns: int, rows: int, canvas_size=(120,144)):
             mask = ImageOps.autocontrast(masks[chosen].resize((x1-x0, y1-y0), Image.Resampling.LANCZOS))
             canvas.paste(rgb, (x0, y0, x1, y1), mask)
         chars.append(line)
-    payload = b''.join(struct.pack('<H', ((r>>3)<<11)|((g>>2)<<5)|(b>>3)) for r,g,b in canvas.get_flattened_data())
+    payload = b''.join(struct.pack('<H', ((r>>3)<<11)|((g>>2)<<5)|(b>>3)) for r,g,b in canvas.getdata())
     header = struct.pack('<4sHHHHHHHHII', b'ACOV', 1, 28, width, height, columns, rows, 1, 0,
                          len(payload), zlib.crc32(payload))
     return canvas, header+payload, '\n'.join(chars)
