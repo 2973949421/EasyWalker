@@ -11,6 +11,7 @@ Date: 2026-08-29
 - T改为递增SaveTicket联合事务：等待Player与显示修订写回、流式诊断关闭和校验后才成功；重复T形成尾随事务，10秒无结果明确超时，所有页面统一反馈。
 - 诊断由16KiB预格式化改为1KiB流式缓冲、单步最多512bytes、滚动CRC；Stage A每15秒摘要，T/错误/恢复保留完整快照和32项RAM事件。
 - 新增生产状态类型编译期回归、旧卡死顺序、1000次切库、保存尾随/超时、日志完整性与字体租约检查。业务代码仍需Stage A真机日志和人工操作确认；P3A/B/C/D保持DEVICE TEST。
+- 扩展私有媒体准备流程：新增KINO 8首及`熱・情`完整双碟29轨，同一NetEase ID配对GD音频和同步歌词；统一歌曲封面135×135中心裁切与曲库封面135×154，修正《約會》构图并对当前《禁色》文件组合加入+1500ms经验偏移。媒体同步不改变固件版本、Queue或Session。
 
 ## V0.8.4 — Owned image stripes, verified frame commits and three-record wheel
 

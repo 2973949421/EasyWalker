@@ -15,8 +15,9 @@ DEST = Path('ADVWalkman/library-covers/folders/AveMujica/cover.adv')
 
 def compile_cover(source):
     picture=ImageOps.exif_transpose(Image.open(source)).convert('RGB')
-    # Keep all five members. Empty space is intentional, not a crop.
-    picture=ImageOps.contain(picture,(135,174),Image.Resampling.LANCZOS)
+    # Library artwork is standardized to the 135x154 canvas proven by the
+    # Cantopop library. Crop only the excess height after fitting the width.
+    picture=ImageOps.fit(picture,(135,154),Image.Resampling.LANCZOS,centering=(.5,.5))
     canvas=picture
     pixels=b''.join(struct.pack('<H',((r>>3)<<11)|((g>>2)<<5)|(b>>3)) for r,g,b in canvas.get_flattened_data())
     return canvas,struct.pack('<4s6H2I',b'LCOV',1,24,canvas.width,canvas.height,1,0,len(pixels),zlib.crc32(pixels))+pixels

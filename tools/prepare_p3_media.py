@@ -79,7 +79,11 @@ def font_sources(latin=False):
     # Keep report-only validators usable on the firmware/toolchain Python.
     # The optional dependency is required only when fonts are regenerated.
     from fontTools.ttLib import TTFont
-    names = ['times.ttf', 'seguisym.ttf'] if latin else ['simkai.ttf', 'msgothic.ttc', 'simsun.ttc', 'seguisym.ttf']
+    # Codepoints above U+00FF share the non-packed face on the device. Put
+    # Times first so Cyrillic uses a proportional text face, then fall back to
+    # the existing CJK/Kana sources. Times has no CJK glyphs, so the established
+    # Chinese/Japanese appearance is unchanged.
+    names = ['times.ttf', 'seguisym.ttf'] if latin else ['times.ttf', 'simkai.ttf', 'msgothic.ttc', 'simsun.ttc', 'seguisym.ttf']
     sources = []
     for name in names:
         path = Path('C:/Windows/Fonts') / name
@@ -163,7 +167,9 @@ def cover_ascii(source: Path, columns: int, rows: int, canvas_size=(120,144)):
     width,height=canvas_size
     if not (0<width<=135 and 0<height<=188):raise ValueError('cover_dimensions')
     canvas = Image.new('RGB', canvas_size, '#080c08')
-    fitted = ImageOps.contain(original, canvas_size, Image.Resampling.LANCZOS)
+    # Device covers have a fixed canvas. Fill it deterministically instead of
+    # inheriting arbitrary source aspect ratios and producing side bars.
+    fitted = ImageOps.fit(original, canvas_size, Image.Resampling.LANCZOS, centering=(.5,.5))
     fitted = ImageEnhance.Contrast(fitted).enhance(1.08).filter(ImageFilter.UnsharpMask(radius=.7,percent=110,threshold=3))
     ox, oy = (width-fitted.width)//2, (height-fitted.height)//2
     original_canvas = canvas.copy()
