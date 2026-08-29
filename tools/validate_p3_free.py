@@ -4,7 +4,7 @@ import re
 import zlib
 from pathlib import Path
 
-VERSION='0.8.4-p3d.renderfix'
+VERSION='0.8.5-p3d.stability-rc'
 
 def evaluate_render(record):
     required=('render_contract','render_pixel_selfcheck','frame_starts','frame_rejects','frame_repairs',
@@ -111,6 +111,10 @@ def current_boots(records):
     if not groups:raise ValueError('No checkpoints from current firmware; history is preserved, not accepted as new evidence')
     return groups
 
+def full_records(records):
+    """Periodic summaries preserve failures, but never stand in for acceptance evidence."""
+    return [record for record in records if record.get('snapshot','full')=='full']
+
 def reboot_evidence(groups):
     ids=sorted(groups)
     for before,after in zip(ids,ids[1:]):
@@ -130,9 +134,14 @@ if __name__=='__main__':
     # No later checkpoint may hide a recorded error from this session.
     groups=current_boots(records)
     current=[r for group in groups.values() for r in group]
-    failed=[r for r in current if evaluate(r)[0]=='FAIL' or evaluate_p3d(r)[0]=='FAIL' or evaluate_wake(r)[0]=='FAIL']
-    record=failed[0] if failed else max(current,key=lambda r:(sum(r.get(k)=='COVERED' for k in ('a_auto','b_auto','c_auto','d_auto')),int(r['boot_id']),int(r['sequence'])))
+    summary_failures=[r for r in current if r.get('snapshot')=='summary' and (r.get('result')=='FAIL' or r.get('failure_reason','none')!='none')]
+    detailed=full_records(current)
+    if not detailed:raise ValueError('No full checkpoint; periodic summary is not acceptance evidence')
+    failed=[r for r in detailed if evaluate(r)[0]=='FAIL' or evaluate_p3d(r)[0]=='FAIL' or evaluate_wake(r)[0]=='FAIL']
+    record=failed[0] if failed else max(detailed,key=lambda r:(sum(r.get(k)=='COVERED' for k in ('a_auto','b_auto','c_auto','d_auto')),int(r['boot_id']),int(r['sequence'])))
     status,details=evaluate(record)
+    if summary_failures:
+        status='FAIL';details+=['summary_recorded_failure:'+summary_failures[0].get('failure_reason','unknown')]
     d_status,d_details=evaluate_p3d(record)
     if d_status=='FAIL':status='FAIL';details+=d_details
     elif status=='READY_FOR_REVIEW' and d_status=='INCOMPLETE':status='INCOMPLETE';details+=d_details

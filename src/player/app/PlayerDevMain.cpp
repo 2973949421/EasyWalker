@@ -36,18 +36,10 @@ FreeSession session;
 #endif
 
 void collectInput() {
-    const uint32_t started=micros();
-    uint64_t previous=input.physicalMask();
-    for(unsigned n=0;n<8;++n){
-        if(n)M5Cardputer.Keyboard.updateKeyList();
-        const auto mask=input.physicalMask();
-        const uint32_t now=millis();
-        const bool allowed=ui.physicalActivity(mask,now);
-        input.capture(mask,now,ui.inputEpoch(),!allowed);
-        if(n&&mask==previous)break;
-        previous=mask;
-        if(micros()-started>=2000)break;
-    }
+    const auto mask=input.physicalMask();
+    const uint32_t now=millis();
+    const bool allowed=ui.physicalActivity(mask,now);
+    input.capture(mask,now,ui.inputEpoch(),!allowed);
 }
 
 void dispatchInput() {
@@ -60,7 +52,11 @@ void dispatchInput() {
 #else
         const auto page=ui.page();
         const bool accepted=action==UiAction::SaveDiagnostics||ui.handleAction(action);
-        if(action==UiAction::SaveDiagnostics)player.requestCheckpoint();
+        if(action==UiAction::SaveDiagnostics){
+            player.requestCheckpoint();
+            const uint32_t ticket=session.requestManualSave(player.checkpointRevision(),ui.settings().store.revision(),millis());
+            ui.notifySavePending(ticket);
+        }
         session.action(action,raw,page,accepted);
 #endif
     }
@@ -136,12 +132,12 @@ void loop() {
     // follow; title animation is capped at 20 fps, without a full framebuffer.
     runtimeDiagnostics.enter(RuntimeStage::Audio);
     uint32_t workAt=micros();player.serviceAudio();uint32_t audioUs=micros()-workAt;runtimeDiagnostics.leave();
-    runtimeDiagnostics.enter(RuntimeStage::Keyboard);M5Cardputer.update();collectInput();dispatchInput();runtimeDiagnostics.leave();
+    runtimeDiagnostics.enter(RuntimeStage::Keyboard);uint32_t inputAt=micros();M5Cardputer.update();collectInput();dispatchInput();uint32_t inputUs=micros()-inputAt;runtimeDiagnostics.leave();
     runtimeDiagnostics.enter(RuntimeStage::Directory);workAt=micros();libraryRuntime.service();const uint32_t libraryUs=micros()-workAt;runtimeDiagnostics.leave();
     // A slow indivisible FS operation must not be followed by another whole
     // input/render burst before the decoder gets its next service.
     if(libraryUs>=6000){runtimeDiagnostics.enter(RuntimeStage::Audio);workAt=micros();player.serviceAudio();audioUs=std::max<uint32_t>(audioUs,micros()-workAt);runtimeDiagnostics.leave();}
-    workAt=micros();runtimeDiagnostics.enter(RuntimeStage::Keyboard);collectInput();dispatchInput();runtimeDiagnostics.leave();
+    inputAt=micros();runtimeDiagnostics.enter(RuntimeStage::Keyboard);collectInput();dispatchInput();inputUs=std::max<uint32_t>(inputUs,micros()-inputAt);runtimeDiagnostics.leave();
     runtimeDiagnostics.enter(RuntimeStage::Settings);
 
 #if defined(P3A_DEVICE_GATE)
@@ -151,7 +147,7 @@ void loop() {
 #endif
     runtimeDiagnostics.leave();
 #if !defined(P3A_DEVICE_GATE)
-    session.recordWork(audioUs,libraryUs,micros()-workAt);
+    session.recordWork(audioUs,libraryUs,inputUs);
 #endif
     if(micros()-workAt>=6000){runtimeDiagnostics.enter(RuntimeStage::Audio);player.serviceAudio();runtimeDiagnostics.leave();}
 
@@ -177,7 +173,7 @@ void loop() {
             runtimeDiagnostics.enter(RuntimeStage::Persistence);player.servicePersistence();runtimeDiagnostics.leave();
         }else{runtimeDiagnostics.enter(RuntimeStage::Ui);ui.service();runtimeDiagnostics.leave();}
         if(micros()-burstAt>=6000)break;
-        runtimeDiagnostics.enter(RuntimeStage::Keyboard);collectInput();dispatchInput();runtimeDiagnostics.leave();
+        inputAt=micros();runtimeDiagnostics.enter(RuntimeStage::Keyboard);collectInput();dispatchInput();inputUs=std::max<uint32_t>(inputUs,micros()-inputAt);runtimeDiagnostics.leave();
 #if !defined(P3A_DEVICE_GATE)
         session.observe(ui,player);
 #endif
@@ -192,7 +188,11 @@ void loop() {
         runtimeDiagnostics.enter(RuntimeStage::Log);session.service(ui,player,burstUs);runtimeDiagnostics.leave();
     }else session.recordBurst(burstUs);
     if(ui.readyToReturn()){
-        if(!returnCheckpointRequested){session.requestManualSave();returnCheckpointRequested=true;}
+        if(!returnCheckpointRequested){
+            player.requestCheckpoint();
+            const uint32_t ticket=session.requestManualSave(player.checkpointRevision(),ui.settings().store.revision(),millis());
+            ui.notifySavePending(ticket);returnCheckpointRequested=true;
+        }
         else if(session.storageIdle()&&!session.manualSavePending())ui.finishLauncherReturn(session.lastSaveOk());
     }else returnCheckpointRequested=false;
 #endif

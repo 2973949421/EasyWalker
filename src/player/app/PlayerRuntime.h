@@ -46,6 +46,8 @@ class PlayerRuntime final {
     bool stateStoreAvailable() const;
     PersistenceResult lastPersistenceResult() const;
     uint32_t stateWriteCount() const;
+    uint32_t checkpointRevision()const{return checkpointRevision_;}
+    uint32_t persistedCheckpointRevision()const{return persistedCheckpointRevision_;}
 
     // Used by the P1 device runner to force a checkpoint before its controlled
     // software restart. The write is still cooperative and must be serviced.
@@ -90,6 +92,7 @@ class PlayerRuntime final {
     uint32_t activeQueueGeneration_ = 0;
     uint32_t lastCheckpointAtMs_ = 0;
     uint32_t stateWriteCount_ = 0;
+    uint32_t checkpointRevision_=0,persistedCheckpointRevision_=0,writingCheckpointRevision_=0;
     PersistenceResult lastPersistenceResult_ = PersistenceResult::NotFound;
 
     PlayerSnapshot previousSnapshot_{};

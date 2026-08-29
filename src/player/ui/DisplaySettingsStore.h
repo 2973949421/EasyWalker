@@ -10,6 +10,8 @@ class DisplaySettingsStore {
     void service(uint32_t now,bool storageIdle);
     bool idle()const{return !phase_&&!dirty_;}
     bool writing()const{return phase_!=0;}
+    uint32_t revision()const{return revision_;}
+    uint32_t savedRevision()const{return savedRevision_;}
     DisplayPreferences value,restored;
     uint32_t writes=0,errors=0,serviceMaxUs=0,invalidSlots=0,openFailures=0;
     bool loaded=false;
@@ -19,7 +21,7 @@ class DisplaySettingsStore {
     void fail(const char* reason);
     fs::File file_;
     uint8_t bytes_[24]{};
-    uint32_t generation_=0,changedAt_=0,revision_=0,writingRevision_=0;
+    uint32_t generation_=0,changedAt_=0,revision_=0,writingRevision_=0,savedRevision_=0;
     uint8_t slot_=0,phase_=0;
     bool dirty_=false;
     const char* error_="none";

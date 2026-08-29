@@ -14,10 +14,21 @@ void FreeSession::begin(){
     started_=lastSaved_=millis();inputCheck_=checkInputEdges();
     if(!inputCheck_)fail("input","edge_selfcheck");
     if(!SD.exists("/ADVWalkman/logs"))SD.mkdir("/ADVWalkman/logs");
-    // Reuse the existing buffer for a bounded tail read; never truncate history.
-    auto previous=SD.open(kLog,"r");if(previous){const size_t n=std::min<size_t>(sizeof(buffer_)-1,previous.size());previous.seek(previous.size()-n);
-        const int got=previous.read(reinterpret_cast<uint8_t*>(buffer_),n);buffer_[got>0?got:0]=0;previous.close();
-        const char* p=buffer_;while((p=std::strstr(p,"boot_id="))){bootId_=std::max(bootId_,uint32_t(std::strtoul(p+8,nullptr,10)+1));p+=8;}}
+    // Stream the history once at boot.  A full snapshot is deliberately much
+    // larger than the one-KiB scratch, so a tail-only search can miss boot_id.
+    auto previous=SD.open(kLog,"r");if(previous){
+        static const char needle[]="boot_id=";uint8_t match=0;bool digits=false;uint32_t value=0;
+        while(previous.available()){
+            const int got=previous.read(reinterpret_cast<uint8_t*>(buffer_),sizeof(buffer_));if(got<=0)break;
+            for(int i=0;i<got;++i){const char ch=buffer_[i];
+                if(digits){if(ch>='0'&&ch<='9')value=value*10+unsigned(ch-'0');
+                    else{bootId_=std::max(bootId_,value+1);digits=false;value=0;match=ch==needle[0]?1:0;}}
+                else if(ch==needle[match]){if(++match==sizeof(needle)-1){digits=true;match=0;}}
+                else match=ch==needle[0]?1:0;
+            }
+        }
+        if(digits)bootId_=std::max(bootId_,value+1);previous.close();
+    }
     auto f=SD.open(kLog,"a");if(f){f.println();f.close();}else fail("logging","open_log");
 }
 void FreeSession::fail(const char* component,const char* reason){
@@ -27,8 +38,8 @@ void FreeSession::fail(const char* component,const char* reason){
     requestSave_=true;
 }
 void FreeSession::action(UiAction action,const RawKeyEvent& raw,UiPage page,bool accepted){
-    events_[eventCount_%12]={millis()-started_,action,page,raw.x,raw.y,accepted,raw.capturedAtMs};++eventCount_;++actions_;
-    if(action==UiAction::SaveDiagnostics){requestSave_=manual_=true;return;}
+    events_[eventCount_%32]={millis()-started_,action,page,raw.x,raw.y,accepted,raw.capturedAtMs};++eventCount_;++actions_;
+    if(action==UiAction::SaveDiagnostics)return;
     if(action==UiAction::ToggleView&&!accepted&&page==UiPage::Player)noLyricsPending_=true;
     if(!accepted)return;
     switch(action){
@@ -146,125 +157,162 @@ void FreeSession::append(const char* fmt,...){
     const int n=std::vsnprintf(buffer_+length_,sizeof(buffer_)-length_,fmt,args);va_end(args);
     if(n<0 || size_t(n)>=sizeof(buffer_)-length_){overflow_=true;return;}length_+=n;
 }
-void FreeSession::prepare(const UiCoordinator& ui,const PlayerRuntime& player){
-    length_=written_=0;overflow_=false;++sequence_;
+void FreeSession::beginSnapshot(const UiCoordinator&,const PlayerRuntime&,bool detailed){
+    length_=written_=0;overflow_=false;++sequence_;streamSection_=0;
+    streamDetailed_=detailed;streamFinalChunk_=false;streamCrc_=~0U;
+}
+
+void FreeSession::prepareNext(const UiCoordinator& ui,const PlayerRuntime& player){
+    length_=written_=0;overflow_=false;streamFinalChunk_=false;
     const auto s=player.snapshot();const auto m=ui.nowPlaying().mediaStatus();const auto& r=ui.nowPlaying().stats();
-    const auto u=ui.stats();const auto library=ui.browser().stats();
+    const auto u=ui.stats();const auto library=ui.browser().stats();const auto& ds=ui.settings();
+    const auto& power=ui.screenPower();const auto& visual=ui.libraryVisual();const auto& wake=ui.wakeStats();
     const bool a=textSeen_&&textOk_&&u.playlistFrames&&u.libraryFrames&&u.differentTrackSelections;
-    const bool b=longestPlaying_>=60000 && volumeEvents_ && playEvents_ && r.titleDraws && r.timeDraws;
+    const bool b=longestPlaying_>=60000&&volumeEvents_&&playEvents_&&r.titleDraws&&r.timeDraws;
     const bool c=lyricsReady_&&coverReady_&&lyricFrames_&&coverFrames_&&deadlineUpdates_&&viewEvents_;
-    const auto& ds=ui.settings();const auto& power=ui.screenPower();const auto& visual=ui.libraryVisual();
     const bool d=visual.coverFrames&&visual.frames&&ds.changes&&ds.store.writes&&power.sleeps&&power.wakes;
-    append("BEGIN sequence=%lu\n",(unsigned long)sequence_);
-    append("render_contract=1\nrender_pixel_selfcheck=%s\nframe_starts=%lu\nframe_cancels=%lu\nframe_rejects=%lu\nframe_repairs=%lu\nframe_failure=%s\n",
-        u.displaySelfFailure?u.displaySelfFailure:"PASS",(unsigned long)r.frameStarts,(unsigned long)r.frameCancels,(unsigned long)r.frameRejects,(unsigned long)r.frameRepairs,r.frameFailure);
-    append("frame_id=%lu\nframe_generation=%lu\nframe_pending=%u\nframe_expected_rows=%u\nframe_submitted_rows=%u\nfull_frames=%lu\npatch_frames=%lu\nfallback_frames=%lu\n",
-        (unsigned long)m.frameId,(unsigned long)m.generation,ui.nowPlaying().framePending(),ui.nowPlaying().expectedRows(),ui.nowPlaying().submittedRows(),
-        (unsigned long)m.frames,(unsigned long)m.patchFrames,(unsigned long)m.fallbackFrames);
-    append("frame_start_ms=%lu\nframe_first_ms=%lu\nframe_complete_ms=%lu\nstripe_submit_max_us=%lu\nstripe_draw_max_us=%lu\nstripe_wait_wall_max_us=%lu\nstripe_waits=%lu\n",
-        (unsigned long)r.frameStartedAt,(unsigned long)r.frameFirstAt,(unsigned long)r.frameCompletedAt,(unsigned long)r.submitMaxUs,
-        (unsigned long)r.drawMaxUs,(unsigned long)r.bandWaitWallMaxUs,(unsigned long)r.bandWaits);
-    const char* scenes[]={"lyrics","cover","playlist","library","settings"};
-    for(unsigned i=0;i<5;++i)append("sleep_%s=%u\nwake_%s=%u\n",scenes[i],ui.sleepsOn(i),scenes[i],ui.wakesOn(i));
-    append("pcm_peak_track=%s\nlyric_peak_track=%s\nlyric_peak_generation=%lu\nlyric_peak_due_ms=%lu\nlyric_peak_prepared_ms=%lu\nlyric_peak_submitted_ms=%lu\nmedia_peak_work=%u\n",pcmPeakTrack_,lyricPeakTrack_,(unsigned long)lyricPeakGeneration_,(unsigned long)lyricPeakDue_,(unsigned long)lyricPeakPrepared_,(unsigned long)lyricPeakSubmitted_,m.peakWork);
-    append("warm_returns=%lu\nwarm_return_max_ms=%lu\nselection_feedback_max_ms=%lu\n",(unsigned long)u.warmReturns,(unsigned long)u.warmReturnMaxMs,(unsigned long)u.selectionFeedbackMaxMs);
-    append("input_accept_max_ms=%lu\ninput_queue_overflow=%lu\ninput_stale_events=%lu\nview_pending=%u\nview_coalesced=%lu\nview_warm_max_ms=%lu\nview_cold_max_ms=%lu\nview_failures=%lu\nlibrary_text_evidence=synthetic_layout_not_real_library\n",
-        (unsigned long)ui.inputLatencyMaxMs(),(unsigned long)ui.inputOverflow(),(unsigned long)ui.inputStale(),m.viewPending,
-        (unsigned long)m.viewCoalesced,(unsigned long)m.viewWarmMaxMs,(unsigned long)m.viewColdMaxMs,(unsigned long)m.viewFailures);
-    const char* storagePhases[]={"idle","queue_path_prepare","open_target","write_header","write_payload","close_target","open_verify","read_verify","check_size","close_resize","create_target","flush_target","read_header","queue_path_fetch","publish","cleanup_close"};
-    append("view_requested_at_ms=%lu\nview_ready_at_ms=%lu\nview_first_stripe_at_ms=%lu\nview_completed_at_ms=%lu\n",(unsigned long)m.viewRequestedMs,(unsigned long)m.viewReadyMs,(unsigned long)m.viewFirstStripeMs,(unsigned long)m.viewCompletedMs);
-    append("view_warm_completed=%lu\nview_cold_completed=%lu\nview_failure=%s\naudio_source_read_max_us=%lu\nmedia_plus_events_bytes=%lu\n",(unsigned long)m.viewWarmCompleted,(unsigned long)m.viewColdCompleted,m.viewFailure,(unsigned long)player.sourceReadMaxUs(),(unsigned long)p3MemoryReport[1]);
-    for(unsigned i=1;i<16;++i)append("store_%s_max_us=%lu\n",storagePhases[i],(unsigned long)player.persistencePhasePeakUs(i));
-    append("tab_playing=%lu\ntab_paused=%lu\ntab_before_ms=%lu\ntab_after_ms=%lu\ntab_state=%u\n",(unsigned long)u.tabPlaying,(unsigned long)u.tabPaused,(unsigned long)u.tabBeforeMs,(unsigned long)u.tabAfterMs,u.tabState);
-    append("tab_events=%lu\ntab_state_errors=%lu\nwindow_builds=%lu\nhighlight_updates=%lu\npage_first_frame_max_ms=%lu\ntransport_service_max_us=%lu\npersistence_service_max_us=%lu\n",
-        (unsigned long)u.tabEvents,(unsigned long)u.tabStateErrors,(unsigned long)u.windowBuilds,(unsigned long)u.highlightUpdates,(unsigned long)u.firstFrameMaxMs,
-        (unsigned long)player.transportServiceMaxUs(),(unsigned long)player.persistenceServiceMaxUs());
-    append("lyric_due_ms=%lu\nlyric_prepared_ms=%lu\nlyric_submitted_ms=%lu\ncover_opens=%lu\nfont_opens=%lu\nfont_index_page_hits=%lu\nfont_first_draw_cp=%lu\nfont_first_draw_face=%u\npcm_peak_at_ms=%lu\npcm_peak_generation=%lu\npcm_peak_page=%s\n",
-        (unsigned long)m.lyricDueMs,(unsigned long)m.lyricPreparedMs,(unsigned long)m.lyricSubmittedMs,(unsigned long)m.coverOpens,
-        (unsigned long)ui.fonts().stats().opens,(unsigned long)ui.fonts().stats().indexPageHits,(unsigned long)ui.fonts().stats().firstDrawCodepoint,ui.fonts().stats().firstDrawFont,
-        (unsigned long)pcmPeakAt_,(unsigned long)pcmPeakGeneration_,uiPageName(pcmPeakPage_));
-    const char* components[]={"lyrics","cover","font","navigation"};
-    for(unsigned i=0;i<4;++i){const auto& e=mediaErrors_[i];
-        append("%s_failure=%s\n%s_failure_path=%s\n%s_failure_info=%lu,%lu,%lu,%s,%d,%ld,%ld\n",components[i],e.count?e.failure.reason:"none",
-            components[i],e.count?e.path:"NA",components[i],(unsigned long)e.count,(unsigned long)e.generation,(unsigned long)e.at,
-            e.failure.operation,e.failure.systemError,(long)e.failure.expected,(long)e.failure.actual);
+    const char* result=failure_[0]?"FAIL":a&&b&&c&&d?"READY_FOR_REVIEW":"INCOMPLETE";
+    if(!streamDetailed_){
+        switch(streamSection_++){
+            case 0:
+                append("BEGIN sequence=%lu\nsnapshot=summary\nschema=2\nversion=%s\nmode=free\nboot_id=%lu\nelapsed_ms=%lu\nresult=%s\nfailure_component=%s\nfailure_reason=%s\n",
+                    (unsigned long)sequence_,ADV_WALKMAN_VERSION,(unsigned long)bootId_,(unsigned long)(millis()-started_),result,
+                    component_[0]?component_:"none",failure_[0]?failure_:"none");
+                append("page=%s\nplayer_state=%s\nposition_ms=%lu\naudio_errors=%lu\nbackpressure=%lu\npcm_gap_max_us=%lu\npcm_buffers=%lu\n",
+                    uiPageName(ui.page()),playerStateName(s.state),(unsigned long)s.positionMs,(unsigned long)audioErrors_,
+                    (unsigned long)backpressure_,(unsigned long)pcmGapMaxUs_,(unsigned long)s.pcmBuffersSinceReset);return;
+            case 1:
+                append("library_requests=%lu\nlibrary_stalls=%lu\nlibrary_recoveries=%lu\nlibrary_failures=%lu\nlibrary_stale_rejects=%lu\nlibrary_transaction_state=%u\n",
+                    (unsigned long)u.libraryRequests,(unsigned long)u.libraryStalls,(unsigned long)u.libraryRecoveries,
+                    (unsigned long)u.libraryFailures,(unsigned long)u.libraryStaleRejects,unsigned(visual.transaction().state()));
+                append("save_requested_ticket=%lu\nsave_completed_ticket=%lu\nsave_status=%u\ninput_accept_max_ms=%lu\nwarm_return_max_ms=%lu\nview_warm_max_ms=%lu\nselection_feedback_max_ms=%lu\nminimum_heap=%lu\n",
+                    (unsigned long)save_.requested(),(unsigned long)save_.completed(),unsigned(save_.status()),
+                    (unsigned long)ui.inputLatencyMaxMs(),(unsigned long)u.warmReturnMaxMs,(unsigned long)m.viewWarmMaxMs,
+                    (unsigned long)u.selectionFeedbackMaxMs,(unsigned long)minimumHeap_);return;
+            default:
+                streamFinalChunk_=true;append("END sequence=%lu crc=%08lx\n",(unsigned long)sequence_,(unsigned long)(streamCrc_^~0U));return;
+        }
     }
-    append("boot_id=%lu\nmanual_checkpoint=%u\nstate_writes=%lu\nrestored_track=%s\nrestored_position_ms=%lu\nrestored_view=%u\nstartup_paused=%u\nstartup_silent=%u\n",(unsigned long)bootId_,manual_,(unsigned long)player.stateWriteCount(),restoredTrack_,(unsigned long)restoredPosition_,restoredView_,startupPaused_,startupSilent_);
-    append("startup_observed_ms=%lu\nmuted_media_selfcheck=current_resource_or_no_track_cancel\n",(unsigned long)startupObservedMs_);
-    append("effective_view=%u\nheader_visible=%u\nno_lyrics_view_noop=%lu\npreference_track_transitions=%lu\nui_latin_font=Times_New_Roman\nui_cjk_font=KaiTi\nlatin_lyric_px=14\nfont_coverage_bits=4\n",unsigned(m.view),ui.nowPlaying().model().headerVisible,(unsigned long)noLyricsView_,(unsigned long)preferenceTransitions_);
-    append("audio_service_max_us=%lu\nlibrary_service_max_us=%lu\ninput_work_max_us=%lu\nfont_service_max_us=%lu\nmedia_service_max_us=%lu\n",(unsigned long)audioMax_,(unsigned long)libraryMax_,(unsigned long)inputMax_,(unsigned long)ui.fonts().stats().serviceMaxUs,(unsigned long)m.serviceMaxUs);
-    append("schema=1\nversion=%s\nmode=free\nresult=%s\nhuman_review=PENDING\na_auto=%s\nb_auto=%s\nc_auto=%s\nd_auto=%s\n",ADV_WALKMAN_VERSION,failure_[0]?"FAIL":a&&b&&c&&d?"READY_FOR_REVIEW":"INCOMPLETE",a?"COVERED":"INCOMPLETE",b?"COVERED":"INCOMPLETE",c?"COVERED":"INCOMPLETE",d?"COVERED":"INCOMPLETE");
-    append("brightness=%u\nplayer_timeout_ms=%lu\nother_timeout_ms=%lu\ndisplay_settings_loaded=%u\nrestored_brightness=%u\nrestored_player_timeout_ms=%lu\nrestored_other_timeout_ms=%lu\nsettings_changes=%lu\nsettings_writes=%lu\nsettings_errors=%lu\nsettings_saved=%u\nsettings_service_max_us=%lu\n",
-        ds.store.value.brightness,(unsigned long)displayTimeoutMs(ds.store.value.playerTimeout),(unsigned long)displayTimeoutMs(ds.store.value.otherTimeout),ds.store.loaded,ds.store.restored.brightness,
-        (unsigned long)displayTimeoutMs(ds.store.restored.playerTimeout),(unsigned long)displayTimeoutMs(ds.store.restored.otherTimeout),(unsigned long)ds.changes,(unsigned long)ds.store.writes,(unsigned long)ds.store.errors,ui.displaySettingsSaved(),(unsigned long)ds.store.serviceMaxUs);
-    append("screen_asleep=%u\nwake_swallowing=%u\nscreen_sleeps=%lu\nscreen_wakes=%lu\nlibrary_cover_frames=%lu\nvinyl_frames=%lu\nlibrary_cover_state=%u\nlibrary_cover_errors=%lu\nlibrary_cover_service_max_us=%lu\nlauncher_requests=%lu\nlauncher_errors=%lu\nlauncher_error=%s\n",
-        power.asleep(),power.swallowing(),(unsigned long)power.sleeps,(unsigned long)power.wakes,(unsigned long)visual.coverFrames,(unsigned long)visual.frames,unsigned(visual.cover.state()),(unsigned long)visual.cover.errors,(unsigned long)visual.cover.serviceMaxUs,(unsigned long)ds.returnRequests,(unsigned long)ds.returnErrors,ds.returnError());
-    const auto& wake=ui.wakeStats();
-    append("metadata_fallback_cause=%u\n",ui.metadataFallbackCause());
-    append("previous_phase_valid=%u\nwake_resume_pcm=%lu\nwake_unfinished_count=%lu\nmetadata_fallbacks=%lu\n",
-        runtimeDiagnostics.previousValid,(unsigned long)wake.pcm,(unsigned long)ui.unfinishedWakes(),(unsigned long)ui.metadataFallbacks());
-    append("reset_reason=%lu\nprevious_phase=%lu\nprevious_phase_ms=%lu\nspeaker_distortion=DEFERRED\n",
-        (unsigned long)runtimeDiagnostics.resetReason,(unsigned long)runtimeDiagnostics.previousPhase,(unsigned long)runtimeDiagnostics.previousMs);
-    append("wake_captured_ms=%lu\nwake_backlight_ms=%lu\nwake_resume_ms=%lu\nwake_first_frame_ms=%lu\nwake_unlock_ms=%lu\nwake_resume_position_ms=%lu\nwake_complete=%s\n",
-        (unsigned long)wake.captured,(unsigned long)wake.backlight,(unsigned long)wake.resume,(unsigned long)wake.firstFrame,
-        (unsigned long)wake.unlocked,(unsigned long)wake.position,
-        !power.wakes?"NA":wake.firstFrame&&wake.unlocked?"YES":"PENDING");
-    append("heap_largest_block=%lu\n",(unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT));
-    append("runtime_peaks_us=%lu,%lu,%lu,%lu,%lu,%lu,%lu\n",
-        (unsigned long)runtimeDiagnostics.maxima[1],(unsigned long)runtimeDiagnostics.maxima[2],
-        (unsigned long)runtimeDiagnostics.maxima[3],(unsigned long)runtimeDiagnostics.maxima[4],
-        (unsigned long)runtimeDiagnostics.maxima[5],(unsigned long)runtimeDiagnostics.maxima[6],
-        (unsigned long)runtimeDiagnostics.maxima[7]);
-    append("wake_mask_high=%lu\nwake_mask_low=%lu\nwake_suppressed_actions=%lu\nsettings_invalid_slots=%lu\nsettings_open_failures=%lu\n",
-        (unsigned long)(power.lastWakeMask>>32),(unsigned long)power.lastWakeMask,(unsigned long)ui.suppressedActions(),(unsigned long)ds.store.invalidSlots,(unsigned long)ds.store.openFailures);
-    append("nav_state=%u\nnav_generation=%lu\nnav_target=%s\nnav_error=%s\nnav_errors=%lu\npage_frame_complete=%u\nplaylist_frames=%lu\nlibrary_frames=%lu\ntrack_selections=%lu\ndifferent_track_selections=%lu\nqueue_count=%u\nselected_queue_count=%lu\ncurrent_index=%u\ntime_font_px=14\n",
-        unsigned(u.navigationState),(unsigned long)u.navigationGeneration,ui.navigationTarget(),ui.navigationError()[0]?ui.navigationError():"none",(unsigned long)u.navigationErrors,u.pageFirstFrameComplete,
-        (unsigned long)u.playlistFrames,(unsigned long)u.libraryFrames,(unsigned long)u.trackSelections,(unsigned long)u.differentTrackSelections,unsigned(s.queueCount),(unsigned long)u.lastQueueCount,unsigned(s.currentIndex));
-    append("browser_path=%s\nbrowser_state=%u\nbrowser_error=%u\nlast_browser_error=%lu\nscanned_entries=%lu\nscratch_allocation_failures=%lu\nlargest_block_at_nav_error=%lu\nbrowser_prepare_max_us=%lu\nbrowser_draw_max_us=%lu\nscan_max_us=%lu\nentry_read_max_us=%lu\n",
-        ui.browser().currentPath(),unsigned(ui.browser().state()),unsigned(ui.browser().error()),(unsigned long)u.lastLibraryError,(unsigned long)library.scannedEntries,(unsigned long)library.scratchAllocationFailures,
-        (unsigned long)u.largestFreeBlock,(unsigned long)u.prepareMaxUs,(unsigned long)u.renderMaxUs,(unsigned long)library.scanMaxUs,(unsigned long)library.entryReadMaxUs);
-    // Independent evidence survives a prior self-check/navigation failure.
-    append("audio_limits_ok=%u\nmedia_limits_ok=%u\n",!audioErrors_&&!backpressure_&&pcmGapMaxUs_<=70000,presentMaxUs_<=100000&&lateMaxMs_<=200);
-    append("navigation_work_max_us=%lu\n",(unsigned long)u.navigationMaxUs);
-    // track is already the media model's path; do not duplicate up to 511
-    // bytes per checkpoint. Keep the explicit reference and generation.
-    append("media_track_ref=track\nmedia_generation=%lu\nmedia_active=%u\nfont_io_errors=%lu\nfont_draw_misses=%lu\n",(unsigned long)m.generation,ui.nowPlaying().model().active,(unsigned long)ui.fonts().stats().ioErrors,(unsigned long)ui.fonts().stats().drawMisses);
-    append("coverage_scope=free_main_path\nnot_exercised=playing_seek;manual_reboot_requires_host_comparison\ndisplay_selfchecks=%u\ndisplay_self_failure=%s\n",ui.stats().displaySelfChecks,ui.stats().displaySelfFailure?ui.stats().displaySelfFailure:"none");
-    append("resource_expected=%ld\nresource_actual=%ld\nrepeat_raw=%u\nshuffle_raw=%u\n",(long)resourceExpected_,(long)resourceActual_,unsigned(s.repeatMode),s.shuffleEnabled);
-    append("speaker_volume_raw=%u\nspeaker_volume_cap=%u\nheap_free=%lu\n",player.rawSpeakerVolume(),VolumePolicy::maximumRaw,(unsigned long)ESP.getFreeHeap());
-    append("lyric_font_px=%u\nlyric_columns=%u\nadjacent_preview=0\n",unsigned(MediaLayout::cell),unsigned(MediaLayout::columns));
-    append("failure_component=%s\nfailure_reason=%s\nresource_path=%s\nresource_operation=%s\nresource_errno=%d\n",component_[0]?component_:"none",failure_[0]?failure_:"none",resourcePath_[0]?resourcePath_:"NA",resourceOperation_[0]?resourceOperation_:"NA",resourceErrno_);
-    append("elapsed_ms=%lu\ntrack=%s\npage=%s\nplayer_state=%s\nposition_ms=%lu\nsample_rate=%lu\nvolume=%u\npreferred_view=%u\n",(unsigned long)(millis()-started_),track_,uiPageName(ui.page()),playerStateName(s.state),(unsigned long)s.positionMs,(unsigned long)s.sampleRateHz,player.volume(),player.preferredNowPlayingView());
-    append("input_selfcheck=%u\nactions=%lu\nnav_mask=%lu\nvolume_events=%lu\nplay_events=%lu\nview_events=%lu\nlibrary_text_seen=%u\nlibrary_text_ok=%u\nlibrary_width_px=%lu\n",inputCheck_,(unsigned long)actions_,(unsigned long)nav_,(unsigned long)volumeEvents_,(unsigned long)playEvents_,(unsigned long)viewEvents_,textSeen_,textOk_,(unsigned long)libraryWidth_);
-    append("longest_playing_ms=%lu\naudio_errors=%lu\nbackpressure=%lu\npcm_gap_max_us=%lu\npcm_buffers=%lu\n",(unsigned long)longestPlaying_,(unsigned long)audioErrors_,(unsigned long)backpressure_,(unsigned long)pcmGapMaxUs_,(unsigned long)s.pcmBuffersSinceReset);
-    append("lyrics_state=%u\ncover_state=%u\nlyrics_frames=%lu\ncover_frames=%lu\nlyric_deadline_updates=%lu\nprepare_max_us=%lu\npresent_max_us=%lu\nlyric_late_max_ms=%lu\nresource_bytes=%lu\n",unsigned(m.lyrics),unsigned(m.cover),(unsigned long)lyricFrames_,(unsigned long)coverFrames_,(unsigned long)deadlineUpdates_,(unsigned long)prepareMaxUs_,(unsigned long)presentMaxUs_,(unsigned long)lateMaxMs_,(unsigned long)m.reads);
-    append("overlay_patches=%lu\nrender_max_us=%lu\nui_burst_max_us=%lu\nlog_write_max_us=%lu\nminimum_heap=%lu\nmedia_budget_bytes=%u\n",(unsigned long)r.overlayPatches,(unsigned long)r.renderMaxUs,(unsigned long)uiBurstMaxUs_,(unsigned long)writeMaxUs_,(unsigned long)minimumHeap_,unsigned(kP3DMediaBudgetBytes));
-    const uint32_t first=eventCount_>12?eventCount_-12:0;
-    for(uint32_t i=first;i<eventCount_;++i){const auto& e=events_[i%12];append("event_%lu=%lu,%s,%s,%d,%d,%u,captured_abs_ms:%lu\n",(unsigned long)i,(unsigned long)e.ms,uiPageName(e.page),uiActionName(e.action),e.x,e.y,e.accepted,(unsigned long)e.captured);}
-    const uint32_t crc=mediaCrc(~0U,reinterpret_cast<const uint8_t*>(buffer_),length_)^~0U;
-    append("END sequence=%lu crc=%08lx\n",(unsigned long)sequence_,(unsigned long)crc);
+    switch(streamSection_++){
+        case 0:
+            append("BEGIN sequence=%lu\nsnapshot=full\nschema=2\nversion=%s\nmode=free\nresult=%s\nhuman_review=PENDING\nboot_id=%lu\nmanual_checkpoint=%u\na_auto=%s\nb_auto=%s\nc_auto=%s\nd_auto=%s\n",
+                (unsigned long)sequence_,ADV_WALKMAN_VERSION,result,(unsigned long)bootId_,writingManual_,a?"COVERED":"INCOMPLETE",b?"COVERED":"INCOMPLETE",c?"COVERED":"INCOMPLETE",d?"COVERED":"INCOMPLETE");return;
+        case 1:
+            append("render_contract=1\nrender_pixel_selfcheck=%s\nframe_starts=%lu\nframe_cancels=%lu\nframe_rejects=%lu\nframe_repairs=%lu\nframe_failure=%s\nframe_id=%lu\nframe_generation=%lu\nframe_pending=%u\nframe_expected_rows=%u\nframe_submitted_rows=%u\nfull_frames=%lu\npatch_frames=%lu\nfallback_frames=%lu\nframe_start_ms=%lu\nframe_first_ms=%lu\nframe_complete_ms=%lu\n",
+                u.displaySelfFailure?u.displaySelfFailure:"PASS",(unsigned long)r.frameStarts,(unsigned long)r.frameCancels,(unsigned long)r.frameRejects,(unsigned long)r.frameRepairs,r.frameFailure,
+                (unsigned long)m.frameId,(unsigned long)m.generation,ui.nowPlaying().framePending(),ui.nowPlaying().expectedRows(),ui.nowPlaying().submittedRows(),
+                (unsigned long)m.frames,(unsigned long)m.patchFrames,(unsigned long)m.fallbackFrames,(unsigned long)r.frameStartedAt,(unsigned long)r.frameFirstAt,(unsigned long)r.frameCompletedAt);return;
+        case 2:
+            append("input_accept_max_ms=%lu\ninput_queue_overflow=%lu\ninput_stale_events=%lu\nwarm_returns=%lu\nwarm_return_max_ms=%lu\nselection_feedback_max_ms=%lu\npage_first_frame_max_ms=%lu\nview_pending=%u\nview_coalesced=%lu\nview_warm_max_ms=%lu\nview_cold_max_ms=%lu\nview_warm_completed=%lu\nview_cold_completed=%lu\nview_failures=%lu\nview_failure=%s\ntab_events=%lu\ntab_state_errors=%lu\ntab_playing=%lu\ntab_paused=%lu\n",
+                (unsigned long)ui.inputLatencyMaxMs(),(unsigned long)ui.inputOverflow(),(unsigned long)ui.inputStale(),(unsigned long)u.warmReturns,
+                (unsigned long)u.warmReturnMaxMs,(unsigned long)u.selectionFeedbackMaxMs,(unsigned long)u.firstFrameMaxMs,m.viewPending,
+                (unsigned long)m.viewCoalesced,(unsigned long)m.viewWarmMaxMs,(unsigned long)m.viewColdMaxMs,(unsigned long)m.viewWarmCompleted,
+                (unsigned long)m.viewColdCompleted,(unsigned long)m.viewFailures,m.viewFailure,(unsigned long)u.tabEvents,(unsigned long)u.tabStateErrors,
+                (unsigned long)u.tabPlaying,(unsigned long)u.tabPaused);return;
+        case 3:
+            append("library_requests=%lu\nlibrary_stalls=%lu\nlibrary_recoveries=%lu\nlibrary_failures=%lu\nlibrary_stale_rejects=%lu\nlibrary_transaction_state=%u\nlibrary_cover_validation_hits=%lu\nlibrary_cover_stale_rejects=%lu\nlibrary_cover_frames=%lu\nvinyl_frames=%lu\nlibrary_cover_state=%u\nlibrary_cover_errors=%lu\nlibrary_cover_service_max_us=%lu\nwindow_builds=%lu\nhighlight_updates=%lu\nplaylist_frames=%lu\nlibrary_frames=%lu\ntrack_selections=%lu\ndifferent_track_selections=%lu\n",
+                (unsigned long)u.libraryRequests,(unsigned long)u.libraryStalls,(unsigned long)u.libraryRecoveries,(unsigned long)u.libraryFailures,
+                (unsigned long)u.libraryStaleRejects,unsigned(visual.transaction().state()),(unsigned long)visual.cover.validationHits,
+                (unsigned long)visual.cover.staleRejects,(unsigned long)visual.coverFrames,(unsigned long)visual.frames,unsigned(visual.cover.state()),
+                (unsigned long)visual.cover.errors,(unsigned long)visual.cover.serviceMaxUs,(unsigned long)u.windowBuilds,(unsigned long)u.highlightUpdates,
+                (unsigned long)u.playlistFrames,(unsigned long)u.libraryFrames,(unsigned long)u.trackSelections,(unsigned long)u.differentTrackSelections);return;
+        case 4:
+            append("longest_playing_ms=%lu\naudio_errors=%lu\nbackpressure=%lu\npcm_gap_max_us=%lu\npcm_buffers=%lu\naudio_source_read_max_us=%lu\naudio_service_max_us=%lu\ntransport_service_max_us=%lu\npersistence_service_max_us=%lu\nlyrics_state=%u\ncover_state=%u\nlyrics_frames=%lu\ncover_frames=%lu\nlyric_deadline_updates=%lu\nprepare_max_us=%lu\npresent_max_us=%lu\nlyric_late_max_ms=%lu\nresource_bytes=%lu\nmedia_service_max_us=%lu\n",
+                (unsigned long)longestPlaying_,(unsigned long)audioErrors_,(unsigned long)backpressure_,(unsigned long)pcmGapMaxUs_,
+                (unsigned long)s.pcmBuffersSinceReset,(unsigned long)player.sourceReadMaxUs(),(unsigned long)audioMax_,
+                (unsigned long)player.transportServiceMaxUs(),(unsigned long)player.persistenceServiceMaxUs(),unsigned(m.lyrics),unsigned(m.cover),
+                (unsigned long)lyricFrames_,(unsigned long)coverFrames_,(unsigned long)deadlineUpdates_,(unsigned long)prepareMaxUs_,
+                (unsigned long)presentMaxUs_,(unsigned long)lateMaxMs_,(unsigned long)m.reads,(unsigned long)m.serviceMaxUs);return;
+        case 5:
+            append("nav_state=%u\nnav_generation=%lu\nnav_errors=%lu\nnav_error=%s\npage_frame_complete=%u\nqueue_count=%u\nselected_queue_count=%lu\ncurrent_index=%u\ntime_font_px=14\nbrowser_state=%u\nbrowser_error=%u\nlast_browser_error=%lu\nscanned_entries=%lu\nscratch_allocation_failures=%lu\nbrowser_prepare_max_us=%lu\nbrowser_draw_max_us=%lu\nscan_max_us=%lu\nentry_read_max_us=%lu\nnavigation_work_max_us=%lu\n",
+                unsigned(u.navigationState),(unsigned long)u.navigationGeneration,(unsigned long)u.navigationErrors,ui.navigationError()[0]?ui.navigationError():"none",
+                u.pageFirstFrameComplete,unsigned(s.queueCount),(unsigned long)u.lastQueueCount,unsigned(s.currentIndex),unsigned(ui.browser().state()),unsigned(ui.browser().error()),
+                (unsigned long)u.lastLibraryError,(unsigned long)library.scannedEntries,(unsigned long)library.scratchAllocationFailures,(unsigned long)u.prepareMaxUs,
+                (unsigned long)u.renderMaxUs,(unsigned long)library.scanMaxUs,(unsigned long)library.entryReadMaxUs,(unsigned long)u.navigationMaxUs);return;
+        case 6:
+            append("brightness=%u\nplayer_timeout_ms=%lu\nother_timeout_ms=%lu\ndisplay_settings_loaded=%u\nrestored_brightness=%u\nrestored_player_timeout_ms=%lu\nrestored_other_timeout_ms=%lu\nsettings_changes=%lu\nsettings_writes=%lu\nsettings_errors=%lu\nsettings_saved=%u\nsettings_service_max_us=%lu\nscreen_asleep=%u\nwake_swallowing=%u\nscreen_sleeps=%lu\nscreen_wakes=%lu\nlauncher_requests=%lu\nlauncher_errors=%lu\nlauncher_error=%s\n",
+                ds.store.value.brightness,(unsigned long)displayTimeoutMs(ds.store.value.playerTimeout),(unsigned long)displayTimeoutMs(ds.store.value.otherTimeout),ds.store.loaded,
+                ds.store.restored.brightness,(unsigned long)displayTimeoutMs(ds.store.restored.playerTimeout),(unsigned long)displayTimeoutMs(ds.store.restored.otherTimeout),
+                (unsigned long)ds.changes,(unsigned long)ds.store.writes,(unsigned long)ds.store.errors,ui.displaySettingsSaved(),(unsigned long)ds.store.serviceMaxUs,
+                power.asleep(),power.swallowing(),(unsigned long)power.sleeps,(unsigned long)power.wakes,(unsigned long)ds.returnRequests,(unsigned long)ds.returnErrors,ds.returnError());return;
+        case 7:{
+            const char* scenes[]={"lyrics","cover","playlist","library","settings"};
+            append("reset_reason=%lu\nprevious_phase_valid=%u\nprevious_phase=%lu\nprevious_phase_ms=%lu\nwake_resume_pcm=%lu\nwake_unfinished_count=%lu\nwake_captured_ms=%lu\nwake_backlight_ms=%lu\nwake_resume_ms=%lu\nwake_first_frame_ms=%lu\nwake_unlock_ms=%lu\nwake_resume_position_ms=%lu\nwake_complete=%s\n",
+                (unsigned long)runtimeDiagnostics.resetReason,runtimeDiagnostics.previousValid,(unsigned long)runtimeDiagnostics.previousPhase,(unsigned long)runtimeDiagnostics.previousMs,
+                (unsigned long)wake.pcm,(unsigned long)ui.unfinishedWakes(),(unsigned long)wake.captured,(unsigned long)wake.backlight,(unsigned long)wake.resume,
+                (unsigned long)wake.firstFrame,(unsigned long)wake.unlocked,(unsigned long)wake.position,!power.wakes?"NA":wake.firstFrame&&wake.unlocked?"YES":"PENDING");
+            for(unsigned i=0;i<5;++i)append("sleep_%s=%u\nwake_%s=%u\n",scenes[i],ui.sleepsOn(i),scenes[i],ui.wakesOn(i));return;}
+        case 8:{
+            static const char* phases[]={"idle","queue_path_prepare","open_target","write_header","write_payload","close_target","open_verify","read_verify","check_size","close_resize","create_target","flush_target","read_header","queue_path_fetch","publish","cleanup_close"};
+            append("save_requested_ticket=%lu\nsave_active_ticket=%lu\nsave_completed_ticket=%lu\nsave_status=%u\nstate_writes=%lu\n",
+                (unsigned long)save_.requested(),(unsigned long)save_.activeThrough(),(unsigned long)save_.completed(),unsigned(save_.status()),(unsigned long)player.stateWriteCount());
+            for(unsigned i=1;i<16;++i)append("store_%s_max_us=%lu\n",phases[i],(unsigned long)player.persistencePhasePeakUs(i));return;}
+        case 9:
+            append("failure_component=%s\nfailure_reason=%s\nresource_operation=%s\nresource_errno=%d\nresource_expected=%ld\nresource_actual=%ld\nlyrics_failure=%s\ncover_failure=%s\nfont_failure=%s\nnavigation_failure=%s\ndisplay_selfchecks=%u\ndisplay_self_failure=%s\nfont_io_errors=%lu\nfont_draw_misses=%lu\nmetadata_fallbacks=%lu\nmetadata_fallback_cause=%u\n",
+                component_[0]?component_:"none",failure_[0]?failure_:"none",resourceOperation_[0]?resourceOperation_:"NA",resourceErrno_,(long)resourceExpected_,(long)resourceActual_,
+                mediaErrors_[0].count?mediaErrors_[0].failure.reason:"none",mediaErrors_[1].count?mediaErrors_[1].failure.reason:"none",
+                mediaErrors_[2].count?mediaErrors_[2].failure.reason:"none",mediaErrors_[3].count?mediaErrors_[3].failure.reason:"none",
+                u.displaySelfChecks,u.displaySelfFailure?u.displaySelfFailure:"none",(unsigned long)ui.fonts().stats().ioErrors,
+                (unsigned long)ui.fonts().stats().drawMisses,(unsigned long)ui.metadataFallbacks(),ui.metadataFallbackCause());return;
+        case 10:
+            append("elapsed_ms=%lu\npage=%s\nplayer_state=%s\nposition_ms=%lu\nsample_rate=%lu\nvolume=%u\npreferred_view=%u\neffective_view=%u\nheader_visible=%u\nrepeat_raw=%u\nshuffle_raw=%u\nspeaker_volume_raw=%u\nspeaker_volume_cap=%u\nminimum_heap=%lu\nheap_free=%lu\nheap_largest_block=%lu\nmedia_budget_bytes=%u\nmedia_plus_events_bytes=%lu\ninput_selfcheck=%u\nactions=%lu\nnav_mask=%lu\nvolume_events=%lu\nplay_events=%lu\nview_events=%lu\nlibrary_text_seen=%u\nlibrary_text_ok=%u\nno_lyrics_view_noop=%lu\npreference_track_transitions=%lu\ncoverage_scope=free_main_path\nnot_exercised=playing_seek;manual_reboot_requires_host_comparison\nspeaker_distortion=DEFERRED\n",
+                (unsigned long)(millis()-started_),uiPageName(ui.page()),playerStateName(s.state),(unsigned long)s.positionMs,(unsigned long)s.sampleRateHz,player.volume(),player.preferredNowPlayingView(),unsigned(m.view),
+                ui.nowPlaying().model().headerVisible,unsigned(s.repeatMode),s.shuffleEnabled,player.rawSpeakerVolume(),VolumePolicy::maximumRaw,(unsigned long)minimumHeap_,(unsigned long)ESP.getFreeHeap(),
+                (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT),unsigned(kP3DMediaBudgetBytes),(unsigned long)p3MemoryReport[1],inputCheck_,(unsigned long)actions_,(unsigned long)nav_,
+                (unsigned long)volumeEvents_,(unsigned long)playEvents_,(unsigned long)viewEvents_,textSeen_,textOk_,(unsigned long)noLyricsView_,(unsigned long)preferenceTransitions_);return;
+        case 11:
+            append("media_track_ref=track\nmedia_generation=%lu\nmedia_active=%u\n",
+                (unsigned long)m.generation,ui.nowPlaying().model().active);
+            append("track=%s\n",track_);return;
+        case 12:
+            append("restored_track=%s\nrestored_position_ms=%lu\nrestored_view=%u\nstartup_paused=%u\nstartup_silent=%u\nstartup_observed_ms=%lu\n",
+                restoredTrack_,(unsigned long)restoredPosition_,restoredView_,startupPaused_,startupSilent_,(unsigned long)startupObservedMs_);return;
+        case 13:append("resource_path=%s\n",resourcePath_[0]?resourcePath_:"NA");return;
+        case 14:append("nav_target=%s\n",ui.navigationTarget());return;
+        case 15:append("browser_path=%s\n",ui.browser().currentPath());return;
+        case 16:case 17:case 18:case 19:{
+            const uint32_t block=streamSection_-17;const uint32_t first=eventCount_>32?eventCount_-32:0;
+            const uint32_t from=first+block*8,to=std::min<uint32_t>(eventCount_,from+8);
+            for(uint32_t i=from;i<to;++i){const auto& e=events_[i%32];append("event_%lu=%lu,%s,%s,%d,%d,%u,captured_abs_ms:%lu\n",
+                (unsigned long)i,(unsigned long)e.ms,uiPageName(e.page),uiActionName(e.action),e.x,e.y,e.accepted,(unsigned long)e.captured);}return;}
+        default:
+            streamFinalChunk_=true;append("END sequence=%lu crc=%08lx\n",(unsigned long)sequence_,(unsigned long)(streamCrc_^~0U));return;
+    }
 }
 void FreeSession::service(UiCoordinator& ui,const PlayerRuntime& player,uint32_t uiBurstUs){
     uiBurstMaxUs_=std::max(uiBurstMaxUs_,uiBurstUs);
-    if(ui.nowPlaying().presentingLyrics() || !player.persistenceIdle() || ui.settingsBusy())return;
-    if(manual_&&!ui.settings().store.idle())return;
+    const uint32_t now=millis();
+    if(save_.active()&&save_.timedOut(now)){
+        if(file_)file_.close();file_=fs::File();logPrepared_=false;streamFinalChunk_=false;writingManual_=false;requestSave_=save_.needsNext();
+        const uint32_t ticket=save_.activeThrough();save_.timeout(now);lastSaveOk_=false;ui.notifySaveFinished(ticket,false,"超时");return;
+    }
+    if(save_.active()){
+        if(player.persistedCheckpointRevision()<save_.requiredPlayerRevision()){save_.stage(SaveStatus::WaitingPlayer);return;}
+        if(ui.settings().store.savedRevision()<save_.requiredDisplayRevision()){save_.stage(SaveStatus::WaitingDisplay);return;}
+    }else if(!player.persistenceIdle())return;
+    if(ui.nowPlaying().presentingLyrics() || ui.settingsBusy())return;
     const uint32_t start=micros();
     if(file_){
-        if(written_<length_){const size_t n=std::min<size_t>(512,length_-written_);if(file_.write(reinterpret_cast<const uint8_t*>(buffer_+written_),n)!=n){logWriteOk_=false;fail("logging","write_log");written_=length_;}else written_+=n;}
+        if(written_<length_){const size_t n=std::min<size_t>(512,length_-written_);
+            if(file_.write(reinterpret_cast<const uint8_t*>(buffer_+written_),n)!=n){logWriteOk_=false;fail("logging","write_log");written_=length_;streamFinalChunk_=true;}
+            else{if(!streamFinalChunk_)streamCrc_=mediaCrc(streamCrc_,reinterpret_cast<const uint8_t*>(buffer_+written_),n);written_+=n;}}
+        else if(!streamFinalChunk_){prepareNext(ui,player);if(overflow_){logWriteOk_=false;fail("logging","checkpoint_section");streamFinalChunk_=true;}return;}
         else if(!logFlushed_){file_.flush();logWriteOk_&=file_.getWriteError()==0;logFlushed_=true;}
         else{const bool logOk=logWriteOk_;file_.close();lastSaved_=millis();
             const bool persisted=player.stateStoreAvailable()&&player.lastPersistenceResult()==PersistenceResult::Ok;
             if(!logOk)fail("logging","flush_log");if(writingManual_&&!persisted)fail("persistence","manual_checkpoint_not_saved");
             lastSaveOk_=logOk&&persisted&&ui.displaySettingsSaved();
-            if(writingManual_)ui.notifyLogSaved(lastSaveOk_);writingManual_=false;}
+            if(writingManual_){const uint32_t ticket=save_.activeThrough();save_.finish(lastSaveOk_,millis());ui.notifySaveFinished(ticket,lastSaveOk_,lastSaveOk_?nullptr:"校验");}
+            writingManual_=false;if(save_.needsNext()){save_.begin(millis());requestSave_=true;}}
     }else if(logPrepared_){
         file_=SD.open(kLog,"a");logPrepared_=false;logFlushed_=false;logWriteOk_=true;
         if(file_){if(!file_.setBufferSize(512)){logWriteOk_=false;written_=length_;fail("logging","log_buffer");}}
-        else{writingManual_=false;fail("logging","open_log");ui.notifyLogSaved(false);lastSaved_=millis();}
+        else{const uint32_t ticket=save_.activeThrough();writingManual_=false;fail("logging","open_log");if(save_.active()){save_.finish(false,millis());ui.notifySaveFinished(ticket,false,"日志打开");}lastSaved_=millis();}
     }else if(requestSave_ || millis()-lastSaved_>=15000){
-        prepare(ui,player);requestSave_=false;writingManual_=manual_;manual_=false;
+        writingManual_=save_.active();if(writingManual_)save_.stage(SaveStatus::WritingDiagnostics);
+        beginSnapshot(ui,player,writingManual_||failure_[0]);prepareNext(ui,player);requestSave_=false;
         lastSaveOk_=false;
-        if(overflow_){writingManual_=false;fail("logging","checkpoint_buffer");ui.notifyLogSaved(false);lastSaved_=millis();return;}
+        if(overflow_){const uint32_t ticket=save_.activeThrough();writingManual_=false;fail("logging","checkpoint_section");if(save_.active()){save_.finish(false,millis());ui.notifySaveFinished(ticket,false,"日志过大");}lastSaved_=millis();return;}
         logPrepared_=true;
     }
     writeMaxUs_=std::max<uint32_t>(writeMaxUs_,micros()-start);

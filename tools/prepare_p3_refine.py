@@ -6,7 +6,6 @@ preview images are PC pixel-layout references, not device screenshots.
 import argparse,json,math,shutil,struct,subprocess
 from pathlib import Path
 from PIL import Image,ImageDraw
-from fontTools.ttLib import TTFont
 from prepare_p3_media import LOCAL,PACKAGE,make_font,font_sources,sha
 from prepare_song_library import FFDIR,probe
 from prepare_p3_perf import audio_hash
@@ -69,6 +68,7 @@ def tags():
     print('11 titles checked; changed:',[r['file'] for r in report if r['changed']],flush=True)
 
 def source(path):
+    from fontTools.ttLib import TTFont
     path=Path(path);font=TTFont(path,fontNumber=0,lazy=True)
     points=set(font.getBestCmap());font.close();return path,points
 

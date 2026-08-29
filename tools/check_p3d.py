@@ -78,38 +78,20 @@ class P3DChecks(unittest.TestCase):
             self.assertEqual(evaluate_p3d(dict(record,**{k:'0'}))[0],'INCOMPLETE')
     def test_checkpoint_capacity_and_failure_exit(self):
         code=source('src/player/p3abc/FreeSession.cpp')
-        body=code.split('void FreeSession::prepare(')[1].split('void FreeSession::service(')[0]
-        strings=re.findall(r'append\("((?:\\.|[^"\\])*)"',body)
-        paths={'restored_track':511,'nav_target':511,'browser_path':511,'media_track':511,'track':511,'resource_path':559,'pcm_peak_track':511,'lyric_peak_track':511}
-        bounds={'version':32,'mode':4,'result':16,'a_auto':10,'b_auto':10,'c_auto':10,'d_auto':10,
-            'launcher_error':64,'nav_error':64,'display_self_failure':64,'failure_component':23,'failure_reason':63,
-            'resource_operation':23,'player_state':16,'page':16}
-        total=0
-        for encoded in strings:
-            fmt=encoded.replace('\\n','\n')
-            if fmt.startswith('%s_'):
-                # Exact bounded fields, not an arbitrary per-component margin.
-                numeric=re.sub(r'%l[ud]', '%d',fmt)
-                for component in ('lyrics','cover','font','navigation'):
-                    total+=len((numeric%(component,'x'*63,component,'x'*559,component,
-                        4294967295,4294967295,4294967295,'x'*23,-2147483648,-2147483648,-2147483648)).encode())
-                continue
-            if fmt.startswith('event_'):
-                total+=12*128;continue
-            if fmt.startswith('store_%s'):
-                phases=re.findall(r'"([a-z_]+)"',body.split('storagePhases[]={')[1].split('};')[0])[1:]
-                total+=sum(len(fmt.replace('%s',phase).replace('%lu','9'*10).encode()) for phase in phases);continue
-            if fmt.startswith('sleep_%s'):
-                total+=sum(len((fmt.replace('%s',scene).replace('%u','255')).encode()) for scene in ('lyrics','cover','playlist','library','settings'));continue
-            for line in fmt.splitlines(keepends=True):
-                key=line.split('=',1)[0];limit=paths.get(key,bounds.get(key,32))
-                value=re.sub(r'%[0-9]*[lu]*[udx]',lambda m:'9'*10,line)
-                value=value.replace('%s','x'*limit);total+=len(value.encode())
+        body=code.split('void FreeSession::prepareNext(')[1].split('void FreeSession::service(')[0]
         capacity=int(re.search(r'buffer_\[(\d+)\]',source('src/player/p3abc/FreeSession.h'))[1])
-        print(f'LOG_BOUND: {total}/{capacity} bytes')
-        self.assertLessEqual(total,capacity,'bounded paths must fit a complete log checkpoint')
+        self.assertEqual(capacity,1024)
+        # Maximum-length paths are emitted in separate stream sections; no
+        # complete checkpoint or pair of long paths is retained in RAM.
+        for case,key in ((11,'track='),(12,'restored_track='),(13,'resource_path='),(14,'nav_target='),(15,'browser_path=')):
+            section=body.split(f'case {case}:',1)[1].split(f'case {case+1}:',1)[0]
+            self.assertIn(key,section)
+            self.assertEqual(sum(f'append("{k}' in section for k in ('track=','restored_track=','resource_path=','nav_target=','browser_path=')),1)
+        self.assertIn('case 16:case 17:case 18:case 19:',body)
+        self.assertIn('from+8',body)
+        print(f'LOG_STREAM: scratch={capacity} bytes, paths split, events=8/section')
         service=code.split('void FreeSession::service(')[1]
-        for failure in ('checkpoint_buffer','log_buffer','open_log','write_log'):
+        for failure in ('checkpoint_section','log_buffer','open_log','write_log'):
             self.assertIn('fail("logging","'+failure+'")',service)
         self.assertIn('else if(!logFlushed_)',service)
         self.assertIn('lastSaveOk_=logOk&&persisted&&ui.displaySettingsSaved()',service)

@@ -36,7 +36,7 @@ void DisplaySettingsStore::service(uint32_t now,bool storageIdle){
     }else if(phase_==4){uint8_t check[24];DisplayPreferences p;uint32_t g;
         const bool ok=file_.size()==24&&file_.read(check,24)==24&&decode(check,p,g)&&!std::memcmp(check,bytes_,24);
         if(!ok)fail("settings_verify");else phase_=7;
-    }else if(phase_==7){file_.close();generation_=mediaU32(bytes_+8);slot_^=1;phase_=0;dirty_=revision_!=writingRevision_;++writes;error_="none";}
+    }else if(phase_==7){file_.close();generation_=mediaU32(bytes_+8);slot_^=1;phase_=0;savedRevision_=writingRevision_;dirty_=revision_!=writingRevision_;++writes;error_="none";}
     serviceMaxUs=std::max<uint32_t>(serviceMaxUs,micros()-started);
 }
 } }

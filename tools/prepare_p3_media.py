@@ -18,7 +18,6 @@ import zlib
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageEnhance, ImageFilter
-from fontTools.ttLib import TTFont, TTCollection
 
 ROOT = Path(__file__).resolve().parents[1]
 LOCAL = ROOT / 'test-data/local/p3-media'
@@ -77,6 +76,9 @@ def pair_cues(original, translated):
 
 
 def font_sources(latin=False):
+    # Keep report-only validators usable on the firmware/toolchain Python.
+    # The optional dependency is required only when fonts are regenerated.
+    from fontTools.ttLib import TTFont
     names = ['times.ttf', 'seguisym.ttf'] if latin else ['simkai.ttf', 'msgothic.ttc', 'simsun.ttc', 'seguisym.ttf']
     sources = []
     for name in names:

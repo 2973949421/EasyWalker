@@ -165,7 +165,7 @@ void PlayerRuntime::servicePersistence() {
                     activeQueueGeneration_ =
                         stateStore_.latestQueueGeneration();
                     sessionDirty_ = true;
-                }
+                }else persistedCheckpointRevision_=writingCheckpointRevision_;
             } else {
                 if (queueSaveWasPending_) {
                     queueSaveWasPending_ = false;
@@ -227,6 +227,7 @@ void PlayerRuntime::requestCheckpoint(bool queueChanged) {
         return;
     }
     sessionDirty_ = true;
+    if(!++checkpointRevision_)++checkpointRevision_;
     queueDirty_ = queueDirty_ || queueChanged;
     if (queueChanged) {
         queuePublicationBlocked_ = false;
@@ -462,6 +463,7 @@ void PlayerRuntime::startPendingSave() {
             stateStore_.saveSessionAsync(sessionScratch_);
         lastPersistenceResult_ = result;
         if (result == PersistenceResult::Pending) {
+            writingCheckpointRevision_=checkpointRevision_;
             sessionDirty_ = false;
         }
     }
