@@ -1,4 +1,4 @@
-# ADV Walkman 媒体导入工作流
+# EasyWalker 媒体导入工作流
 
 本流程服务用户私有、非商用曲库。设备端仍只消费准备好的MP3、LRC和ADV封面，不在ESP32上访问网络API。
 

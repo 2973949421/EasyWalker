@@ -1,14 +1,17 @@
-# ADV Walkman PRD
+# EasyWalker PRD
 
 > 版本：V0.3
 > 状态：V1 Design Baseline  
-> 工作名：ADV Walkman
+> 项目名：EasyWalker
+> 历史开发代号：ADV Walkman
 
 当前P3收口采用两阶段稳定性门槛：`0.8.5-p3d.stability-rc`必须先证明快速切换曲库、页面往返、息屏唤醒和T保存不会永久失去操作，才能生成仅降低日志频率的`0.8.6-p3.closure`。编译、自动状态机回归或一次未复现均不能替代20分钟耳机压力操作和新版日志。纯UI恢复不得调用Play/Pause/Stop/Seek，不得通过重启或重选歌曲自愈。
 
 ## 1. 产品定位
 
-ADV Walkman 是一个运行在 M5Stack Cardputer ADV 上的本地随身音乐播放器固件。
+EasyWalker 是一个运行在 M5Stack Cardputer ADV 上的本地随身音乐播放器固件。
+
+现有设备路径、固件安装文件名和历史测试 Fixture 中的 `ADVWalkman` / `ADV-Walkman` 暂作为兼容标识保留，不随品牌名变更迁移。
 
 项目的主要价值：
 

@@ -61,7 +61,7 @@ void SettingsPanel::finishReturn(bool logOk){
     esp_restart();
 }
 bool SettingsPanel::prepare(FontCache& fonts){
-    const char* fixed="设置屏幕亮度息屏时间关于返回播放器其他页面秒分钟永不取消确认上下选择左右调整返回保存中未保存已保存失败请按进入菜单设备版本0123456789%: /Enter Esc Launcher ADV Walkman M5Stack Cardputer";
+    const char* fixed="设置屏幕亮度息屏时间关于返回播放器其他页面秒分钟永不取消确认上下选择左右调整返回保存中未保存已保存失败请按进入菜单设备版本0123456789%: /Enter Esc Launcher EasyWalker M5Stack Cardputer";
     if(!fonts.requestUiWindow(fixed,12,0,3000,1))return false;
     return fonts.requestUiWindow(ADV_WALKMAN_VERSION,12,0,123,1)&&fonts.requestUiWindow(returnError_,12,0,240,1);
 }
@@ -76,7 +76,7 @@ bool SettingsPanel::render(M5GFX& display,M5Canvas& row,FontCache& fonts){
         for(int i=0;i<4;++i){const int y=44+i*31;if(selected_==i)row.drawRect(3,y-5-stripe_,129,24,accent);text(labels[i],y,selected_==i);}
     }else if(panel_==1){text("息屏时间",38,true);const char* labels[]={"播放器","其他页面"};
         for(int i=0;i<2;++i){const int y=66+i*46;if(selected_==i)row.drawRect(3,y-4-stripe_,129,39,accent);text(labels[i],y,selected_==i);text(times[i?store.value.otherTimeout:store.value.playerTimeout],y+17);}
-    }else if(panel_==2){text("ADV Walkman",43,true);text(ADV_WALKMAN_VERSION,67);text("M5Stack",103);text("Cardputer ADV",123);
+    }else if(panel_==2){text("EasyWalker",43,true);text(ADV_WALKMAN_VERSION,67);text("M5Stack",103);text("Cardputer ADV",123);
     }else{ text("返回 Launcher",43,true);text("取消",80,!confirmed_);text("确认",107,confirmed_);
         text("请按 Enter",145);text("进入菜单",162); }
     if(returning())text("保存中",185,true);

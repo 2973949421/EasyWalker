@@ -1,4 +1,4 @@
-# ADV Walkman Technical Design
+# EasyWalker Technical Design
 
 > 版本：V0.3
 > 状态：基线架构；V1 Audio Backend 已由 P0 Benchmark 冻结为 Candidate A

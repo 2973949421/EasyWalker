@@ -1,6 +1,7 @@
-# ADV Walkman
+# EasyWalker
 
-> 工作名：ADV Walkman  
+> 项目名：EasyWalker
+> 历史开发代号：ADV Walkman
 > 当前阶段：P3 稳定性 Stage A `0.8.5-p3d.stability-rc`，统一UI事务、可靠T保存、流式诊断与页面状态减负；A/B/C/D仍为DEVICE TEST
 > 平台：M5Stack Cardputer ADV
 
@@ -10,7 +11,9 @@
 
 后续本地音频或纯歌单导入的曲源、同步歌词、内嵌资源和多语言翻译规则见[媒体导入工作流](docs/MEDIA_IMPORT_WORKFLOW.md)。网络API只参与PC准备，设备固件不联网。
 
-ADV Walkman 是一个基于 M5Stack Cardputer ADV 的个人化复古随身音乐播放器固件。
+EasyWalker 是一个基于 M5Stack Cardputer ADV 的个人化复古随身音乐播放器固件。
+
+为保持现有 microSD、Launcher、存档和历史验收资料兼容，设备路径 `/ADVWalkman`、既有 `ADV-Walkman-*.bin` 文件名及测试 Fixture 名称暂不迁移；它们是兼容标识，不再是项目对外名称。
 
 项目目标不是替代手机 + 无线耳机，也不追求商业产品级功能堆叠。核心价值是：
 

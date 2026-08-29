@@ -1,4 +1,4 @@
-# ADV Walkman References
+# EasyWalker References
 
 > 作用：记录已经研究过的官方资料和开源方案，以及“值得借什么 / 不借什么”。  
 > 注意：本文件是参考资料，不是最终技术决策。最终方案以 `TECH_DESIGN.md` 和真机 Benchmark 为准。

@@ -1,4 +1,4 @@
-# ADV Walkman Audio Backend Benchmark
+# EasyWalker Audio Backend Benchmark
 
 > 状态：P0-01 / P0-02 / P0-03 / P0-05 / P0-06 — DONE；P0-04 Candidate C — DEFERRED；V1 Audio Backend 已冻结为 Candidate A。
 > 目标：在正式播放器开发前，选出 V1 最合适的原生 3.5mm 音频底层。
