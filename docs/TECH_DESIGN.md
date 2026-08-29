@@ -5,6 +5,8 @@
 
 P3稳定性RC采用`UiRequestToken(pageEpoch, requestGeneration, resourceGeneration)`作为所有异步UI结果的唯一归属依据。`LibraryPageController`拥有曲库事务，`PlaylistPageController`拥有六行窗口，`UiWorkScheduler`只按工作结果排程，`CheckpointCoordinator`拥有T保存Ticket；资源读取器和Scheduler不改变产品页面或音频Transport。完整实现和验收边界见`P3_STABILITY_RC.md`。
 
+0.9.1把T保存的状态结果与诊断结果拆开：独立CRC保护的`SAVE_BEGIN`/`SAVE_END`包围分步状态保存和完整快照，任何完整快照破损都不能吞掉Ticket终态。详细段设计上限768 bytes，周期摘要60秒；P4日志在1MiB的current/previous间轮换。RTC breadcrumb已删除，复位原因仅在启动摘要写SD。Playlist暖返回复用六行模型及字体租约；歌词坐标在既有Glyph数组内完成水平/垂直居中，不增加媒体工作集。完整边界见`P4AB_FIX.md`。
+
 ## 1. 设计目标
 
 技术设计优先级：

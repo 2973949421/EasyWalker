@@ -1,5 +1,17 @@
 # Changelog
 
+## V0.9.1 — Reliable saves, warm lists and lyric layout
+
+Date: 2026-08-29
+
+- T保存增加独立、带CRC的`SAVE_BEGIN`/`SAVE_END`；状态保存和详细日志分别给出结果，详细快照溢出不再吞掉Ticket终态。
+- 完整快照按≤768-byte段拆分，32项事件按每段4项输出；周期摘要改为60秒，新日志使用1MiB current/previous轮换并停止扩张旧P3日志。
+- 删除16-byte RTC breadcrumb及阶段写入，只在SD启动摘要保留`esp_reset_reason()`；联合固件静态RAM较0.9.0减少32 bytes。
+- Playlist暖返回保留六行最终文本、正式Title、Metadata状态与字体租约；同页移动仅刷新旧/新高亮，周期日志保持最低优先级。
+- Lyrics在既有Glyph数组中按实际列数与最大高度水平/垂直居中；Playlist、Library、Settings的Tab统一回Player，Player Tab语义不变。
+- KINO《Группа крови》双语24个时间点按284.003秒音频/LRCLIB对应时间轴重排；KINO曲库图替换为单张公有领域Victor Tsoi 1986肖像。
+- 六环境构建和主机回归通过；真机时序、保存终态和《血液型》≤300ms听感仍为`DEVICE TEST`，详见`docs/P4AB_FIX.md`。
+
 ## V0.9.0 — Context controls and atomic playback mode
 
 Date: 2026-08-29

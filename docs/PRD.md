@@ -532,8 +532,8 @@ PC 批处理：
 ### 8.5 Library
 
 Tab是页面导航而非选歌：Player按Tab打开当前歌曲所在目录并定位当前歌曲；
-Playlist/Library按Tab直接回当前Player，歌曲、队列、进度、播放/暂停状态均不变。
-Enter仍选择歌曲并从头播放，包括同一首；Esc保持逐层返回。Settings不接管Tab，
+Playlist/Library/Settings按Tab直接回当前Player，歌曲、队列、进度、播放/暂停状态均不变。
+Enter仍选择歌曲并从头播放，包括同一首；Esc保持逐层返回。Settings的Tab只离开页面，
 没有当前歌曲时Tab无动作。息屏首次Tab只唤醒，全部松开后的下一次按键才导航。
 列表加载超过250ms时仅在底部状态区提示，不把“加载中”叠在歌曲行；完成后清除。
 

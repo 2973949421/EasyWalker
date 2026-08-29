@@ -2,12 +2,12 @@
 
 > 项目名：EasyWalker
 > 历史开发代号：ADV Walkman
-> 当前阶段：P3已冻结为`FROZEN / UNVERIFIED / KNOWN ISSUES`；P4A+B联合固件`0.9.0-p4ab.controls`进入本地实现/DEVICE TEST
+> 当前阶段：P3仍为`FROZEN / UNVERIFIED / KNOWN ISSUES`；P4A+B修复固件`0.9.1-p4ab.fix`已完成本地实现并进入DEVICE TEST
 > 平台：M5Stack Cardputer ADV
 
 ## 1. 项目是什么
 
-P3冻结证据见[P3交付路线](docs/P3_DELIVERY.md)，不生成原计划的0.8.6，也不把未验证项目写成通过。P4A+B实施与验收见[P4AB控制](docs/P4AB_CONTROLS.md)：播放器页只启用顶部盲操区1～8，9～12保持无动作；页面路由、上一首/下一首、四态播放模式和保存诊断均不改变媒体与音频Backend。
+P3冻结证据见[P3交付路线](docs/P3_DELIVERY.md)，不生成原计划的0.8.6，也不把未验证项目写成通过。P4A+B基线见[P4AB控制](docs/P4AB_CONTROLS.md)，0.9.1保存、列表、歌词与KINO资源修复见[P4A+B修复记录](docs/P4AB_FIX.md)。播放器页只启用顶部盲操区1～8，9～12保持无动作；不改变音频Backend或存档格式。
 
 后续本地音频或纯歌单导入的曲源、同步歌词、内嵌资源和多语言翻译规则见[媒体导入工作流](docs/MEDIA_IMPORT_WORKFLOW.md)。网络API只参与PC准备，设备固件不联网。
 
@@ -78,7 +78,7 @@ V1 不以以下内容为目标：
 
 ## 5. 当前最重要的技术任务
 
-### 当前交付入口 — 0.9.0 P4A+B Controls
+### 当前交付入口 — 0.9.1 P4A+B Fix
 
 只安装同名`ADV-Walkman-P3ABC-Gate.bin`，用耳机自由测试10～15分钟。Player逐个测试
 1～8；Playlist/Library/Settings按同位置不得漏出Transport。检查5秒Previous规则、
@@ -141,13 +141,13 @@ Seek / 切 View / 暂停 / 重启，也不再盯着封面等 60 秒后被测试�
 | `\` 或 Enter | 播放 / 暂停，两个冻结盲操位置均可用 |
 | `] }` | Lyrics / Cover |
 | Esc | 返回播放列表；列表内继续返回曲库 |
-| Tab | Player→当前歌曲目录；Playlist/Library→Player，不重播；Settings及无当前歌曲时无动作 |
+| Tab | Player→当前歌曲目录；Playlist/Library/Settings→Player，不重播；无当前歌曲时无动作 |
 | 方向位置、Enter | 曲库 / 播放列表导航、选歌 |
 | S（曲库页） | 进入设置；上下选择、左右调整、Enter打开内部子面板、Esc返回 |
 | T | 请求状态及诊断保存；等现有状态保存完成后显示“已保存” |
 
-可以按自己的顺序听歌、看歌词、切封面、调音量和浏览。日志每 15 秒自动分块保存；
-日志按启动编号追加，不覆盖上次启动。结束前在播放器按 T，等“已保存”后再关机取 SD。
+可以按自己的顺序听歌、看歌词、切封面、调音量和浏览。新P4日志每60秒写紧凑摘要，
+在1MiB的current/previous之间轮换。结束前按T并等待明确终态后再关机取SD。
 日志保留同版本每次启动的第一项错误，不会为了测试主动停播。
 自然连续播放满 60 秒只是后台覆盖项；没测到的操作写 INCOMPLETE，不是假 PASS。
 本次最后在设置里确认“返回Launcher”，由固件保存并返回；重新启动后等至少3秒不要按键，确认恢复暂停、歌曲、视图和显示设置正确；

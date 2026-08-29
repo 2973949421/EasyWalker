@@ -12,11 +12,11 @@ no-op，等待P5 DSP；音频Backend、3×1536缓冲、Queue/Session格式、音
 
 ## 实现合同
 
-- `InputRouter`直接接收`UiPage`；Esc和开发T保持原规则，Tab在Settings无动作。
+- `InputRouter`直接接收`UiPage`；Esc和开发T保持原规则。0.9.1起Playlist、Library、Settings的Tab统一回Player。
 - Player坐标：`x=13,y=0..3`为Volume+、Play、Play、Previous；`x=12,y=0..3`
   为Volume-、View、Play Mode、Next；`x=11`整排无动作。
 - Playlist只产生Up/Down/Enter/Esc/Tab；Library产生Left/Right/Enter/Esc/Tab及S；Settings
-  产生方向/Enter/Esc，不接管Tab/S。页面代次仍丢弃旧动作，息屏仍吞掉首组按键。
+  产生方向/Enter/Esc/Tab，S无动作。页面代次仍丢弃旧动作，息屏仍吞掉首组按键。
 - Previous大于5秒回本曲0秒，否则走真实History；Next按order。Pause保持，Repeat One不
   拦截手动导航，Normal边界失败保持原状态且不请求checkpoint。
 - `setPlaybackMode(RepeatMode,bool)`在一次Action内同时修改Repeat/Shuffle，并只请求一次

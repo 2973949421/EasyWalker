@@ -799,6 +799,17 @@ AC：
 
 # P4 — Keymap
 
+0.9.1本地修复记录：
+
+- [x] T保存独立`SAVE_BEGIN`/`SAVE_END`，状态成功/日志失败/状态失败/超时四种终态可区分
+- [x] 完整日志≤768-byte分段、60秒摘要、1MiB current/previous轮换；删除RTC breadcrumb
+- [x] Playlist暖返回复用六行模型及正式Title；同窗口移动只刷新两行
+- [x] Lyrics水平/垂直居中；四页面Tab路由完成
+- [x] 《血液型》双语24个时间点重排；KINO单张Victor Tsoi肖像LCOV通过
+- [x] 六环境构建通过；P3ABC 797024 bytes、SHA-256 `be454cf94424dccd70c1cce08ed49b4b238ced55645b896b682f9b3dd4831325`
+- [x] 静态RAM 128624 bytes，较0.9.0净减32；媒体+事件49080/49152，RTC诊断0
+- [ ] 真机T终态/轮换、暖返回≤300ms、歌词呈现≤100ms和《血液型》≤300ms听感
+
 0.9.0本地交付记录：
 
 - [x] 100项主机回归及13项C++计时契约通过
