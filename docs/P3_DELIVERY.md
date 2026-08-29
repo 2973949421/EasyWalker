@@ -4,7 +4,13 @@
 > `TECH_DESIGN.md`、任务状态以 `TASKS.md` 为准。P3 不重新选择 Audio Backend，
 > 不改变 P1 Queue / Session 或 P2 Library Engine 语义。
 
-## 当前验收方式 — 0.8.4（覆盖下方历史 Gate 操作顺序）
+## 当前验收方式 — 0.8.5 Stage A（覆盖下方历史 Gate 操作顺序）
+
+详见`P3_STABILITY_RC.md`。当前先验证稳定性RC，不生成最终closure：Library页面/请求/资源统一Token，旧结果不能提交；显式Scheduler不再让旧ready条带阻塞新页面；2秒无进展只允许一次局部恢复，再失败保持页面可导航。Playlist六行模型和字体租约跨Player暖返回保留。T使用递增Ticket，所有页面立即显示保存状态，关闭及回读校验后才成功，重复请求不会静默丢失。日志改为1KiB流式写，Stage A每15秒摘要、T/错误/恢复写完整快照。
+
+耳机播放至少20分钟，播放5分钟后做三轮、每轮至少20次快速左右切库，并在封面变化时反向；每轮后验证Tab/Enter/Esc/T。Player、Playlist、Library、Settings分别T，封面读取中连续T两次。Lyrics/Cover/Playlist/Library分别做15秒息屏唤醒。P0要求零永久卡死、零旧代次/条带冲突、正常操作零自愈；严格时序、音频与保存门槛不变。Stage A日志和人工操作通过后，才以同业务代码、60秒摘要生成0.8.6；若再改业务代码必须重跑Stage A。
+
+## 历史验收方式 — 0.8.4
 
 详见`P3_RENDER_FIX.md`。先修共享条带占用/实际连续提交/取消，再优化暖返回和字模准备；曲库固定单行滚动名称、三唱片各自短名、四套字体加粗。封面文件已完整，不再生成或复制歌曲封面。本轮只交付同名联合BIN和四套字体三格式，音乐/歌词/标签/Queue/Session不改。
 

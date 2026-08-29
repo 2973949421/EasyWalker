@@ -1,5 +1,17 @@
 # Changelog
 
+## V0.8.5 — UI transactions, reliable checkpoints and low-overhead diagnostics
+
+Date: 2026-08-29
+
+- Library请求统一使用页面/选择/资源三重Token；旧封面结果只能释放，不能提交或恢复旧页面。名称、轮盘和174行封面全部同代次完成后才发布显示选择。
+- 修复旧ready条带阻塞新浏览模型的调度顺序；显式有界工作调度替代`resourceTurn_`。Library连续2秒无进展执行一次局部恢复，再失败进入仍可Tab/Esc/左右操作的错误状态。
+- Library/Playlist页面状态拆出控制器；Playlist六行模型及专属字体租约跨Player暖往返保留，Player清理不再淘汰列表字模。曲库三项CRC验证结果按本次启动缓存。
+- 每主循环只做一次官方键盘硬件更新；保留固定16项事件队列、短按、组合键及唤醒吞键语义。
+- T改为递增SaveTicket联合事务：等待Player与显示修订写回、流式诊断关闭和校验后才成功；重复T形成尾随事务，10秒无结果明确超时，所有页面统一反馈。
+- 诊断由16KiB预格式化改为1KiB流式缓冲、单步最多512bytes、滚动CRC；Stage A每15秒摘要，T/错误/恢复保留完整快照和32项RAM事件。
+- 新增生产状态类型编译期回归、旧卡死顺序、1000次切库、保存尾随/超时、日志完整性与字体租约检查。业务代码仍需Stage A真机日志和人工操作确认；P3A/B/C/D保持DEVICE TEST。
+
 ## V0.8.4 — Owned image stripes, verified frame commits and three-record wheel
 
 Date: 2026-08-29

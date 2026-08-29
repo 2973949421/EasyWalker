@@ -1,12 +1,12 @@
 # ADV Walkman
 
 > 工作名：ADV Walkman  
-> 当前阶段：P3 收尾候选 `0.8.4-p3d.renderfix`，共享条带修复、完整提交证据、固定三唱片与加粗字体；A/B/C/D仍为DEVICE TEST
+> 当前阶段：P3 稳定性 Stage A `0.8.5-p3d.stability-rc`，统一UI事务、可靠T保存、流式诊断与页面状态减负；A/B/C/D仍为DEVICE TEST
 > 平台：M5Stack Cardputer ADV
 
 ## 1. 项目是什么
 
-本轮实施与交付记录见 [P3_RENDER_FIX.md](docs/P3_RENDER_FIX.md)。封面等待期间独占固定135×18条带，只有有效连续提交才发布完整View；同曲返回保留有效行模型、标题和资源。曲库名称固定单行，长名滚动，不再挤压三唱片轮盘；三张唱片各有蓝色弧形短名，四套专用字体离线加粗。音乐、歌词、封面和存档不改。历史“唤醒后停音且按键无效”仍需真机复验；扬声器破音暂缓，使用耳机验收。
+本轮实施与交付记录见 [P3_STABILITY_RC.md](docs/P3_STABILITY_RC.md)。Library、Playlist、后台调度与联合保存改为有明确所有者的事务；快速切库只允许最新Token提交，2秒无进展先局部恢复、再次失败仍可导航。T在所有页面先显示“保存中”，每个Ticket必须成功、失败或10秒超时。诊断改为1KiB流式生成，Stage A每15秒摘要、T/错误/恢复写完整快照。音乐、歌词、封面、标签和存档格式不变。构建与自动回归不能代替20分钟真机压力试用；扬声器破音继续暂缓，使用耳机验收。
 
 ADV Walkman 是一个基于 M5Stack Cardputer ADV 的个人化复古随身音乐播放器固件。
 
@@ -73,9 +73,11 @@ V1 不以以下内容为目标：
 
 ## 5. 当前最重要的技术任务
 
-### 当前交付入口 — 0.8.4 完整刷新与三唱片
+### 当前交付入口 — 0.8.5 稳定性 Stage A
 
-仅安装同名`ADV-Walkman-P3ABC-Gate.bin`。重点检查在列表/曲库长时间停留后Tab返回、歌词/封面单次View往返及音量浮层，确保图面完整、不残留且可继续操作。暗黒天国仍刻意无歌词。检查固定三唱片、三处弧形短名、加粗名称及长名滚动。Lyrics/Cover/Playlist各两次15秒睡醒；约20分钟耳机听歌后再返回，T保存并手动重启。指标、文件及测试证据见[P3_RENDER_FIX.md](docs/P3_RENDER_FIX.md)。
+仅安装同名`ADV-Walkman-P3ABC-Gate.bin`。耳机播放至少20分钟；播放5分钟后进入Library，做三轮快速左右切换、每轮至少20次，并在切换中反向。每轮后验证Tab、Enter、Esc与T仍有响应。分别在Player/Playlist/Library/Settings按T，封面读取中快速按两次T；每个请求都应先显示“保存中”，正常3秒、繁忙5秒内给出结果，绝不能永久等待。Lyrics/Cover/Playlist/Library各验证15秒息屏唤醒。Stage A通过后才允许生成仅降低日志频率的`0.8.6-p3.closure`。完整标准见[P3_STABILITY_RC.md](docs/P3_STABILITY_RC.md)。
+
+Stage A六环境已构建通过；联合BIN为792192 bytes，SHA-256为`2b91291d11f5e76ad2b65efd7afb16037fbc1222b9cbaf3eb1910bbc0ed8c26c`，静态RAM为128568 bytes，媒体加事件为49080/49152 bytes。以上只证明本地门槛通过，P3A/B/C/D仍为`DEVICE TEST`。
 
 ### 历史入口 — 0.8.3 唤醒、标题与黑胶轮盘
 

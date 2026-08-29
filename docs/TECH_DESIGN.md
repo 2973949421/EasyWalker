@@ -3,6 +3,8 @@
 > 版本：V0.3
 > 状态：基线架构；V1 Audio Backend 已由 P0 Benchmark 冻结为 Candidate A
 
+P3稳定性RC采用`UiRequestToken(pageEpoch, requestGeneration, resourceGeneration)`作为所有异步UI结果的唯一归属依据。`LibraryPageController`拥有曲库事务，`PlaylistPageController`拥有六行窗口，`UiWorkScheduler`只按工作结果排程，`CheckpointCoordinator`拥有T保存Ticket；资源读取器和Scheduler不改变产品页面或音频Transport。完整实现和验收边界见`P3_STABILITY_RC.md`。
+
 ## 1. 设计目标
 
 技术设计优先级：
