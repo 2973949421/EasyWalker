@@ -81,6 +81,6 @@ class RenderfixChecks(unittest.TestCase):
         self.assertEqual(evaluate_render(dict(good,full_frames='0',patch_frames='99',fallback_frames='99'))[0],'INCOMPLETE')
         self.assertEqual(evaluate_render(dict(good,render_pixel_selfcheck='render_band_pixels'))[0],'FAIL')
         with self.assertRaises(ValueError):current_boots([dict(version='0.8.3-p3d.refine',boot_id='8')])
-        self.assertEqual(VERSION,'0.9.0-p4ab.controls')
+        self.assertEqual(VERSION,'0.9.1-p4ab.fix')
 
 if __name__=='__main__':unittest.main(verbosity=2)

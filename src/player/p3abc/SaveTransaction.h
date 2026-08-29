@@ -21,6 +21,12 @@ enum class SaveStatus : uint8_t {
     Failed,
     TimedOut,
 };
+enum class SaveOutcome : uint8_t {
+    Succeeded,
+    StateSavedLogFailed,
+    StateFailed,
+    TimedOut,
+};
 
 class SaveTransaction final {
  public:
@@ -36,11 +42,13 @@ class SaveTransaction final {
     }
     ADV_SAVE_CONSTEXPR void stage(SaveStatus value){if(active_)status_=value;}
     constexpr bool timedOut(uint32_t now)const{return active_&&uint32_t(now-startedAt_)>=10000;}
-    ADV_SAVE_CONSTEXPR void finish(bool success,uint32_t now){
+    ADV_SAVE_CONSTEXPR void finish(SaveOutcome outcome,uint32_t now){
         if(!active_)return;active_=false;completed_=activeThrough_;completedAt_=now;
-        status_=success?SaveStatus::Succeeded:SaveStatus::Failed;
+        outcome_=outcome;
+        status_=outcome==SaveOutcome::Succeeded?SaveStatus::Succeeded:
+                outcome==SaveOutcome::TimedOut?SaveStatus::TimedOut:SaveStatus::Failed;
     }
-    ADV_SAVE_CONSTEXPR void timeout(uint32_t now){if(!active_)return;active_=false;completed_=activeThrough_;completedAt_=now;status_=SaveStatus::TimedOut;}
+    ADV_SAVE_CONSTEXPR void timeout(uint32_t now){finish(SaveOutcome::TimedOut,now);}
     constexpr bool pending()const{return active_||requested_!=completed_;}
     constexpr bool active()const{return active_;}
     constexpr bool needsNext()const{return !active_&&requested_!=completed_;}
@@ -52,12 +60,14 @@ class SaveTransaction final {
     constexpr uint32_t startedAt()const{return startedAt_;}
     constexpr uint32_t completedAt()const{return completedAt_;}
     constexpr SaveStatus status()const{return status_;}
+    constexpr SaveOutcome outcome()const{return outcome_;}
  private:
     uint32_t requested_=0,activeThrough_=0,completed_=0;
     uint32_t latestPlayerRevision_=0,latestDisplayRevision_=0;
     uint32_t requiredPlayerRevision_=0,requiredDisplayRevision_=0;
     uint32_t requestedAt_=0,startedAt_=0,completedAt_=0;
     SaveStatus status_=SaveStatus::Idle;
+    SaveOutcome outcome_=SaveOutcome::Succeeded;
     bool active_=false;
 };
 
@@ -70,7 +80,7 @@ class CheckpointCoordinator final {
     bool begin(uint32_t now){return transaction_.begin(now);}
     void stage(SaveStatus value){transaction_.stage(value);}
     bool timedOut(uint32_t now)const{return transaction_.timedOut(now);}
-    void finish(bool success,uint32_t now){transaction_.finish(success,now);}
+    void finish(SaveOutcome outcome,uint32_t now){transaction_.finish(outcome,now);}
     void timeout(uint32_t now){transaction_.timeout(now);}
     bool pending()const{return transaction_.pending();}
     bool active()const{return transaction_.active();}
@@ -81,6 +91,7 @@ class CheckpointCoordinator final {
     uint32_t requiredPlayerRevision()const{return transaction_.requiredPlayerRevision();}
     uint32_t requiredDisplayRevision()const{return transaction_.requiredDisplayRevision();}
     SaveStatus status()const{return transaction_.status();}
+    SaveOutcome outcome()const{return transaction_.outcome();}
     const SaveTransaction& transaction()const{return transaction_;}
  private:
     SaveTransaction transaction_{};

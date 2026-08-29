@@ -51,10 +51,15 @@ def layout(original,chinese,fonts,page=0):
     width=(sl+sr)*19+(6 if sl and sr else 0)-1
     edge=67+max(width,0)//2
     glyphs=[]
+    visible=[]
     for block,slots,count,end in ((right,sr,pr,edge),(left,sl,pl,edge-sr*19-(6 if sr else 0))):
         first=min(page,count-1)*slots if count>1 else 0
-        for col,values in enumerate(block[first:first+slots]):
-            for char,y in values:glyphs.append((char,end-col*19-18,6+y))
+        visible.append((block[first:first+slots],end))
+    used=max((y+fonts.glyph(char)[3] for block,_ in visible for values in block for char,y in values),default=0)
+    top=max(0,(202-used)//2)
+    for block,end in visible:
+        for col,values in enumerate(block):
+            for char,y in values:glyphs.append((char,end-col*19-18,6+top+y))
     return glyphs,pages
 
 def render(original,chinese,fonts,page=0,intro=False):

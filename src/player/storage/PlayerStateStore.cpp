@@ -917,6 +917,11 @@ void PlayerStateStore::serviceVerifyPayload() {
 }
 
 void PlayerStateStore::complete(PersistenceResult result) {
+    if (result == PersistenceResult::Ok) {
+        lastFailurePhase_ = 0;
+    } else if (phase_ != JobPhase::Cleanup) {
+        lastFailurePhase_ = static_cast<uint8_t>(phase_);
+    }
     if (jobFile_) {
         completionResult_ = result;
         phase_ = JobPhase::Cleanup;

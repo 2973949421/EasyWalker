@@ -62,7 +62,7 @@ class NowPlayingPresenter final {
     void setContent(const char* hint, const char* error);
     void notifyVolumeAdjusted(uint8_t volume, uint32_t nowMs);
     void notifyLogSaving(uint32_t nowMs){logNote_=4;logNoteAt_=nowMs;model_.dirty|=DirtyStatus;}
-    void notifyLogSaved(bool success,uint32_t nowMs){logNote_=success?1:2;logNoteAt_=nowMs;model_.dirty|=DirtyStatus;}
+    void notifyLogSaved(uint8_t result,uint32_t nowMs){logNote_=result;logNoteAt_=nowMs;model_.dirty|=DirtyStatus;}
     // One row/stripe per call; no file access or full-screen Sprite.
     bool renderOne(M5GFX& display);
     const NowPlayingModel& model() const { return model_; }

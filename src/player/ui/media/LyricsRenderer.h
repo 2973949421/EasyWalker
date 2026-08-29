@@ -30,7 +30,9 @@ class LyricsRenderer final {
     int advanceColumn(const char* start,uint32_t cp,bool& inWord,int& y,
                       unsigned& column,FontCache& font,bool& ready);
     unsigned columns(const char* text,FontCache& font,bool& ready);
+    int usedHeight(const char* text,unsigned firstColumn,unsigned capacity,
+                   FontCache& font,bool& ready);
     void place(const char* text,unsigned firstColumn,unsigned capacity,int right,
-               uint16_t color,FontCache& font);
+               int topOffset,uint16_t color,FontCache& font);
 };
 } }

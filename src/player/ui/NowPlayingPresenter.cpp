@@ -269,7 +269,7 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
         formatTime(position,sizeof(position),model_.positionMs);
         if(model_.durationMs)formatTime(duration,sizeof(duration),model_.durationMs);else std::strcpy(duration,"--:--");
         std::snprintf(text,sizeof(text),"%s/%s",position,duration);
-        const char* statusText=logNote_?(logNote_==1?"已保存":logNote_==3?"切换失败":logNote_==4?"保存中":"保存失败"):text;
+        const char* statusText=logNote_?(logNote_==1?"已保存":logNote_==3?"切换失败":logNote_==4?"保存中":logNote_==5?"状态已存 日志失败":"保存失败"):text;
         if(fonts_&&!fonts_->requestUiWindow(statusText,14,0,84,1))return false;
         const char* mode=model_.modeLabel();
         const char* modeGlyph=std::strcmp(mode,"ONE")==0?"1":std::strcmp(mode,"ALL")==0?"A":std::strcmp(mode,"SHUF")==0?"S":std::strcmp(mode,"NORM")==0?"":"?";

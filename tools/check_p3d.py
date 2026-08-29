@@ -83,17 +83,17 @@ class P3DChecks(unittest.TestCase):
         self.assertEqual(capacity,1024)
         # Maximum-length paths are emitted in separate stream sections; no
         # complete checkpoint or pair of long paths is retained in RAM.
-        for case,key in ((11,'track='),(12,'restored_track='),(13,'resource_path='),(14,'nav_target='),(15,'browser_path=')):
+        for case,key in ((15,'track='),(16,'restored_track='),(17,'resource_path='),(18,'nav_target='),(19,'browser_path=')):
             section=body.split(f'case {case}:',1)[1].split(f'case {case+1}:',1)[0]
             self.assertIn(key,section)
             self.assertEqual(sum(f'append("{k}' in section for k in ('track=','restored_track=','resource_path=','nav_target=','browser_path=')),1)
-        self.assertIn('case 16:case 17:case 18:case 19:',body)
-        self.assertIn('from+8',body)
-        print(f'LOG_STREAM: scratch={capacity} bytes, paths split, events=8/section')
+        self.assertIn('case 20:case 21:case 22:case 23:case 24:case 25:case 26:case 27:',body)
+        self.assertIn('from+4',body)
+        print(f'LOG_STREAM: scratch={capacity} bytes, paths split, events=4/section')
         service=code.split('void FreeSession::service(')[1]
         for failure in ('checkpoint_section','log_buffer','open_log','write_log'):
             self.assertIn('fail("logging","'+failure+'")',service)
         self.assertIn('else if(!logFlushed_)',service)
-        self.assertIn('lastSaveOk_=logOk&&persisted&&ui.displaySettingsSaved()',service)
+        self.assertIn('lastSaveOk_=outcome==SaveOutcome::Succeeded||outcome==SaveOutcome::StateSavedLogFailed',code)
         self.assertIn('navigationError_',source('src/player/ui/UiCoordinator.cpp'))
 if __name__=='__main__':unittest.main(verbosity=2)

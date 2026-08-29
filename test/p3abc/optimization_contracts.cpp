@@ -32,10 +32,9 @@ static_assert(viewRequests(),"repeated View never cancels the undisplayed target
 static_assert(chooseMediaWork(0,true,true,true,true)==MediaWork::Font,"due glyphs have priority");
 static_assert(chooseMediaWork(1,false,true,true,true)==MediaWork::Lyrics,"due text has priority");
 static_assert(chooseMediaWork(3,true,true,true,true)==MediaWork::Cover,"cover still progresses during due work");
-static_assert(playbackPageRoute(true,false,true)==PlaybackPageRoute::CurrentFolder,"Player Tab opens folder");
-static_assert(playbackPageRoute(false,false,true)==PlaybackPageRoute::Player,"browser Tab returns without transport");
-static_assert(playbackPageRoute(false,true,true)==PlaybackPageRoute::None,"Settings ignores Tab");
-static_assert(playbackPageRoute(true,false,false)==PlaybackPageRoute::None,"no current track");
+static_assert(playbackPageRoute(true,true)==PlaybackPageRoute::CurrentFolder,"Player Tab opens folder");
+static_assert(playbackPageRoute(false,true)==PlaybackPageRoute::Player,"every non-Player page returns without transport");
+static_assert(playbackPageRoute(true,false)==PlaybackPageRoute::None,"no current track");
 constexpr bool coverLifecycle(){
     for(uint8_t phase=1;phase<=3;++phase) {
 #ifdef REPRODUCE_COVER_CLOSE_BUG

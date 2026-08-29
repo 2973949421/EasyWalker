@@ -231,7 +231,7 @@ bool UiCoordinator::handleAction(UiAction action) {
     ++stats_.inputEvents;
     if(action==UiAction::ToggleCurrentPlaybackPage){
         const auto before=player_->snapshot();
-        const auto route=playbackPageRoute(page_==UiPage::Player,page_==UiPage::Settings,before.hasCurrent);
+        const auto route=playbackPageRoute(page_==UiPage::Player,before.hasCurrent);
         if(route==PlaybackPageRoute::None)return false;
         ++stats_.tabEvents;
         if(route==PlaybackPageRoute::CurrentFolder){
@@ -443,13 +443,17 @@ void UiCoordinator::notifySavePending(uint32_t ticket){
     if(page_==UiPage::Player)nowPlaying_.notifyLogSaving(saveToastAt_);else dirty_=true;
 }
 
-void UiCoordinator::notifySaveFinished(uint32_t ticket,bool success,const char* stage){
+void UiCoordinator::notifySaveFinished(uint32_t ticket,SaveNotice result,const char* stage){
     if(ticket<saveToastTicket_)return;
+    const bool success=result==SaveNotice::Succeeded;
+    const bool partial=result==SaveNotice::StateSavedLogFailed;
     saveToast_=success?2:3;saveToastTicket_=ticket;saveToastAt_=millis();saveToastDrawn_=false;
     if(success)std::snprintf(saveToastText_,sizeof(saveToastText_),"已保存");
+    else if(partial)std::snprintf(saveToastText_,sizeof(saveToastText_),"状态已保存，日志失败");
+    else if(result==SaveNotice::TimedOut)std::snprintf(saveToastText_,sizeof(saveToastText_),"保存失败:超时");
     else if(stage&&*stage)std::snprintf(saveToastText_,sizeof(saveToastText_),"保存失败:%s",stage);
     else std::snprintf(saveToastText_,sizeof(saveToastText_),"保存失败");
-    if(page_==UiPage::Player)nowPlaying_.notifyLogSaved(success,saveToastAt_);else dirty_=true;
+    if(page_==UiPage::Player)nowPlaying_.notifyLogSaved(partial?5:(success?1:2),saveToastAt_);else dirty_=true;
 }
 
 bool UiCoordinator::serviceSaveToast(uint32_t now){

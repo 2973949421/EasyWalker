@@ -25,7 +25,16 @@ unsigned LyricsRenderer::columns(const char* text,FontCache& fonts,bool& ready){
         const int advance=advanceColumn(start,cp,inWord,y,cols,fonts,ready);y+=advance;}
     stats_.invalidUtf8|=invalid;return cols;
 }
-void LyricsRenderer::place(const char* text,unsigned first,unsigned capacity,int right,uint16_t color,FontCache& fonts){
+int LyricsRenderer::usedHeight(const char* text,unsigned first,unsigned capacity,FontCache& fonts,bool& ready){
+    unsigned col=0;int y=0,maximum=0;bool invalid=false,inWord=false;
+    while(*text){const char* start=text;const uint32_t cp=mediaCodepoint(text,invalid);
+        const int advance=advanceColumn(start,cp,inWord,y,col,fonts,ready);
+        if(col>=first&&col<first+capacity)maximum=std::max(maximum,y+advance);
+        y+=advance;
+    }
+    stats_.invalidUtf8|=invalid;return maximum;
+}
+void LyricsRenderer::place(const char* text,unsigned first,unsigned capacity,int right,int topOffset,uint16_t color,FontCache& fonts){
     unsigned col=0;int y=0;bool ready=true,invalid=false,inWord=false;
     while(*text){const char* start=text;const uint32_t cp=mediaCodepoint(text,invalid);
         const int advance=advanceColumn(start,cp,inWord,y,col,fonts,ready);
@@ -34,7 +43,7 @@ void LyricsRenderer::place(const char* text,unsigned first,unsigned capacity,int
             const int x=right-int(col-first)*kPitch-kCell;
             if(x<6 || x+kCell>129 || y+advance>kHeight){stats_.layoutError=true;return;}
             if(cp>0xFFFF){stats_.layoutError=true;return;}
-            glyphs_[stats_.glyphs++]={uint16_t(cp),uint8_t(x),uint8_t(kTop+y)};
+            glyphs_[stats_.glyphs++]={uint16_t(cp),uint8_t(x),uint8_t(kTop+topOffset+y)};
         }y+=advance;
     }
     stats_.invalidUtf8|=invalid;
@@ -69,9 +78,15 @@ bool LyricsRenderer::prepare(const LyricsTimeline& timeline,FontCache& fonts,uin
     const int width=(leftSlots+rightSlots)*kPitch+(leftSlots&&rightSlots?6:0)-(kPitch-kCell);
     const int rightEdge=67+std::max(0,width)/2;
     const uint16_t color=stats_.intro?0x8410:0xFFFF;color_=color;
-    place(chinese,rightPages>1?std::min(page,rightPages-1)*rightSlots:0,rightSlots,rightEdge,color,fonts);
-    place(original,leftPages>1?std::min(page,leftPages-1)*leftSlots:0,leftSlots,
-          rightEdge-int(rightSlots)*kPitch-(rightSlots?6:0),color,fonts);
+    const unsigned rightFirst=rightPages>1?std::min(page,rightPages-1)*rightSlots:0;
+    const unsigned leftFirst=leftPages>1?std::min(page,leftPages-1)*leftSlots:0;
+    const int used=std::max(usedHeight(chinese,rightFirst,rightSlots,fonts,ready),
+                            usedHeight(original,leftFirst,leftSlots,fonts,ready));
+    if(!ready)return false;
+    const int topOffset=std::max(0,(kHeight-used)/2);
+    place(chinese,rightFirst,rightSlots,rightEdge,topOffset,color,fonts);
+    place(original,leftFirst,leftSlots,
+          rightEdge-int(rightSlots)*kPitch-(rightSlots?6:0),topOffset,color,fonts);
     return ready;
 }
 bool LyricsRenderer::prepareFrame(FontCache& fonts,uint8_t pin){

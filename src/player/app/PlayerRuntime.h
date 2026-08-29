@@ -37,6 +37,7 @@ class PlayerRuntime final {
     void serviceAudio();
     void servicePersistence();
     uint32_t persistencePhasePeakUs(uint8_t phase)const{return stateStore_.phasePeakUs(phase);}
+    uint8_t persistenceFailurePhase()const{return stateStore_.lastFailurePhase();}
     uint32_t sourceReadMaxUs()const{return engine_.sourceReadMaxUs();}
     PlayerSnapshot snapshot() const;
     bool currentPath(char* output, size_t outputCapacity) const;

@@ -22,6 +22,7 @@
 
 namespace adv_walkman {
 namespace player {
+enum class SaveNotice:uint8_t{Succeeded,StateSavedLogFailed,Failed,TimedOut};
 constexpr size_t kP3DMediaBudgetBytes=kMediaBudgetBytes+sizeof(LibraryVisual);
 static_assert(kP3DMediaBudgetBytes<=48*1024,"P3D media memory exceeds 48 KiB");
 // Account explicitly for refinement state outside the media owners: wake
@@ -59,8 +60,8 @@ class UiCoordinator final : private PlaylistPageController {
     FontCache& fonts() { return fonts_; }
     const FontCache& fonts() const {return fonts_;}
     void notifySavePending(uint32_t ticket);
-    void notifySaveFinished(uint32_t ticket,bool success,const char* stage=nullptr);
-    void notifyLogSaved(bool success){notifySaveFinished(saveToastTicket_,success);}
+    void notifySaveFinished(uint32_t ticket,SaveNotice result,const char* stage=nullptr);
+    void notifyLogSaved(bool success){notifySaveFinished(saveToastTicket_,success?SaveNotice::Succeeded:SaveNotice::Failed);}
     NowPlayingPresenter& presenterForValidation() { return nowPlaying_; }
     void setHint(const char* hint);
     // Gate-only card: never text over a partially visible media frame.

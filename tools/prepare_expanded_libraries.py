@@ -22,7 +22,7 @@ import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageDraw, ImageOps
 
 from font_index_v2 import generate as generate_idx2
 from prepare_p3_media import LOCAL, PACKAGE, cover_ascii, font_sources, make_font, sha, validate_cover
@@ -38,6 +38,9 @@ FFDIR = Path("B:/Tools/FFmpeg/ffmpeg-9.0.1-essentials_build/bin")
 CANTO_SOURCE = Path("B:/sharewithlight/SONG/粤语迷幻/ADV导入包")
 UA = "EasyWalker-private-import/1.0"
 LIBRARY_SIZE = (135, 154)
+KINO_LIBRARY_SIZE = (135, 173)
+KINO_PORTRAIT = RAW / "Victor_Tsoi_1986.jpg"
+KINO_PORTRAIT_SOURCE = "https://commons.wikimedia.org/wiki/File:Victor_Tsoi_1986.jpg"
 FONT_FACES = ("cjk-12", "cjk-14", "cjk-16", "cjk-18", "library-cjk-12", "library-cjk-18")
 LYRIC_LINE = re.compile(r"^(\[[0-9]{1,3}:[0-9]{2}(?:[.:][0-9]{1,3})?\])(.*)$")
 DROP_CREDITS = ("作词", "作曲", "编曲", "制作", "混音", "录音", "母带", "吉他", "贝斯", "鼓", "和声")
@@ -208,8 +211,9 @@ def download_art(url: str) -> Path:
     return target
 
 
-def library_cover(image: Image.Image) -> bytes:
-    fitted = ImageOps.fit(ImageOps.exif_transpose(image).convert("RGB"), LIBRARY_SIZE, Image.Resampling.LANCZOS, centering=(.5,.5))
+def library_cover(image: Image.Image, size: tuple[int, int] = LIBRARY_SIZE,
+                  centering: tuple[float, float] = (.5, .5)) -> bytes:
+    fitted = ImageOps.fit(ImageOps.exif_transpose(image).convert("RGB"), size, Image.Resampling.LANCZOS, centering=centering)
     pixels = b"".join(struct.pack("<H",((r>>3)<<11)|((g>>2)<<5)|(b>>3)) for r,g,b in fitted.getdata())
     return struct.pack("<4s6H2I",b"LCOV",1,24,fitted.width,fitted.height,1,0,len(pixels),zlib.crc32(pixels))+pixels
 
@@ -226,22 +230,36 @@ def write_covers() -> list[dict]:
         source = PACKAGE / "CoverSource" / track.library / f"{track.basename}.jpg"
         source.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(art[track.cover_url],source)
         report.append({"file":target.relative_to(PACKAGE).as_posix(),"dimensions":[135,135],"sha256":sha(target)})
-    # 熱・情 uses the official album art. KINO uses a deliberate four-cover
-    # collage, so no single album jacket is misrepresented as the whole library.
+    # 熱・情 uses the official album art. KINO deliberately uses one public-
+    # domain Victor Tsoi portrait; a four-album collage is not the collection's
+    # visual identity and is difficult to read on the 135px display.
     with Image.open(art[PASSION_COVER]) as image:
         data = library_cover(image)
     target = PACKAGE / "ADVWalkman/library-covers/folders/熱・情/cover.adv"
     target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(data)
-    unique = [art[KINO_DATA[i][5]] for i in (0,1,2,3)]
-    collage = Image.new("RGB", LIBRARY_SIZE, "black")
-    boxes = ((0,0,68,77),(68,0,135,77),(0,77,68,154),(68,77,135,154))
-    for source_path, box in zip(unique, boxes):
-        with Image.open(source_path) as image:
-            tile=ImageOps.fit(image.convert("RGB"),(box[2]-box[0],box[3]-box[1]),Image.Resampling.LANCZOS)
-        collage.paste(tile,(box[0],box[1]))
-    target = PACKAGE / "ADVWalkman/library-covers/folders/KINO/cover.adv"
-    target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(library_cover(collage))
+    write_kino_portrait_cover()
     return report
+
+
+def write_kino_portrait_cover() -> Path:
+    if not KINO_PORTRAIT.is_file():
+        raise ValueError(f"kino_portrait_missing:{KINO_PORTRAIT}:{KINO_PORTRAIT_SOURCE}")
+    with Image.open(KINO_PORTRAIT) as image:
+        portrait = ImageOps.exif_transpose(image).convert("RGB")
+        fitted = ImageOps.fit(portrait, KINO_LIBRARY_SIZE, Image.Resampling.LANCZOS, centering=(.5, .38))
+        data = library_cover(portrait, KINO_LIBRARY_SIZE, (.5, .38))
+    target = PACKAGE / "ADVWalkman/library-covers/folders/KINO/cover.adv"
+    target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(data)
+    source = PACKAGE / "CoverSource/KINO/Victor_Tsoi_1986.jpg"
+    source.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(KINO_PORTRAIT, source)
+    preview = Image.new("RGB", (135, 240), (8, 12, 8));preview.paste(fitted, (0, 0))
+    draw = ImageDraw.Draw(preview);draw.text((52, 176), "KINO", fill="white")
+    for x, y, selected in ((29, 232, False), (67, 222, True), (105, 232, False)):
+        draw.ellipse((x-26, y-26, x+26, y+26), fill="black", outline=(80, 80, 80), width=2)
+        draw.ellipse((x-9, y-9, x+9, y+9), fill=(248, 190, 0) if selected else (70, 60, 40))
+    preview_path = PRIVATE / "kino-library-135x240.png";preview_path.parent.mkdir(parents=True, exist_ok=True);preview.save(preview_path)
+    if validate_library_cover(target) != KINO_LIBRARY_SIZE:raise ValueError("kino_library_cover_dimensions")
+    return target
 
 
 def merge_and_fix_existing() -> list[str]:
@@ -364,10 +382,13 @@ def verify() -> None:
         translation = PACKAGE / "Lyrics" / track.library / f"{track.basename}.zh-Hans.lrc"
         if item["translated_cues"] and len(translation.read_text(encoding="utf-8-sig").splitlines()) != item["translated_cues"]:
             raise ValueError(f"translated_cues:{translation}")
-    for library in ("粤语迷幻", "AveMujica", "KINO", "熱・情"):
+    for library in ("粤语迷幻", "AveMujica", "熱・情"):
         cover = PACKAGE / "ADVWalkman/library-covers/folders" / library / "cover.adv"
         if validate_library_cover(cover) != LIBRARY_SIZE:
             raise ValueError(f"library_cover_dimensions:{cover}")
+    kino_cover = PACKAGE / "ADVWalkman/library-covers/folders/KINO/cover.adv"
+    if validate_library_cover(kino_cover) != KINO_LIBRARY_SIZE:
+        raise ValueError(f"library_cover_dimensions:{kino_cover}")
     canto_lyric = PACKAGE / "Lyrics/粤语迷幻/禁色.lrc"
     if canto_lyric.read_text(encoding="utf-8-sig").splitlines()[0] != "[offset:+1500]":
         raise ValueError("forbidden_colour_offset")
@@ -413,8 +434,10 @@ def sync(sd_text: str) -> None:
 
 
 if __name__=="__main__":
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument("--build",action="store_true");parser.add_argument("--verify",action="store_true");parser.add_argument("--sync")
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument("--build",action="store_true");parser.add_argument("--verify",action="store_true");parser.add_argument("--refresh-kino-cover",action="store_true");parser.add_argument("--sync")
     args=parser.parse_args()
     if args.build:build()
+    if args.refresh_kino_cover:
+        target=write_kino_portrait_cover();print(f"KINO_PORTRAIT_PASS file={target} dimensions={KINO_LIBRARY_SIZE}",flush=True)
     if args.verify:verify()
     if args.sync:sync(args.sync)

@@ -55,7 +55,7 @@ void dispatchInput() {
         const bool accepted=action==UiAction::SaveDiagnostics||ui.handleAction(action);
         if(action==UiAction::SaveDiagnostics){
             player.requestCheckpoint();
-            const uint32_t ticket=session.requestManualSave(player.checkpointRevision(),ui.settings().store.revision(),millis());
+            const uint32_t ticket=session.requestManualSave(player.checkpointRevision(),ui.settings().store.revision(),page,millis());
             ui.notifySavePending(ticket);
         }
         session.action(action,raw,page,accepted,pcmBefore,player.snapshot());
@@ -191,7 +191,7 @@ void loop() {
     if(ui.readyToReturn()){
         if(!returnCheckpointRequested){
             player.requestCheckpoint();
-            const uint32_t ticket=session.requestManualSave(player.checkpointRevision(),ui.settings().store.revision(),millis());
+            const uint32_t ticket=session.requestManualSave(player.checkpointRevision(),ui.settings().store.revision(),ui.page(),millis());
             ui.notifySavePending(ticket);returnCheckpointRequested=true;
         }
         else if(session.storageIdle()&&!session.manualSavePending())ui.finishLauncherReturn(session.lastSaveOk());

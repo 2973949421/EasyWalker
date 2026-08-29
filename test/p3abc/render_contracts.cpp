@@ -126,11 +126,21 @@ constexpr bool saveTicketsAreNeverLost(){
     SaveTransaction save;
     const auto first=save.request(10,2,3);if(first!=1||!save.begin(11))return false;
     const auto second=save.request(12,4,5);if(second!=2||!save.active()||!save.pending())return false;
-    save.finish(true,20);if(save.completed()!=1||!save.needsNext()||!save.begin(21))return false;
+    save.finish(SaveOutcome::Succeeded,20);if(save.completed()!=1||!save.needsNext()||!save.begin(21))return false;
     if(save.requiredPlayerRevision()!=4||save.requiredDisplayRevision()!=5)return false;
     save.timeout(10021);
     return save.completed()==2&&save.status()==SaveStatus::TimedOut&&!save.pending();
 }
+constexpr bool saveOutcomesAreDistinct(){
+    SaveTransaction save;
+    save.request(1,1,1);save.begin(2);save.finish(SaveOutcome::StateSavedLogFailed,3);
+    if(save.status()!=SaveStatus::Failed||save.outcome()!=SaveOutcome::StateSavedLogFailed)return false;
+    save.request(4,2,2);save.begin(5);save.finish(SaveOutcome::StateFailed,6);
+    if(save.outcome()!=SaveOutcome::StateFailed)return false;
+    save.request(7,3,3);save.begin(8);save.timeout(10008);
+    return save.status()==SaveStatus::TimedOut&&save.outcome()==SaveOutcome::TimedOut;
+}
 static_assert(libraryTransactionTerminates(),"Library transaction must terminate on the latest exact token");
 static_assert(thousandRetargetsKeepLatest(),"1000 rapid Library retargets must preserve only the latest token");
 static_assert(saveTicketsAreNeverLost(),"every T ticket must complete or time out, including a trailing request");
+static_assert(saveOutcomesAreDistinct(),"state success and diagnostic success have distinct outcomes");

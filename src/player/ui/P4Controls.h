@@ -33,7 +33,7 @@ constexpr UiAction routedActionAt(UiPage page, int x, int y) {
                ? UiAction::Back
                : x == 5 && y == 1
                      ? UiAction::SaveDiagnostics
-                     : x == 0 && y == 1 && page != UiPage::Settings
+                     : x == 0 && y == 1
                            ? UiAction::ToggleCurrentPlaybackPage
                            : page == UiPage::Player
                                  ? (playerKeyAt(x, y) == PlayerKey::VolumeUp
@@ -110,8 +110,8 @@ static_assert(routedActionAt(UiPage::Playlist, 12, 3) == UiAction::None,
               "playlist does not leak key 8");
 static_assert(routedActionAt(UiPage::Settings, 12, 3) == UiAction::Right,
               "settings keeps right navigation");
-static_assert(routedActionAt(UiPage::Settings, 0, 1) == UiAction::None,
-              "settings does not own Tab");
+static_assert(routedActionAt(UiPage::Settings, 0, 1) == UiAction::ToggleCurrentPlaybackPage,
+              "settings Tab returns to Player");
 static_assert(routedActionAt(UiPage::Settings, 3, 2) == UiAction::None,
               "settings does not own S");
 

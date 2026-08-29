@@ -4,7 +4,7 @@ import re
 import zlib
 from pathlib import Path
 
-VERSION='0.9.0-p4ab.controls'
+VERSION='0.9.1-p4ab.fix'
 
 def evaluate_render(record):
     required=('render_contract','render_pixel_selfcheck','frame_starts','frame_rejects','frame_repairs',
@@ -23,11 +23,12 @@ def evaluate_render(record):
     return 'READY_FOR_REVIEW',['submission contract covered; screen appearance still requires human review']
 
 def evaluate_wake(record):
-    required=('reset_reason','previous_phase_valid','wake_complete','wake_unfinished_count',
+    required=('reset_reason','rtc_diagnostic_bytes','wake_complete','wake_unfinished_count',
               'wake_captured_ms','wake_backlight_ms','wake_resume_ms','wake_first_frame_ms','wake_unlock_ms',
               'wake_resume_pcm','pcm_buffers','wake_resume_position_ms','position_ms')
     absent=[k for k in required if k not in record]
     if absent:return 'INCOMPLETE',absent
+    if record['rtc_diagnostic_bytes']!='0':return 'FAIL',['rtc_diagnostic_storage']
     if int(record['wake_unfinished_count']):return 'INCOMPLETE',['wake_interrupted_before_first_frame']
     if record['wake_complete']!='YES':return 'INCOMPLETE',['wake_not_completed']
     # No timestamp ordering across uint32 wrap; compare modular deltas.
@@ -71,6 +72,21 @@ def checkpoints(data):
             current.extend(line)
     if not result:raise ValueError('No complete checkpoint; do not report PASS')
     return result  # A trailing incomplete checkpoint never erases earlier evidence.
+
+def save_records(data):
+    """Return independently committed SAVE_BEGIN/SAVE_END records.
+
+    A torn full snapshot is intentionally ignored by checkpoints(), while a
+    later short SAVE_END remains readable and can report partial success.
+    """
+    records=[]
+    for line in data.splitlines(keepends=True):
+        match=re.fullmatch(rb'(SAVE_(?:BEGIN|END) .+ )crc=([0-9a-fA-F]{8})\n',line)
+        if not match:continue
+        if int(match[2],16)!=zlib.crc32(match[1]):raise ValueError('SAVE record CRC mismatch')
+        fields=dict(item.split('=',1) for item in match[1].decode('utf-8').strip().split()[1:])
+        fields['record']=match[1].split(b' ',1)[0].decode('ascii');records.append(fields)
+    return records
 
 def evaluate(record):
     if record.get('version')!=VERSION or record.get('mode')!='free':raise ValueError('Wrong firmware/log format')
@@ -130,7 +146,10 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('log',type=Path)
     args=parser.parse_args()
-    records=checkpoints(args.log.read_bytes())
+    data=args.log.read_bytes();records=checkpoints(data);saves=save_records(data)
+    begun={(item.get('boot_id','0'),item['ticket']) for item in saves if item['record']=='SAVE_BEGIN'}
+    ended={(item.get('boot_id','0'),item['ticket']) for item in saves if item['record']=='SAVE_END'}
+    if begun-ended:raise ValueError('T save has no terminal record: '+','.join('/'.join(value) for value in sorted(begun-ended)))
     # No later checkpoint may hide a recorded error from this session.
     groups=current_boots(records)
     current=[r for group in groups.values() for r in group]

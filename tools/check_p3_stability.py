@@ -1,4 +1,4 @@
-"""0.8.5 state ownership, save-ticket and streaming-log host contracts.
+"""0.9.1 state ownership, save-ticket and streaming-log host contracts.
 
 These tests exercise production pure state types with the target compiler.
 They do not claim LCD timing, SD latency, or audio continuity on hardware.
@@ -54,7 +54,7 @@ class StabilityChecks(unittest.TestCase):
         self.assertEqual([r['sequence'] for r in full_records(records)], ['2'])
 
     def test_stage_a_version_and_single_keyboard_update(self):
-        self.assertEqual(VERSION, '0.9.0-p4ab.controls')
+        self.assertEqual(VERSION, '0.9.1-p4ab.fix')
         main = (ROOT/'src/player/app/PlayerDevMain.cpp').read_text(encoding='utf-8')
         loop = main.split('void loop()')[1]
         self.assertEqual(loop.count('M5Cardputer.update()'), 1)

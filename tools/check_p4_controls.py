@@ -35,7 +35,7 @@ class P4ControlChecks(unittest.TestCase):
         self.assertIn("UiPage::Playlist", controls)
         self.assertIn("UiPage::Library", controls)
         self.assertIn("UiPage::Settings", controls)
-        self.assertIn("settings does not own Tab", controls)
+        self.assertIn("settings Tab returns to Player", controls)
 
     def test_transport_and_mode_have_one_checkpoint_boundary(self):
         runtime = source("src/player/app/PlayerRuntime.cpp")

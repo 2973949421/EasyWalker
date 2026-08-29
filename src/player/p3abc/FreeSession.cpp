@@ -9,14 +9,31 @@
 #include <cstring>
 #include <cstdlib>
 namespace adv_walkman { namespace player {
-namespace {constexpr const char* kLog="/ADVWalkman/logs/p3-free-last.txt";}
+namespace {
+constexpr const char* kLog="/ADVWalkman/logs/p4-free-current.txt";
+constexpr const char* kPreviousLog="/ADVWalkman/logs/p4-free-previous.txt";
+constexpr const char* kRotateTemp="/ADVWalkman/logs/p4-free-rotate.tmp";
+constexpr uint32_t kSummaryIntervalMs=60000;
+constexpr size_t kLogLimit=1024U*1024U;
+bool rotateLog(){
+    auto current=SD.open(kLog,"r");const size_t size=current?current.size():0;if(current)current.close();
+    if(size<kLogLimit)return true;
+    if(SD.exists(kRotateTemp))SD.remove(kRotateTemp);
+    if(!SD.rename(kLog,kRotateTemp))return false;
+    auto fresh=SD.open(kLog,"w");if(!fresh){SD.rename(kRotateTemp,kLog);return false;}fresh.close();
+    if(SD.exists(kPreviousLog))SD.remove(kPreviousLog);
+    return SD.rename(kRotateTemp,kPreviousLog);
+}
+}
 void FreeSession::begin(){
     started_=lastSaved_=millis();inputCheck_=checkInputEdges();
     if(!inputCheck_)fail("input","edge_selfcheck");
     if(!SD.exists("/ADVWalkman/logs"))SD.mkdir("/ADVWalkman/logs");
-    // Stream the history once at boot.  A full snapshot is deliberately much
-    // larger than the one-KiB scratch, so a tail-only search can miss boot_id.
-    auto previous=SD.open(kLog,"r");if(previous){
+    if(!rotateLog())fail("logging","rotate_log");
+    // Only the bounded P4 current/previous pair is scanned. The 3.61 MiB P3
+    // journal is preserved as history and is never reopened by this version.
+    const char* logs[]={kPreviousLog,kLog};
+    for(const char* path:logs){auto previous=SD.open(path,"r");if(previous){
         static const char needle[]="boot_id=";uint8_t match=0;bool digits=false;uint32_t value=0;
         while(previous.available()){
             const int got=previous.read(reinterpret_cast<uint8_t*>(buffer_),sizeof(buffer_));if(got<=0)break;
@@ -27,15 +44,14 @@ void FreeSession::begin(){
                 else match=ch==needle[0]?1:0;
             }
         }
-        if(digits)bootId_=std::max(bootId_,value+1);previous.close();
-    }
+        if(digits)bootId_=std::max(bootId_,value+1);previous.close();}}
     auto f=SD.open(kLog,"a");if(f){f.println();f.close();}else fail("logging","open_log");
 }
 void FreeSession::fail(const char* component,const char* reason){
     if(failure_[0])return;
     std::snprintf(component_,sizeof(component_),"%s",component);
     std::snprintf(failure_,sizeof(failure_),"%s",reason);
-    requestSave_=true;
+    requestSave_=true;failureSnapshotPending_=true;
 }
 void FreeSession::action(UiAction action,const RawKeyEvent& raw,UiPage page,bool accepted,
                          uint32_t pcmBefore,const PlayerSnapshot& after){
@@ -177,9 +193,25 @@ void FreeSession::append(const char* fmt,...){
     const int n=std::vsnprintf(buffer_+length_,sizeof(buffer_)-length_,fmt,args);va_end(args);
     if(n<0 || size_t(n)>=sizeof(buffer_)-length_){overflow_=true;return;}length_+=n;
 }
-void FreeSession::beginSnapshot(const UiCoordinator&,const PlayerRuntime&,bool detailed){
+const char* FreeSession::outcomeName(SaveOutcome outcome){
+    switch(outcome){case SaveOutcome::Succeeded:return "Succeeded";case SaveOutcome::StateSavedLogFailed:return "StateSavedLogFailed";
+        case SaveOutcome::StateFailed:return "StateFailed";case SaveOutcome::TimedOut:return "TimedOut";}return "Unknown";
+}
+const char* FreeSession::saveFailureName(SaveFailureStage stage){
+    switch(stage){case SaveFailureStage::None:return "none";case SaveFailureStage::DisplayOpen:return "display_open";
+        case SaveFailureStage::DisplayWrite:return "display_write";case SaveFailureStage::DisplayFlush:return "display_flush";
+        case SaveFailureStage::DisplayVerifyOpen:return "display_verify_open";case SaveFailureStage::DisplayVerify:return "display_verify";
+        case SaveFailureStage::Snapshot:return "snapshot";
+        case SaveFailureStage::LogOpen:return "log_open";case SaveFailureStage::LogWrite:return "log_write";
+        case SaveFailureStage::LogFlush:return "log_flush";case SaveFailureStage::Timeout:return "timeout";
+        case SaveFailureStage::PlayerBase:break;}
+    static const char* phases[]={"player_idle","player_queue_prepare","player_open","player_write_header","player_write_payload","player_close","player_verify_open","player_verify_read","player_check_size","player_resize_close","player_create","player_flush","player_read_header","player_queue_fetch","player_publish","player_cleanup"};
+    const unsigned value=unsigned(stage),base=unsigned(SaveFailureStage::PlayerBase);
+    return value>=base&&value<base+16?phases[value-base]:"unknown";
+}
+void FreeSession::beginStream(StreamKind kind,const UiCoordinator&,const PlayerRuntime&){
     length_=written_=0;overflow_=false;++sequence_;streamSection_=0;
-    streamDetailed_=detailed;streamFinalChunk_=false;streamCrc_=~0U;
+    streamKind_=kind;streamFinalChunk_=false;streamCrc_=~0U;
 }
 
 void FreeSession::prepareNext(const UiCoordinator& ui,const PlayerRuntime& player){
@@ -192,10 +224,24 @@ void FreeSession::prepareNext(const UiCoordinator& ui,const PlayerRuntime& playe
     const bool c=lyricsReady_&&coverReady_&&lyricFrames_&&coverFrames_&&deadlineUpdates_&&viewEvents_;
     const bool d=visual.coverFrames&&visual.frames&&ds.changes&&ds.store.writes&&power.sleeps&&power.wakes;
     const char* result=failure_[0]?"FAIL":a&&b&&c&&d?"READY_FOR_REVIEW":"INCOMPLETE";
-    if(!streamDetailed_){
+    if(streamKind_==StreamKind::SaveBegin){
+        append("SAVE_BEGIN boot_id=%lu ticket=%lu page=%s player_revision=%lu display_revision=%lu ",
+            (unsigned long)bootId_,(unsigned long)save_.activeThrough(),uiPageName(static_cast<UiPage>(activeSavePage_)),
+            (unsigned long)save_.requiredPlayerRevision(),(unsigned long)save_.requiredDisplayRevision());
+        const uint32_t crc=mediaCrc(~0U,reinterpret_cast<const uint8_t*>(buffer_),length_)^~0U;
+        append("crc=%08lx\n",(unsigned long)crc);streamFinalChunk_=true;return;
+    }
+    if(streamKind_==StreamKind::SaveEnd){
+        append("SAVE_END boot_id=%lu ticket=%lu outcome=%s failure_stage=%s player_revision=%lu display_revision=%lu ",
+            (unsigned long)bootId_,(unsigned long)save_.activeThrough(),outcomeName(pendingOutcome_),saveFailureName(saveFailureStage_),
+            (unsigned long)player.persistedCheckpointRevision(),(unsigned long)ui.settings().store.savedRevision());
+        const uint32_t crc=mediaCrc(~0U,reinterpret_cast<const uint8_t*>(buffer_),length_)^~0U;
+        append("crc=%08lx\n",(unsigned long)crc);streamFinalChunk_=true;return;
+    }
+    if(streamKind_==StreamKind::Summary){
         switch(streamSection_++){
             case 0:
-                append("BEGIN sequence=%lu\nsnapshot=summary\nschema=2\nversion=%s\nmode=free\nboot_id=%lu\nelapsed_ms=%lu\nresult=%s\nfailure_component=%s\nfailure_reason=%s\n",
+                append("BEGIN sequence=%lu\nsnapshot=summary\nschema=3\nversion=%s\nmode=free\nboot_id=%lu\nelapsed_ms=%lu\nresult=%s\nfailure_component=%s\nfailure_reason=%s\n",
                     (unsigned long)sequence_,ADV_WALKMAN_VERSION,(unsigned long)bootId_,(unsigned long)(millis()-started_),result,
                     component_[0]?component_:"none",failure_[0]?failure_:"none");
                 append("page=%s\nplayer_state=%s\nposition_ms=%lu\naudio_errors=%lu\nbackpressure=%lu\npcm_gap_max_us=%lu\npcm_buffers=%lu\n",
@@ -220,8 +266,8 @@ void FreeSession::prepareNext(const UiCoordinator& ui,const PlayerRuntime& playe
     }
     switch(streamSection_++){
         case 0:
-            append("BEGIN sequence=%lu\nsnapshot=full\nschema=2\nversion=%s\nmode=free\nresult=%s\nhuman_review=PENDING\nboot_id=%lu\nmanual_checkpoint=%u\na_auto=%s\nb_auto=%s\nc_auto=%s\nd_auto=%s\n",
-                (unsigned long)sequence_,ADV_WALKMAN_VERSION,result,(unsigned long)bootId_,writingManual_,a?"COVERED":"INCOMPLETE",b?"COVERED":"INCOMPLETE",c?"COVERED":"INCOMPLETE",d?"COVERED":"INCOMPLETE");return;
+            append("BEGIN sequence=%lu\nsnapshot=full\nschema=3\nversion=%s\nmode=free\nresult=%s\nhuman_review=PENDING\nboot_id=%lu\nmanual_checkpoint=%u\na_auto=%s\nb_auto=%s\nc_auto=%s\nd_auto=%s\n",
+                (unsigned long)sequence_,ADV_WALKMAN_VERSION,result,(unsigned long)bootId_,manualPhase_==ManualPhase::Full,a?"COVERED":"INCOMPLETE",b?"COVERED":"INCOMPLETE",c?"COVERED":"INCOMPLETE",d?"COVERED":"INCOMPLETE");return;
         case 1:
             append("render_contract=1\nrender_pixel_selfcheck=%s\nframe_starts=%lu\nframe_cancels=%lu\nframe_rejects=%lu\nframe_repairs=%lu\nframe_failure=%s\nframe_id=%lu\nframe_generation=%lu\nframe_pending=%u\nframe_expected_rows=%u\nframe_submitted_rows=%u\nfull_frames=%lu\npatch_frames=%lu\nfallback_frames=%lu\nframe_start_ms=%lu\nframe_first_ms=%lu\nframe_complete_ms=%lu\n",
                 u.displaySelfFailure?u.displaySelfFailure:"PASS",(unsigned long)r.frameStarts,(unsigned long)r.frameCancels,(unsigned long)r.frameRejects,(unsigned long)r.frameRepairs,r.frameFailure,
@@ -235,119 +281,201 @@ void FreeSession::prepareNext(const UiCoordinator& ui,const PlayerRuntime& playe
                 (unsigned long)m.viewColdCompleted,(unsigned long)m.viewFailures,m.viewFailure,(unsigned long)u.tabEvents,(unsigned long)u.tabStateErrors,
                 (unsigned long)u.tabPlaying,(unsigned long)u.tabPaused);return;
         case 3:
-            append("library_requests=%lu\nlibrary_stalls=%lu\nlibrary_recoveries=%lu\nlibrary_failures=%lu\nlibrary_stale_rejects=%lu\nlibrary_transaction_state=%u\nlibrary_cover_validation_hits=%lu\nlibrary_cover_stale_rejects=%lu\nlibrary_cover_frames=%lu\nvinyl_frames=%lu\nlibrary_cover_state=%u\nlibrary_cover_errors=%lu\nlibrary_cover_service_max_us=%lu\nwindow_builds=%lu\nhighlight_updates=%lu\nplaylist_frames=%lu\nlibrary_frames=%lu\ntrack_selections=%lu\ndifferent_track_selections=%lu\n",
+            append("library_requests=%lu\nlibrary_stalls=%lu\nlibrary_recoveries=%lu\nlibrary_failures=%lu\nlibrary_stale_rejects=%lu\nlibrary_transaction_state=%u\nlibrary_cover_validation_hits=%lu\nlibrary_cover_stale_rejects=%lu\nlibrary_cover_frames=%lu\nvinyl_frames=%lu\n",
                 (unsigned long)u.libraryRequests,(unsigned long)u.libraryStalls,(unsigned long)u.libraryRecoveries,(unsigned long)u.libraryFailures,
                 (unsigned long)u.libraryStaleRejects,unsigned(visual.transaction().state()),(unsigned long)visual.cover.validationHits,
-                (unsigned long)visual.cover.staleRejects,(unsigned long)visual.coverFrames,(unsigned long)visual.frames,unsigned(visual.cover.state()),
+                (unsigned long)visual.cover.staleRejects,(unsigned long)visual.coverFrames,(unsigned long)visual.frames);return;
+        case 4:
+            append("library_cover_state=%u\nlibrary_cover_errors=%lu\nlibrary_cover_service_max_us=%lu\nwindow_builds=%lu\nhighlight_updates=%lu\nplaylist_frames=%lu\nlibrary_frames=%lu\ntrack_selections=%lu\ndifferent_track_selections=%lu\n",
+                unsigned(visual.cover.state()),
                 (unsigned long)visual.cover.errors,(unsigned long)visual.cover.serviceMaxUs,(unsigned long)u.windowBuilds,(unsigned long)u.highlightUpdates,
                 (unsigned long)u.playlistFrames,(unsigned long)u.libraryFrames,(unsigned long)u.trackSelections,(unsigned long)u.differentTrackSelections);return;
-        case 4:
+        case 5:
             append("longest_playing_ms=%lu\naudio_errors=%lu\nbackpressure=%lu\npcm_gap_max_us=%lu\npcm_buffers=%lu\naudio_source_read_max_us=%lu\naudio_service_max_us=%lu\ntransport_service_max_us=%lu\npersistence_service_max_us=%lu\nlyrics_state=%u\ncover_state=%u\nlyrics_frames=%lu\ncover_frames=%lu\nlyric_deadline_updates=%lu\nprepare_max_us=%lu\npresent_max_us=%lu\nlyric_late_max_ms=%lu\nresource_bytes=%lu\nmedia_service_max_us=%lu\n",
                 (unsigned long)longestPlaying_,(unsigned long)audioErrors_,(unsigned long)backpressure_,(unsigned long)pcmGapMaxUs_,
                 (unsigned long)s.pcmBuffersSinceReset,(unsigned long)player.sourceReadMaxUs(),(unsigned long)audioMax_,
                 (unsigned long)player.transportServiceMaxUs(),(unsigned long)player.persistenceServiceMaxUs(),unsigned(m.lyrics),unsigned(m.cover),
                 (unsigned long)lyricFrames_,(unsigned long)coverFrames_,(unsigned long)deadlineUpdates_,(unsigned long)prepareMaxUs_,
                 (unsigned long)presentMaxUs_,(unsigned long)lateMaxMs_,(unsigned long)m.reads,(unsigned long)m.serviceMaxUs);return;
-        case 5:
+        case 6:
             append("nav_state=%u\nnav_generation=%lu\nnav_errors=%lu\nnav_error=%s\npage_frame_complete=%u\nqueue_count=%u\nselected_queue_count=%lu\ncurrent_index=%u\ntime_font_px=14\nbrowser_state=%u\nbrowser_error=%u\nlast_browser_error=%lu\nscanned_entries=%lu\nscratch_allocation_failures=%lu\nbrowser_prepare_max_us=%lu\nbrowser_draw_max_us=%lu\nscan_max_us=%lu\nentry_read_max_us=%lu\nnavigation_work_max_us=%lu\n",
                 unsigned(u.navigationState),(unsigned long)u.navigationGeneration,(unsigned long)u.navigationErrors,ui.navigationError()[0]?ui.navigationError():"none",
                 u.pageFirstFrameComplete,unsigned(s.queueCount),(unsigned long)u.lastQueueCount,unsigned(s.currentIndex),unsigned(ui.browser().state()),unsigned(ui.browser().error()),
                 (unsigned long)u.lastLibraryError,(unsigned long)library.scannedEntries,(unsigned long)library.scratchAllocationFailures,(unsigned long)u.prepareMaxUs,
                 (unsigned long)u.renderMaxUs,(unsigned long)library.scanMaxUs,(unsigned long)library.entryReadMaxUs,(unsigned long)u.navigationMaxUs);return;
-        case 6:
+        case 7:
             append("brightness=%u\nplayer_timeout_ms=%lu\nother_timeout_ms=%lu\ndisplay_settings_loaded=%u\nrestored_brightness=%u\nrestored_player_timeout_ms=%lu\nrestored_other_timeout_ms=%lu\nsettings_changes=%lu\nsettings_writes=%lu\nsettings_errors=%lu\nsettings_saved=%u\nsettings_service_max_us=%lu\nscreen_asleep=%u\nwake_swallowing=%u\nscreen_sleeps=%lu\nscreen_wakes=%lu\nlauncher_requests=%lu\nlauncher_errors=%lu\nlauncher_error=%s\n",
                 ds.store.value.brightness,(unsigned long)displayTimeoutMs(ds.store.value.playerTimeout),(unsigned long)displayTimeoutMs(ds.store.value.otherTimeout),ds.store.loaded,
                 ds.store.restored.brightness,(unsigned long)displayTimeoutMs(ds.store.restored.playerTimeout),(unsigned long)displayTimeoutMs(ds.store.restored.otherTimeout),
                 (unsigned long)ds.changes,(unsigned long)ds.store.writes,(unsigned long)ds.store.errors,ui.displaySettingsSaved(),(unsigned long)ds.store.serviceMaxUs,
                 power.asleep(),power.swallowing(),(unsigned long)power.sleeps,(unsigned long)power.wakes,(unsigned long)ds.returnRequests,(unsigned long)ds.returnErrors,ds.returnError());return;
-        case 7:{
+        case 8:{
             const char* scenes[]={"lyrics","cover","playlist","library","settings"};
-            append("reset_reason=%lu\nprevious_phase_valid=%u\nprevious_phase=%lu\nprevious_phase_ms=%lu\nwake_resume_pcm=%lu\nwake_unfinished_count=%lu\nwake_captured_ms=%lu\nwake_backlight_ms=%lu\nwake_resume_ms=%lu\nwake_first_frame_ms=%lu\nwake_unlock_ms=%lu\nwake_resume_position_ms=%lu\nwake_complete=%s\n",
-                (unsigned long)runtimeDiagnostics.resetReason,runtimeDiagnostics.previousValid,(unsigned long)runtimeDiagnostics.previousPhase,(unsigned long)runtimeDiagnostics.previousMs,
+            append("reset_reason=%lu\nrtc_diagnostic_bytes=0\nwake_resume_pcm=%lu\nwake_unfinished_count=%lu\nwake_captured_ms=%lu\nwake_backlight_ms=%lu\nwake_resume_ms=%lu\nwake_first_frame_ms=%lu\nwake_unlock_ms=%lu\nwake_resume_position_ms=%lu\nwake_complete=%s\n",
+                (unsigned long)runtimeDiagnostics.resetReason,
                 (unsigned long)wake.pcm,(unsigned long)ui.unfinishedWakes(),(unsigned long)wake.captured,(unsigned long)wake.backlight,(unsigned long)wake.resume,
                 (unsigned long)wake.firstFrame,(unsigned long)wake.unlocked,(unsigned long)wake.position,!power.wakes?"NA":wake.firstFrame&&wake.unlocked?"YES":"PENDING");
             for(unsigned i=0;i<5;++i)append("sleep_%s=%u\nwake_%s=%u\n",scenes[i],ui.sleepsOn(i),scenes[i],ui.wakesOn(i));return;}
-        case 8:{
-            static const char* phases[]={"idle","queue_path_prepare","open_target","write_header","write_payload","close_target","open_verify","read_verify","check_size","close_resize","create_target","flush_target","read_header","queue_path_fetch","publish","cleanup_close"};
-            append("save_requested_ticket=%lu\nsave_active_ticket=%lu\nsave_completed_ticket=%lu\nsave_status=%u\nstate_writes=%lu\ncheckpoint_revision=%lu\npersisted_checkpoint_revision=%lu\nprevious_requests=%lu\nprevious_accepted=%lu\nnext_requests=%lu\nnext_accepted=%lu\nplay_mode_requests=%lu\nplay_mode_accepted=%lu\ntransport_action_failures=%lu\nlast_transport_index=%u\nlast_transport_state=%u\ntransport_first_pcm_max_ms=%lu\ntransport_pcm_completed=%lu\ntransport_pcm_pending=%u\ntransport_pcm_superseded=%lu\ntransport_paused=%lu\nmode_before_repeat=%u\nmode_before_shuffle=%u\nmode_after_repeat=%u\nmode_after_shuffle=%u\nmode_footer_max_ms=%lu\n",
+        case 9:{
+            append("save_requested_ticket=%lu\nsave_active_ticket=%lu\nsave_completed_ticket=%lu\nsave_status=%u\nstate_writes=%lu\ncheckpoint_revision=%lu\npersisted_checkpoint_revision=%lu\nprevious_requests=%lu\nprevious_accepted=%lu\nnext_requests=%lu\nnext_accepted=%lu\nplay_mode_requests=%lu\nplay_mode_accepted=%lu\ntransport_action_failures=%lu\n",
                 (unsigned long)save_.requested(),(unsigned long)save_.activeThrough(),(unsigned long)save_.completed(),unsigned(save_.status()),(unsigned long)player.stateWriteCount(),
                 (unsigned long)player.checkpointRevision(),(unsigned long)player.persistedCheckpointRevision(),
                 (unsigned long)previousRequests_,(unsigned long)u.previousActions,
                 (unsigned long)nextRequests_,(unsigned long)u.nextActions,
                 (unsigned long)playModeRequests_,(unsigned long)u.playModeActions,
-                (unsigned long)u.transportActionFailures,unsigned(lastTransportIndex_),unsigned(lastTransportState_),
+                (unsigned long)u.transportActionFailures);return;}
+        case 10:
+            append("last_transport_index=%u\nlast_transport_state=%u\ntransport_first_pcm_max_ms=%lu\ntransport_pcm_completed=%lu\ntransport_pcm_pending=%u\ntransport_pcm_superseded=%lu\ntransport_paused=%lu\nmode_before_repeat=%u\nmode_before_shuffle=%u\nmode_after_repeat=%u\nmode_after_shuffle=%u\nmode_footer_max_ms=%lu\n",
+                unsigned(lastTransportIndex_),unsigned(lastTransportState_),
                 (unsigned long)transportFirstPcmMaxMs_,(unsigned long)transportPcmCompleted_,transportPcmPending_,
                 (unsigned long)transportPcmSuperseded_,(unsigned long)transportPaused_,u.modeBeforeRepeat,u.modeBeforeShuffle,
-                u.modeAfterRepeat,u.modeAfterShuffle,(unsigned long)u.modeFeedbackMaxMs);
+                u.modeAfterRepeat,u.modeAfterShuffle,(unsigned long)u.modeFeedbackMaxMs);return;
+        case 11:{
+            static const char* phases[]={"idle","queue_path_prepare","open_target","write_header","write_payload","close_target","open_verify","read_verify","check_size","close_resize","create_target","flush_target","read_header","queue_path_fetch","publish","cleanup_close"};
             for(unsigned i=1;i<16;++i)append("store_%s_max_us=%lu\n",phases[i],(unsigned long)player.persistencePhasePeakUs(i));return;}
-        case 9:
+        case 12:
             append("failure_component=%s\nfailure_reason=%s\nresource_operation=%s\nresource_errno=%d\nresource_expected=%ld\nresource_actual=%ld\nlyrics_failure=%s\ncover_failure=%s\nfont_failure=%s\nnavigation_failure=%s\ndisplay_selfchecks=%u\ndisplay_self_failure=%s\nfont_io_errors=%lu\nfont_draw_misses=%lu\nmetadata_fallbacks=%lu\nmetadata_fallback_cause=%u\n",
                 component_[0]?component_:"none",failure_[0]?failure_:"none",resourceOperation_[0]?resourceOperation_:"NA",resourceErrno_,(long)resourceExpected_,(long)resourceActual_,
                 mediaErrors_[0].count?mediaErrors_[0].failure.reason:"none",mediaErrors_[1].count?mediaErrors_[1].failure.reason:"none",
                 mediaErrors_[2].count?mediaErrors_[2].failure.reason:"none",mediaErrors_[3].count?mediaErrors_[3].failure.reason:"none",
                 u.displaySelfChecks,u.displaySelfFailure?u.displaySelfFailure:"none",(unsigned long)ui.fonts().stats().ioErrors,
                 (unsigned long)ui.fonts().stats().drawMisses,(unsigned long)ui.metadataFallbacks(),ui.metadataFallbackCause());return;
-        case 10:
-            append("elapsed_ms=%lu\npage=%s\nplayer_state=%s\nposition_ms=%lu\nsample_rate=%lu\nvolume=%u\npreferred_view=%u\neffective_view=%u\nheader_visible=%u\nrepeat_raw=%u\nshuffle_raw=%u\nspeaker_volume_raw=%u\nspeaker_volume_cap=%u\nminimum_heap=%lu\nheap_free=%lu\nheap_largest_block=%lu\nmedia_budget_bytes=%u\nmedia_plus_events_bytes=%lu\ninput_selfcheck=%u\nactions=%lu\nnav_mask=%lu\nvolume_events=%lu\nplay_events=%lu\nview_events=%lu\nlibrary_text_seen=%u\nlibrary_text_ok=%u\nno_lyrics_view_noop=%lu\npreference_track_transitions=%lu\ncoverage_scope=free_main_path\nnot_exercised=playing_seek;manual_reboot_requires_host_comparison\nspeaker_distortion=DEFERRED\n",
+        case 13:
+            append("elapsed_ms=%lu\npage=%s\nplayer_state=%s\nposition_ms=%lu\nsample_rate=%lu\nvolume=%u\npreferred_view=%u\neffective_view=%u\nheader_visible=%u\nrepeat_raw=%u\nshuffle_raw=%u\nspeaker_volume_raw=%u\nspeaker_volume_cap=%u\nminimum_heap=%lu\nheap_free=%lu\nheap_largest_block=%lu\nmedia_budget_bytes=%u\nmedia_plus_events_bytes=%lu\n",
                 (unsigned long)(millis()-started_),uiPageName(ui.page()),playerStateName(s.state),(unsigned long)s.positionMs,(unsigned long)s.sampleRateHz,player.volume(),player.preferredNowPlayingView(),unsigned(m.view),
                 ui.nowPlaying().model().headerVisible,unsigned(s.repeatMode),s.shuffleEnabled,player.rawSpeakerVolume(),VolumePolicy::maximumRaw,(unsigned long)minimumHeap_,(unsigned long)ESP.getFreeHeap(),
-                (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT),unsigned(kP3DMediaBudgetBytes),(unsigned long)p3MemoryReport[1],inputCheck_,(unsigned long)actions_,(unsigned long)nav_,
+                (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT),unsigned(kP3DMediaBudgetBytes),(unsigned long)p3MemoryReport[1]);return;
+        case 14:
+            append("input_selfcheck=%u\nactions=%lu\nnav_mask=%lu\nvolume_events=%lu\nplay_events=%lu\nview_events=%lu\nlibrary_text_seen=%u\nlibrary_text_ok=%u\nno_lyrics_view_noop=%lu\npreference_track_transitions=%lu\ncoverage_scope=free_main_path\nnot_exercised=playing_seek;manual_reboot_requires_host_comparison\nspeaker_distortion=DEFERRED\n",
+                inputCheck_,(unsigned long)actions_,(unsigned long)nav_,
                 (unsigned long)volumeEvents_,(unsigned long)playEvents_,(unsigned long)viewEvents_,textSeen_,textOk_,(unsigned long)noLyricsView_,(unsigned long)preferenceTransitions_);return;
-        case 11:
+        case 15:
             append("media_track_ref=track\nmedia_generation=%lu\nmedia_active=%u\n",
                 (unsigned long)m.generation,ui.nowPlaying().model().active);
             append("track=%s\n",track_);return;
-        case 12:
+        case 16:
             append("restored_track=%s\nrestored_position_ms=%lu\nrestored_view=%u\nstartup_paused=%u\nstartup_silent=%u\nstartup_observed_ms=%lu\n",
                 restoredTrack_,(unsigned long)restoredPosition_,restoredView_,startupPaused_,startupSilent_,(unsigned long)startupObservedMs_);return;
-        case 13:append("resource_path=%s\n",resourcePath_[0]?resourcePath_:"NA");return;
-        case 14:append("nav_target=%s\n",ui.navigationTarget());return;
-        case 15:append("browser_path=%s\n",ui.browser().currentPath());return;
-        case 16:case 17:case 18:case 19:{
-            const uint32_t block=streamSection_-17;const uint32_t first=eventCount_>32?eventCount_-32:0;
-            const uint32_t from=first+block*8,to=std::min<uint32_t>(eventCount_,from+8);
+        case 17:append("resource_path=%s\n",resourcePath_[0]?resourcePath_:"NA");return;
+        case 18:append("nav_target=%s\n",ui.navigationTarget());return;
+        case 19:append("browser_path=%s\n",ui.browser().currentPath());return;
+        case 20:case 21:case 22:case 23:case 24:case 25:case 26:case 27:{
+            const uint32_t block=streamSection_-21;const uint32_t first=eventCount_>32?eventCount_-32:0;
+            const uint32_t from=first+block*4,to=std::min<uint32_t>(eventCount_,from+4);
             for(uint32_t i=from;i<to;++i){const auto& e=events_[i%32];append("event_%lu=%lu,%s,%s,%d,%d,%u,captured_abs_ms:%lu\n",
                 (unsigned long)i,(unsigned long)e.ms,uiPageName(e.page),uiActionName(e.action),e.x,e.y,e.accepted,(unsigned long)e.captured);}return;}
         default:
             streamFinalChunk_=true;append("END sequence=%lu crc=%08lx\n",(unsigned long)sequence_,(unsigned long)(streamCrc_^~0U));return;
     }
 }
-void FreeSession::service(UiCoordinator& ui,const PlayerRuntime& player,uint32_t uiBurstUs){
-    uiBurstMaxUs_=std::max(uiBurstMaxUs_,uiBurstUs);
-    const uint32_t now=millis();
-    if(save_.active()&&save_.timedOut(now)){
-        if(file_)file_.close();file_=fs::File();logPrepared_=false;streamFinalChunk_=false;writingManual_=false;requestSave_=save_.needsNext();
-        const uint32_t ticket=save_.activeThrough();save_.timeout(now);lastSaveOk_=false;ui.notifySaveFinished(ticket,false,"超时");return;
+void FreeSession::startNextTicket(uint32_t now){
+    if(save_.needsNext()&&save_.begin(now)){
+        activeSavePage_=latestSavePage_;manualPhase_=ManualPhase::Begin;
+        pendingOutcome_=SaveOutcome::Succeeded;saveFailureStage_=SaveFailureStage::None;
     }
-    if(save_.active()){
-        if(player.persistedCheckpointRevision()<save_.requiredPlayerRevision()){save_.stage(SaveStatus::WaitingPlayer);return;}
-        if(ui.settings().store.savedRevision()<save_.requiredDisplayRevision()){save_.stage(SaveStatus::WaitingDisplay);return;}
-    }else if(!player.persistenceIdle())return;
+}
+void FreeSession::finishStream(UiCoordinator& ui,const PlayerRuntime&,bool logOk){
+    const StreamKind completed=streamKind_;streamKind_=StreamKind::None;lastSaved_=millis();
+    if(completed==StreamKind::SaveBegin){
+        if(!logOk){pendingOutcome_=SaveOutcome::StateSavedLogFailed;if(saveFailureStage_==SaveFailureStage::None)saveFailureStage_=SaveFailureStage::LogWrite;}
+        manualPhase_=ManualPhase::WaitState;return;
+    }
+    if(completed==StreamKind::Full){
+        if(manualPhase_==ManualPhase::Full){
+            if(!logOk){pendingOutcome_=SaveOutcome::StateSavedLogFailed;if(saveFailureStage_==SaveFailureStage::None)saveFailureStage_=SaveFailureStage::Snapshot;}
+            manualPhase_=ManualPhase::End;
+        }
+        failureSnapshotPending_=false;return;
+    }
+    if(completed==StreamKind::SaveEnd){
+        if(!logOk&&pendingOutcome_==SaveOutcome::Succeeded){pendingOutcome_=SaveOutcome::StateSavedLogFailed;saveFailureStage_=SaveFailureStage::LogWrite;}
+        const uint32_t ticket=save_.activeThrough();const SaveOutcome outcome=pendingOutcome_;
+        save_.finish(outcome,millis());lastSaveOk_=outcome==SaveOutcome::Succeeded||outcome==SaveOutcome::StateSavedLogFailed;
+        const SaveNotice notice=outcome==SaveOutcome::Succeeded?SaveNotice::Succeeded:
+            outcome==SaveOutcome::StateSavedLogFailed?SaveNotice::StateSavedLogFailed:
+            outcome==SaveOutcome::TimedOut?SaveNotice::TimedOut:SaveNotice::Failed;
+        ui.notifySaveFinished(ticket,notice,saveFailureName(saveFailureStage_));manualPhase_=ManualPhase::None;
+        startNextTicket(millis());return;
+    }
+}
+void FreeSession::service(UiCoordinator& ui,const PlayerRuntime& player,uint32_t){
+    const uint32_t now=millis();
+    if(save_.active()&&manualPhase_!=ManualPhase::End&&save_.timedOut(now)){
+        if(file_)file_.close();file_=fs::File();logPrepared_=false;streamFinalChunk_=false;streamKind_=StreamKind::None;
+        pendingOutcome_=SaveOutcome::TimedOut;saveFailureStage_=SaveFailureStage::Timeout;manualPhase_=ManualPhase::End;
+    }
     if(ui.nowPlaying().presentingLyrics() || ui.settingsBusy())return;
-    const uint32_t start=micros();
     if(file_){
         if(written_<length_){const size_t n=std::min<size_t>(512,length_-written_);
-            if(file_.write(reinterpret_cast<const uint8_t*>(buffer_+written_),n)!=n){logWriteOk_=false;fail("logging","write_log");written_=length_;streamFinalChunk_=true;}
-            else{if(!streamFinalChunk_)streamCrc_=mediaCrc(streamCrc_,reinterpret_cast<const uint8_t*>(buffer_+written_),n);written_+=n;}}
-        else if(!streamFinalChunk_){prepareNext(ui,player);if(overflow_){logWriteOk_=false;fail("logging","checkpoint_section");streamFinalChunk_=true;}return;}
-        else if(!logFlushed_){file_.flush();logWriteOk_&=file_.getWriteError()==0;logFlushed_=true;}
-        else{const bool logOk=logWriteOk_;file_.close();lastSaved_=millis();
-            const bool persisted=player.stateStoreAvailable()&&player.lastPersistenceResult()==PersistenceResult::Ok;
-            if(!logOk)fail("logging","flush_log");if(writingManual_&&!persisted)fail("persistence","manual_checkpoint_not_saved");
-            lastSaveOk_=logOk&&persisted&&ui.displaySettingsSaved();
-            if(writingManual_){const uint32_t ticket=save_.activeThrough();save_.finish(lastSaveOk_,millis());ui.notifySaveFinished(ticket,lastSaveOk_,lastSaveOk_?nullptr:"校验");}
-            writingManual_=false;if(save_.needsNext()){save_.begin(millis());requestSave_=true;}}
-    }else if(logPrepared_){
+            if(file_.write(reinterpret_cast<const uint8_t*>(buffer_+written_),n)!=n){
+                logWriteOk_=false;if(save_.active())saveFailureStage_=SaveFailureStage::LogWrite;
+                fail("logging","write_log");written_=length_;streamFinalChunk_=true;
+            }else{if(!streamFinalChunk_)streamCrc_=mediaCrc(streamCrc_,reinterpret_cast<const uint8_t*>(buffer_+written_),n);written_+=n;}}
+        else if(!streamFinalChunk_){
+            prepareNext(ui,player);
+            if(overflow_){logWriteOk_=false;if(save_.active())saveFailureStage_=SaveFailureStage::Snapshot;fail("logging","checkpoint_section");streamFinalChunk_=true;}
+            return;
+        }else if(!logFlushed_){
+            file_.flush();logWriteOk_&=file_.getWriteError()==0;
+            if(!logWriteOk_&&save_.active())saveFailureStage_=SaveFailureStage::LogFlush;
+            logFlushed_=true;
+        }else{
+            const bool logOk=logWriteOk_;const bool rotate=file_.size()>=kLogLimit;file_.close();
+            if(!logOk)fail("logging","flush_log");finishStream(ui,player,logOk);
+            if(rotate&&!rotateLog())fail("logging","rotate_log");
+        }
+        return;
+    }
+    if(logPrepared_){
         file_=SD.open(kLog,"a");logPrepared_=false;logFlushed_=false;logWriteOk_=true;
-        if(file_){if(!file_.setBufferSize(512)){logWriteOk_=false;written_=length_;fail("logging","log_buffer");}}
-        else{const uint32_t ticket=save_.activeThrough();writingManual_=false;fail("logging","open_log");if(save_.active()){save_.finish(false,millis());ui.notifySaveFinished(ticket,false,"日志打开");}lastSaved_=millis();}
-    }else if(requestSave_ || millis()-lastSaved_>=15000){
-        writingManual_=save_.active();if(writingManual_)save_.stage(SaveStatus::WritingDiagnostics);
-        beginSnapshot(ui,player,writingManual_||failure_[0]);prepareNext(ui,player);requestSave_=false;
-        lastSaveOk_=false;
-        if(overflow_){const uint32_t ticket=save_.activeThrough();writingManual_=false;fail("logging","checkpoint_section");if(save_.active()){save_.finish(false,millis());ui.notifySaveFinished(ticket,false,"日志过大");}lastSaved_=millis();return;}
+        if(file_){if(!file_.setBufferSize(512)){logWriteOk_=false;written_=length_;if(save_.active())saveFailureStage_=SaveFailureStage::LogWrite;fail("logging","log_buffer");}}
+        else{
+            if(save_.active())saveFailureStage_=SaveFailureStage::LogOpen;
+            fail("logging","open_log");finishStream(ui,player,false);
+        }
+        return;
+    }
+    if(save_.active()){
+        if(manualPhase_==ManualPhase::Begin){
+            save_.stage(SaveStatus::WritingDiagnostics);beginStream(StreamKind::SaveBegin,ui,player);prepareNext(ui,player);logPrepared_=!overflow_;
+            if(overflow_){pendingOutcome_=SaveOutcome::StateSavedLogFailed;saveFailureStage_=SaveFailureStage::Snapshot;manualPhase_=ManualPhase::WaitState;}
+            return;
+        }
+        if(manualPhase_==ManualPhase::WaitState){
+            if(player.persistedCheckpointRevision()<save_.requiredPlayerRevision()){
+                if(player.persistenceIdle()&&player.lastPersistenceResult()!=PersistenceResult::Ok){pendingOutcome_=SaveOutcome::StateFailed;saveFailureStage_=static_cast<SaveFailureStage>(unsigned(SaveFailureStage::PlayerBase)+player.persistenceFailurePhase());manualPhase_=ManualPhase::End;}
+                else{save_.stage(SaveStatus::WaitingPlayer);return;}
+            }
+            if(manualPhase_==ManualPhase::WaitState&&ui.settings().store.savedRevision()<save_.requiredDisplayRevision()){
+                if(ui.settings().store.idle()&&ui.settings().store.error()[0]!='n'){
+                    pendingOutcome_=SaveOutcome::StateFailed;const char* error=ui.settings().store.error();
+                    saveFailureStage_=!std::strcmp(error,"settings_open")?SaveFailureStage::DisplayOpen:
+                        !std::strcmp(error,"settings_write")?SaveFailureStage::DisplayWrite:
+                        !std::strcmp(error,"settings_flush")?SaveFailureStage::DisplayFlush:
+                        !std::strcmp(error,"settings_verify_open")?SaveFailureStage::DisplayVerifyOpen:SaveFailureStage::DisplayVerify;
+                    manualPhase_=ManualPhase::End;}
+                else{save_.stage(SaveStatus::WaitingDisplay);return;}
+            }
+            if(manualPhase_==ManualPhase::WaitState)manualPhase_=ManualPhase::Full;
+        }
+        if(manualPhase_==ManualPhase::Full){
+            save_.stage(SaveStatus::WritingDiagnostics);beginStream(StreamKind::Full,ui,player);prepareNext(ui,player);
+            if(overflow_){pendingOutcome_=SaveOutcome::StateSavedLogFailed;saveFailureStage_=SaveFailureStage::Snapshot;manualPhase_=ManualPhase::End;}
+            else logPrepared_=true;return;
+        }
+        if(manualPhase_==ManualPhase::End){
+            save_.stage(SaveStatus::Verifying);beginStream(StreamKind::SaveEnd,ui,player);prepareNext(ui,player);
+            if(overflow_){const uint32_t ticket=save_.activeThrough();save_.finish(pendingOutcome_,millis());lastSaveOk_=pendingOutcome_==SaveOutcome::Succeeded||pendingOutcome_==SaveOutcome::StateSavedLogFailed;
+                ui.notifySaveFinished(ticket,pendingOutcome_==SaveOutcome::TimedOut?SaveNotice::TimedOut:pendingOutcome_==SaveOutcome::StateFailed?SaveNotice::Failed:SaveNotice::StateSavedLogFailed,"日志终态");manualPhase_=ManualPhase::None;startNextTicket(millis());}
+            else logPrepared_=true;return;
+        }
+    }
+    if(!player.persistenceIdle())return;
+    if(requestSave_||uint32_t(now-lastSaved_)>=kSummaryIntervalMs){
+        const bool detailed=failureSnapshotPending_;beginStream(detailed?StreamKind::Full:StreamKind::Summary,ui,player);prepareNext(ui,player);
+        requestSave_=false;if(detailed)failureSnapshotPending_=false;
+        if(overflow_){fail("logging","checkpoint_section");lastSaved_=millis();return;}
         logPrepared_=true;
     }
-    writeMaxUs_=std::max<uint32_t>(writeMaxUs_,micros()-start);
 }
 } }

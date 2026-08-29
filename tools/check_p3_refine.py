@@ -90,11 +90,11 @@ class RefineChecks(unittest.TestCase):
     def test_wake_missing_evidence_and_historical_versions(self):
         self.assertEqual(evaluate_wake({})[0],'INCOMPLETE')
         with self.assertRaises(ValueError):current_boots([dict(version='0.8.2-p3d.perf',boot_id='6')])
-        record=dict(reset_reason='3',previous_phase_valid='1',wake_complete='YES',wake_unfinished_count='0',
+        record=dict(reset_reason='3',rtc_diagnostic_bytes='0',wake_complete='YES',wake_unfinished_count='0',
             wake_captured_ms='100',wake_backlight_ms='120',wake_resume_ms='121',wake_first_frame_ms='150',wake_unlock_ms='140',
             wake_resume_pcm='10',pcm_buffers='50',wake_resume_position_ms='2000',position_ms='3000')
         self.assertEqual(evaluate_wake(record)[0],'READY_FOR_REVIEW')
         self.assertEqual(evaluate_wake(dict(record,wake_complete='PENDING'))[0],'INCOMPLETE')
         self.assertEqual(evaluate_wake(dict(record,wake_first_frame_ms='90'))[0],'FAIL')
-        self.assertEqual(VERSION,'0.9.0-p4ab.controls')
+        self.assertEqual(VERSION,'0.9.1-p4ab.fix')
 if __name__=='__main__':unittest.main(verbosity=2)
