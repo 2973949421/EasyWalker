@@ -10,7 +10,7 @@ struct CachedGlyph {
     uint8_t age=0,width=0,height=0;
     int8_t dx=0,dy=0;
     uint8_t font=0;
-    uint8_t state:2,pinned:3;
+    uint8_t state:2,pinned:5;
     uint8_t advance=0;
     CachedGlyph():state(0),pinned(0){}
 };
@@ -27,7 +27,15 @@ class FontCache final {
         LibraryCjk12,LibraryCjk18,LibraryLatin14,LibraryLatin22,FaceCount };
     static constexpr unsigned kBitmapBytes=15*1024,kMetrics=200;
     bool begin();void release();~FontCache(){release();}
-    enum Pin : uint8_t { Next=1, Current=2, Ui=4, All=7 };
+    enum Pin : uint8_t {
+        Next=1,
+        Current=2,
+        Playlist=4,
+        Library=8,
+        Ui=16,
+        Player=Next|Current|Ui,
+        All=31,
+    };
     bool request(uint32_t cp,uint8_t font,uint8_t pin=0);
     bool requestMetric(uint32_t cp,uint8_t font);
     bool requestUiMetrics(const char* text,uint8_t pixels,bool library=false);
@@ -35,7 +43,7 @@ class FontCache final {
     uint8_t verticalAdvance(uint32_t cp)const{const uint8_t v=work_&&cp<256?work_->latinAdvance[Latin14-Latin10][cp]:0x88;return std::max<uint8_t>(v>>4,v&15);}
     int textWidth(const char* text,uint8_t pixels)const;
     bool requestText(const char* text,uint8_t font);
-    bool requestUiWindow(const char* text,uint8_t font,int startPx,int widthPx,float size,bool library=false);
+    bool requestUiWindow(const char* text,uint8_t font,int startPx,int widthPx,float size,bool library=false,uint8_t pin=0);
     void service();
     const CachedGlyph* find(uint32_t cp,uint8_t font)const;
     const uint8_t* bitmap(const CachedGlyph& glyph)const;

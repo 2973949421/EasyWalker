@@ -39,10 +39,13 @@ void arc(lgfx::LGFXBase& row,FontCache& cache,const char* text,int cx,int cy,int
     }
 }
 }
-void LibraryVisual::select(const char* path,int direction){
+void LibraryVisual::select(const char* path,int direction,UiRequestToken token){
     // Retarget the visible phase, rather than enqueueing obsolete motions.
     animationFrom_=std::max(-2.f,std::min(2.f,animationFrom_*(3-int(animationStep_))/3.f+direction));
-    visible_=true;cover.select(path);invalidate();previousState_=MediaState::Loading;
+    const bool first=!visible_;visible_=true;transaction_.request(token,millis());cover.select(path,token.resourceGeneration);
+    cover.finishBand();imageY_=cover.state()==MediaState::Ready?0:174;bottomY_=kLibraryWheelTop;
+    nameDone_=false;nameMeasured_=false;clear_=first;nameLayout={};nameOffset_=0;nameEpoch_=nameTick_=millis();
+    previousState_=cover.state();if(cover.state()==MediaState::Loading)transaction_.validating(millis());else transaction_.rendering(millis());
     namesReady_=0;animationAt_=0;animationStep_=direction?0:3;
 }
 void LibraryVisual::setShortName(unsigned slot,const char* text){
@@ -53,7 +56,8 @@ void LibraryVisual::setShortName(unsigned slot,const char* text){
     std::memcpy(shortNames_[slot],text,n);shortNames_[slot][n]=0;namesReady_|=1U<<slot;
 }
 bool LibraryVisual::prepare(FontCache& fonts,const UiRenderContext& c){
-    if(!fonts.requestUiMetrics(c.catalogCount?c.libraryName:"暂无曲库",22,true))return false;
+    const char* name=transaction_.state()==LibraryPageState::Error&&c.error?c.error:(c.catalogCount?c.libraryName:"暂无曲库");
+    if(!fonts.requestUiMetrics(name,22,true))return false;
     if(c.catalogCount){if(namesReady_!=7)return false;
         for(const auto& text:shortNames_)if(!fonts.requestUiWindow(text,14,0,70,1,true))return false;}
     return true;
@@ -72,7 +76,7 @@ void LibraryVisual::drawDiscs(M5Canvas& row,FontCache& fonts,const UiRenderConte
         arc(row,fonts,shortNames_[p.index+1],p.x,p.y,y,p.angle,kLibraryWheelTop,p.index==0?0x65FF:0x43D7);}
 }
 bool LibraryVisual::drawName(M5GFX& display,FontCache& fonts,const UiRenderContext& c,uint32_t now){
-    const char* text=c.catalogCount?c.libraryName:"暂无曲库";
+    const char* text=transaction_.state()==LibraryPageState::Error&&c.error?c.error:(c.catalogCount?c.libraryName:"暂无曲库");
     if(!nameMeasured_){
         if(!fonts.requestUiMetrics(text,22,true))return false;
         bool invalid=false;int advance=0,left=0,right=0;const char* p=text;
@@ -96,14 +100,18 @@ bool LibraryVisual::drawName(M5GFX& display,FontCache& fonts,const UiRenderConte
         if(x+g->dx+g->width>6&&x+g->dx<129)fonts.draw(display,cp,face,x,kLibraryNameTop,TFT_WHITE,bg);
         x+=g->advance;}
     display.clearClipRect();nameDone_=true;nameOffset_=offset;nameTick_=now;
-    fonts.clearPins(FontCache::Ui);return true;
+    transaction_.mark(LibraryNameRegion,now);if(transaction_.publish(now))++coverFrames;return true;
 }
 bool LibraryVisual::render(M5GFX& display,M5Canvas& row,FontCache& fonts,const UiRenderContext& c,uint32_t now){
     if(!visible_)return false;
     if(clear_){display.fillRect(0,0,135,240,bg);clear_=false;return true;}
     if(!cover.bandActive()&&drawName(display,fonts,c,now))return true;
     if(!nameDone_)return false;
-    if(cover.state()!=previousState_){previousState_=cover.state();imageY_=0;}
+    if(cover.state()!=previousState_){
+        previousState_=cover.state();
+        if(previousState_==MediaState::Ready){imageY_=0;transaction_.rendering(now);}
+        else if(previousState_==MediaState::Error){imageY_=174;transaction_.fail(now);++failures;}
+    }
     if(!animationAt_)animationAt_=now;
     const uint8_t step=wheelAnimationStep(animationStep_,now-animationAt_);
     if(step!=animationStep_ && bottomY_>=240){animationStep_=step;bottomY_=kLibraryWheelTop;}
@@ -112,16 +120,19 @@ bool LibraryVisual::render(M5GFX& display,M5Canvas& row,FontCache& fonts,const U
         const int height=std::min(18,240-bottomY_);row.clearClipRect();row.setClipRect(0,0,135,height);row.fillScreen(bg);
         drawDiscs(row,fonts,c,bottomY_,now);
         display.setClipRect(0,bottomY_,135,height);row.pushSprite(&display,0,bottomY_);display.clearClipRect();row.setFont(&fonts::Font0);row.clearClipRect();
-        bottomY_+=height;if(bottomY_>=240){++frames;fonts.clearPins(FontCache::Ui);}return true;
+        bottomY_+=height;if(bottomY_>=240){++frames;transaction_.mark(LibraryWheelRegion,now);if(transaction_.publish(now))++coverFrames;}return true;
     }
     if(imageY_<174){
         const bool ready=cover.state()==MediaState::Ready;
+        if(!ready)return false; // keep the last complete cover while validation runs
         const int height=std::min(18,174-imageY_);
         if(!cover.bandActive()){row.clearClipRect();row.setClipRect(0,0,135,height);row.fillScreen(bg);}
-        if(ready&&!cover.prepareBand(row,imageY_,height))return false;
-        if(!ready){disc(row,67,85-imageY_,32,false);row.drawRect(0,-imageY_,135,174,muted);}
-        display.setClipRect(0,imageY_,135,height);row.pushSprite(&display,0,imageY_);display.clearClipRect();row.clearClipRect();cover.finishBand();imageY_+=height;
-        if(imageY_>=174&&ready)++coverFrames;return true;
+        const auto token=transaction_.requested();
+        if(!cover.prepareBand(row,imageY_,height,token.resourceGeneration))return false;
+        display.setClipRect(0,imageY_,135,height);row.pushSprite(&display,0,imageY_);display.clearClipRect();row.clearClipRect();imageY_+=height;
+        if(!transaction_.submitCover(imageY_-height,height,now)){++failures;transaction_.fail(now);return false;}
+        cover.finishBand(token.resourceGeneration);
+        if(transaction_.publish(now))++coverFrames;return true;
     }
     return false;
 }

@@ -61,7 +61,7 @@ bool FontCache::requestUiMetrics(const char* text,uint8_t pixels,bool library){
         if((library?libraryFace(cp,pixels):faceFor(cp,pixels))==face&&!requestMetric(cp,face))return false;}}
     return true;
 }
-bool FontCache::requestUiWindow(const char* text,uint8_t font,int startPx,int widthPx,float size,bool library){
+bool FontCache::requestUiWindow(const char* text,uint8_t font,int startPx,int widthPx,float size,bool library,uint8_t pin){
     // pixels, not a Font0 scale. Metrics and drawing use the very same face.
     (void)size;if(!text)return true;bool invalid=false;int x=0;
     const char* source=text;
@@ -74,10 +74,11 @@ bool FontCache::requestUiWindow(const char* text,uint8_t font,int startPx,int wi
         x+=advance;if(x>startPx+widthPx)break;}
     const char* end=text;
     const uint8_t faces[]={library?libraryFace(0x4E00,font):faceFor(0x4E00,font),library?libraryFace('A',font):faceFor('A',font)};
+    const uint8_t lease=pin?pin:(library?Library:Ui);
     for(auto loadFace:faces){x=0;text=source;while(text<end){const auto cp=mediaCodepoint(text,invalid);if(cp=='\n'){x=0;continue;}
         const auto face=library?libraryFace(cp,font):faceFor(cp,font);const auto* g=find(cp,face);
         const int advance=packedLatin(face)?latinAdvance(cp,face):(g?g->advance:font);
-        if(face==loadFace&&x+advance>=startPx&&x<=startPx+widthPx&&!request(cp,face,Ui))return false;x+=advance;}}
+        if(face==loadFace&&x+advance>=startPx&&x<=startPx+widthPx&&!request(cp,face,lease))return false;x+=advance;}}
     return true;
 }
 int FontCache::textWidth(const char* text,uint8_t pixels)const{

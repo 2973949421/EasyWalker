@@ -38,14 +38,14 @@ void NowPlayingMedia::selectTrack(const char* path){
     }
     std::snprintf(track_,sizeof(track_),"%s",path?path:"");
     cancelPreparation();abortFrame();active_=true;++generation_;timeline_.selectTrack(path);cover_.selectTrack(path);
-    if(fonts_)fonts_->clearPins();
+    if(fonts_)fonts_->clearPins(FontCache::Player);
     shownCoverRevision_=UINT32_MAX;shownCurrent_=-2;shownPage_=255;shownPages_=1;dirty_=true;seek_=true;
     transition_.pending=false;transition_.requested=preferred_;transition_.displayed=MediaView::Cover;
 }
-void NowPlayingMedia::release(){cancelPreparation();if(fonts_)fonts_->clearPins();timeline_.release();cover_.release();track_[0]=0;active_=false;frameInProgress_=false;++generation_;}
+void NowPlayingMedia::release(){cancelPreparation();if(fonts_)fonts_->clearPins(FontCache::Player);timeline_.release();cover_.release();track_[0]=0;active_=false;frameInProgress_=false;++generation_;}
 void NowPlayingMedia::suspend(){
     if(suspendStep_)return;
-    transition_.cancel();cancelPreparation();if(fonts_)fonts_->clearPins();
+    transition_.cancel();cancelPreparation();if(fonts_)fonts_->clearPins(FontCache::Player);
     cover_.cancelBand();active_=false;frameInProgress_=false;shownGeneration_=UINT32_MAX;
     ++generation_;suspendStep_=1;
 }

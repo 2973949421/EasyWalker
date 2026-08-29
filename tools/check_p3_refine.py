@@ -22,7 +22,7 @@ class RefineChecks(unittest.TestCase):
         self.assertLess(ui.index('serviceSuspension()'),ui.index('if(power_.asleep())return;'))
         media=source('src/player/ui/media/NowPlayingMedia.cpp')
         suspend=media.split('void NowPlayingMedia::suspend()')[1].split('bool NowPlayingMedia::serviceSuspension()')[0]
-        self.assertIn('cover_.cancelBand()',suspend);self.assertIn('fonts_->clearPins()',suspend)
+        self.assertIn('cover_.cancelBand()',suspend);self.assertIn('fonts_->clearPins(FontCache::Player)',suspend)
         self.assertNotIn('.close(',suspend)
         self.assertIn('fonts_->suspendOne()',media);self.assertIn('timeline_.suspendOne()',media)
     def test_metadata_priority_and_cache_hit_are_ram_only(self):
@@ -96,5 +96,5 @@ class RefineChecks(unittest.TestCase):
         self.assertEqual(evaluate_wake(record)[0],'READY_FOR_REVIEW')
         self.assertEqual(evaluate_wake(dict(record,wake_complete='PENDING'))[0],'INCOMPLETE')
         self.assertEqual(evaluate_wake(dict(record,wake_first_frame_ms='90'))[0],'FAIL')
-        self.assertEqual(VERSION,'0.8.4-p3d.renderfix')
+        self.assertEqual(VERSION,'0.8.5-p3d.stability-rc')
 if __name__=='__main__':unittest.main(verbosity=2)

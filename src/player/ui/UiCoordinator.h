@@ -9,11 +9,14 @@
 #include "PageRenderers.h"
 #include "NowPlayingPresenter.h"
 #include "UiTypes.h"
+#include "LibraryPageController.h"
+#include "PlaylistPageController.h"
 #include "LibraryVisual.h"
 #include "SettingsPanel.h"
 #include "InputEdges.h"
 #include "DisplayLifecycle.h"
 #include "RuntimeDiagnostics.h"
+#include "UiWorkScheduler.h"
 #include "player/app/LibraryRuntime.h"
 #include "player/app/PlayerRuntime.h"
 
@@ -23,7 +26,7 @@ constexpr size_t kP3DMediaBudgetBytes=kMediaBudgetBytes+sizeof(LibraryVisual);
 static_assert(kP3DMediaBudgetBytes<=48*1024,"P3D media memory exceeds 48 KiB");
 // Account explicitly for refinement state outside the media owners: wake
 // record, power/input epochs, diagnostics + RTC + six-row metadata bookkeeping.
-constexpr size_t kRefinementStateReserve=192;
+constexpr size_t kRefinementStateReserve=192+sizeof(LibraryPageController);
 // 0.8.4 additions not owned by NowPlayingMedia/LibraryVisual (already sizeof'd):
 // commit descriptor, added presenter diagnostics (baseline stats=44 bytes),
 // wait clock/control bytes, six row layout slices (4-byte aligned), power counts.
@@ -32,7 +35,7 @@ constexpr size_t kP3DMediaAndEventsBytes=kP3DMediaBudgetBytes+sizeof(InputEdges)
 static_assert(kP3DMediaAndEventsBytes<=48*1024,"media plus new input event queue exceeds 48 KiB");
 extern const uint32_t p3MemoryReport[6];
 
-class UiCoordinator final {
+class UiCoordinator final : private PlaylistPageController {
   public:
     bool begin(M5GFX& display, PlayerRuntime& player,
                LibraryRuntime& libraryRuntime);
@@ -55,7 +58,9 @@ class UiCoordinator final {
     void showPlayer() { setPage(UiPage::Player); }
     FontCache& fonts() { return fonts_; }
     const FontCache& fonts() const {return fonts_;}
-    void notifyLogSaved(bool success){nowPlaying_.notifyLogSaved(success,millis());}
+    void notifySavePending(uint32_t ticket);
+    void notifySaveFinished(uint32_t ticket,bool success,const char* stage=nullptr);
+    void notifyLogSaved(bool success){notifySaveFinished(saveToastTicket_,success);}
     NowPlayingPresenter& presenterForValidation() { return nowPlaying_; }
     void setHint(const char* hint);
     // Gate-only card: never text over a partially visible media frame.
@@ -96,9 +101,7 @@ class UiCoordinator final {
         ActivatePlaylistEntry,
     };
 
-    static constexpr uint32_t kMinimumRenderIntervalMs = 20;
-
-    void setPage(UiPage page);
+    void setPage(UiPage page,bool retainBrowser=false);
     void servicePendingIntent();
     void servicePendingNavigation();
     void serviceSelectedMetadata();
@@ -112,6 +115,7 @@ class UiCoordinator final {
     void selectVisibleMetadata();
     void buildRenderContext(UiRenderContext& context);
     void buildPlaylistRows(UiRenderContext& context);
+    bool serviceSaveToast(uint32_t now);
 
     bool beginSelectedLibrary();
     bool activatePlaylistEntry();
@@ -138,17 +142,13 @@ class UiCoordinator final {
     PendingIntent pendingIntent_ = PendingIntent::None;
 
     bool uncategorized_ = false;
-    size_t playlistSelected_ = 0;
     char libraryName_[kTrackPathCapacity] = {};
     char libraryRoot_[kTrackPathCapacity] = {};
     char lastPlaylistPath_[kTrackPathCapacity] = {};
     char pendingTrackPath_[kTrackPathCapacity] = {};
-    char selectedMetadataPath_[kTrackPathCapacity] = {};
-    uint8_t metadataReadyRows_=0;
     uint32_t metadataFallbacks_=0;
     uint8_t metadataFallbackCause_=0; // 1=no Title, 2+Mp3MetadataError, 255=path overflow
     void recordMetadataFallback(uint8_t cause){++metadataFallbacks_;if(!metadataFallbackCause_)metadataFallbackCause_=cause;}
-    bool metadataRequested_ = false;
 
     char hint_[64] = {};
     char gateCard_[160] = {};
@@ -156,11 +156,8 @@ class UiCoordinator final {
     char externalError_[96] = {};
     bool dirty_ = true;
     bool renderRetryRequested_ = false;
-    bool resourceTurn_ = false;
-    uint32_t lastRenderAtMs_ = 0;
     uint32_t lastLibraryGeneration_ = 0;
     LibraryState lastLibraryState_ = LibraryState::Idle;
-    PlayerState lastPlayerState_ = PlayerState::Empty;
     char lastCurrentTrack_[kTrackPathCapacity] = {};
     UiStats stats_{};
     // Fixed six-row scratch, not an all-library cache. Keep complete UTF-8
@@ -171,24 +168,24 @@ class UiCoordinator final {
     char navigationError_[64] = {};
     uint32_t browserGeneration_ = 0, browserRequest_ = 0, browserProgress_ = 0;
     uint32_t browserProgressAt_ = 0;
-    size_t savedPlaylistSelected_ = 0, locateIndex_ = 0;
-    bool locateCurrent_ = false, openRequested_ = false;
+    bool openRequested_ = false;
     bool pageClearRequested_ = true, browserContextReady_ = false;
-    bool retainedPlaylist_ = false, loadingDrawn_ = false;
-    uint8_t dirtyRegions_ = 255;
+    bool loadingDrawn_ = false;
     uint32_t pageRequestedAt_ = 0;
-    uint32_t selectionRequestedAt_ = 0;
-    uint8_t feedbackRegions_ = 0;
-    bool warmReturnPending_ = false;
-    uint8_t prepareRow_ = 0, drawRegion_ = 0;
     NowPlayingPresenter nowPlaying_;
     FontCache fonts_;
     LibraryVisual libraryVisual_;
+    LibraryPageController libraryPage_;
     SettingsPanel settings_;
     ScreenPowerController power_;
     bool p3dPrepared_=false,libraryVisualDirty_=true;
     int libraryMoveDirection_=0;
+    UiWorkScheduler workScheduler_;
     uint8_t appliedBrightness_=255;
+    uint8_t saveToast_=0;
+    bool saveToastDrawn_=false;
+    uint32_t saveToastAt_=0,saveToastTicket_=0;
+    char saveToastText_[40]{};
     uint32_t suppressedActions_=0;
     uint32_t inputLatencyMaxMs_=0;
     uint32_t inputOverflow_=0,inputStale_=0;

@@ -2,6 +2,10 @@
 #include <initializer_list>
 #include "player/ui/WheelLayout.h"
 #include "player/ui/DisplayLifecycle.h"
+#include "player/ui/UiTransaction.h"
+#include "player/ui/UiWorkScheduler.h"
+#include "player/ui/LibraryPageController.h"
+#include "player/p3abc/SaveTransaction.h"
 using namespace adv_walkman::player;
 struct Injected {
     bool owned=false;
@@ -69,3 +73,64 @@ static_assert(cancellationAtEveryBand(),"cancelled frames never submit after pag
 static_assert(wheelRules(),"non-empty libraries have three mapped wheel slots with wrap");
 static_assert(wheelAnimationStep(3,0)==3&&wheelAnimationStep(3,80)==3&&wheelAnimationStep(0,80)==1&&wheelAnimationStep(2,160)==3,"stationary wheel never restarts a completed animation");
 static_assert(validStripeDestination(208,8)&&validStripeDestination(236,3)&&!validStripeDestination(236,18)&&!validStripeDestination(-1,18),"stripe submission stays inside its destination");
+
+constexpr bool libraryFrameRejectsStale(){
+    const UiRequestToken current{4,9,12},old{4,8,11};
+    LibraryFrameCommit frame;frame.begin(current);
+    if(frame.mark(old,LibraryNameRegion)||frame.submitCover(old,0,18))return false;
+    if(!frame.mark(current,LibraryNameRegion)||!frame.mark(current,LibraryWheelRegion))return false;
+    unsigned y=0;while(y<174){const unsigned h=174-y<18?174-y:18;if(!frame.submitCover(current,y,h))return false;y+=h;}
+    return frame.complete();
+}
+constexpr bool readyOldBandCannotBlockNewModel(){
+    UiWorkSnapshot stuck{};stuck.library=true;stuck.browserReady=false;
+    // The old band is active+ready, therefore neither waiting flag nor a font
+    // read is set.  The browser model must still win immediately.
+    return chooseUiWork(stuck,false,false)==UiScheduledWork::BrowserModel;
+}
+static_assert(libraryFrameRejectsStale(),"Library frame accepts only its exact request token");
+static_assert(readyOldBandCannotBlockNewModel(),"ready old Library band must not block the latest browser model");
+
+constexpr bool libraryTransactionTerminates(){
+    LibraryTransaction tx;const UiRequestToken first{3,7,9},latest{3,8,10};
+    tx.request(first,0);tx.validating(1);
+    if(tx.stalled(2000)||!tx.stalled(2001))return false;
+    if(!tx.beginRecovery(2001)||tx.state()!=LibraryPageState::Recovering)return false;
+    // Retargeting starts a clean contract; no rows from the previous token
+    // can make the latest request complete.
+    tx.request(latest,2002);tx.rendering(2003);
+    if(tx.submitCover(0,18,2004)==false)return false;
+    LibraryFrameCommit stale;stale.begin(first);
+    if(tx.state()!=LibraryPageState::Rendering||tx.publish(2004))return false;
+    unsigned y=18;while(y<174){const unsigned h=174-y<18?174-y:18;
+        if(!tx.submitCover(y,h,2005+y))return false;y+=h;}
+    if(!tx.mark(LibraryNameRegion,2200)||!tx.mark(LibraryWheelRegion,2201)||!tx.publish(2202))return false;
+    return tx.state()==LibraryPageState::Presented&&tx.displayed()==latest;
+}
+
+constexpr bool thousandRetargetsKeepLatest(){
+    LibraryPageController page;UiRequestToken latest{};
+    for(uint32_t i=1;i<=1000;++i){
+        if(i%251==0)page.pageChanged();else page.requestSelection();latest=page.token();
+        UiWorkSnapshot work{};work.library=true;work.browserReady=false;
+        if(chooseUiWork(work,false,false)!=UiScheduledWork::BrowserModel)return false;
+    }
+    LibraryFrameCommit frame;frame.begin(latest);
+    if(frame.mark({latest.pageEpoch,latest.requestGeneration-1,latest.resourceGeneration-1},LibraryNameRegion))return false;
+    if(!frame.mark(latest,LibraryNameRegion)||!frame.mark(latest,LibraryWheelRegion))return false;
+    for(unsigned y=0;y<174;){const unsigned h=174-y<18?174-y:18;if(!frame.submitCover(latest,y,h))return false;y+=h;}
+    return frame.complete();
+}
+
+constexpr bool saveTicketsAreNeverLost(){
+    SaveTransaction save;
+    const auto first=save.request(10,2,3);if(first!=1||!save.begin(11))return false;
+    const auto second=save.request(12,4,5);if(second!=2||!save.active()||!save.pending())return false;
+    save.finish(true,20);if(save.completed()!=1||!save.needsNext()||!save.begin(21))return false;
+    if(save.requiredPlayerRevision()!=4||save.requiredDisplayRevision()!=5)return false;
+    save.timeout(10021);
+    return save.completed()==2&&save.status()==SaveStatus::TimedOut&&!save.pending();
+}
+static_assert(libraryTransactionTerminates(),"Library transaction must terminate on the latest exact token");
+static_assert(thousandRetargetsKeepLatest(),"1000 rapid Library retargets must preserve only the latest token");
+static_assert(saveTicketsAreNeverLost(),"every T ticket must complete or time out, including a trailing request");

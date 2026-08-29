@@ -58,6 +58,8 @@ struct UiStats {
     uint32_t renderMaxUs = 0;
     uint32_t inputEvents = 0;
     uint32_t pageTransitions = 0;
+    uint32_t libraryRequests = 0, libraryStalls = 0, libraryRecoveries = 0;
+    uint32_t libraryFailures = 0, libraryStaleRejects = 0;
     uint32_t minimumHeap = UINT32_MAX;
     UiTextLayoutResult libraryText{};
     bool libraryTextIsBenchmark = false;
