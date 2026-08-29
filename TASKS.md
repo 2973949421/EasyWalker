@@ -350,6 +350,10 @@ P3-07 在 P3A 只完成可用骨架，最终视觉仍由 P3D 验收。
 - [x] 六环境构建通过；联合BIN 792192 bytes、静态RAM 128568 bytes、媒体+事件49080/49152 bytes，尺寸/Hash已记录并交付同名Stage A BIN
 - [ ] 0.8.5真机回归：Playlist所有可见行必须以MP3正式Title为准；Metadata尚未完成才允许临时文件名，取得Title后不得因未选中、暖返回或窗口保留退回basename
 - [ ] 0.8.5真机回归：目标曲库没有LCOV时必须把占位图作为该目标的完整帧提交；不得无限保留上一曲库封面。加载中的旧帧保留与Missing终态必须分开
+- [ ] boot 11日志回归：`metadata_fallbacks=0`仍出现可见basename；逐行最终显示来源必须进入自动/日志证据，不能把Metadata层“无fallback”当成画面正确
+- [ ] boot 11日志回归：64次Library请求出现10次stall、6次recover、4次failure而`library_cover_errors=0`；Missing终态、事务失败与封面错误必须分别记录并保持导航可用
+- [ ] boot 11性能回归：输入75ms、选择421ms、暖返回2934ms、暖View631ms、歌词呈现142806us、歌词迟到653ms仍超限；PCM48555us且Audio Error/Backpressure为0
+- [ ] boot 11保存回归：Ticket 1～6完成，日志结束时Ticket 7仍active/`save_status=4`；每个T请求必须有可追踪终态
 - [ ] 20分钟耳机、三轮快速切库、四页T、四场景睡醒及重启恢复真机确认
 - [ ] 严格输入/列表/暖返回/View/歌词/PCM/保存指标和零P0事务错误的新日志
 - [ ] Stage A通过后才生成0.8.6；如改业务代码必须重新Stage A。A/B/C/D仍DEVICE TEST，不进入P4

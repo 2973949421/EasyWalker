@@ -44,6 +44,19 @@
 
 这两项已确认问题使当前0.8.5不能通过Stage A；按用户要求先记录，继续收集本次压力日志，不在设备测试途中替换固件。
 
+### 2026-08-29 boot 11日志诊断
+
+SD日志在媒体同步前保存为私有只读副本`test-data/local/p3-media/stability-085/pre-cantopop-sync-p3-free-last.txt`，与SD原文件SHA-256一致。当前版本共有11个boot；boot 11包含103份完整检查点，不能通过Stage A：
+
+- 音频主路径仍稳定：`pcm_gap_max_us=48555`，`audio_errors=0`，`backpressure=0`。
+- 输入、局部选择、暖返回和暖View分别达到75ms、421ms、2934ms和631ms，均超过50/100/300/300ms门槛；冷View 1358ms仍在1500ms内。
+- 歌词完整呈现峰值142806us、到期迟到653ms，超过100ms/200ms门槛。
+- Library累计64次请求、10次stall、6次recover和4次failure；但`library_cover_errors=0`。这证明“Missing LCOV保留旧图”没有被封面错误计数覆盖，且页面事务已有真实无进展/恢复负担，不能只归因为人工观感。
+- 同期`metadata_fallbacks=0`，但人工看到未选中行显示basename。日志只能证明Metadata层没有声明fallback，不能证明六行最终显示模型使用了正式Title；验收必须增加逐行显示来源证据或生产控制器像素/文本断言。
+- 保存Ticket 1～6已完成；日志结束时Ticket 7仍为active、`save_status=4`，因此最后一次T没有终态证据。不能把前六次成功概括成“每次都能保存”。
+
+随后SD曲库整理为仅`AveMujica`和`粤语迷幻`，两者均提供LCOV；这会消除本次“资源确实缺失”的触发条件，但不会修复固件的Missing终态，相关回归仍保持未通过。
+
 1. 使用耳机正常播放至少20分钟。
 2. 播放5分钟后进入Library，做三轮快速左右切换，每轮至少20次；封面变化中反向切换。
 3. 每轮后分别验证Tab、Enter、Esc和T仍响应；不得靠重启恢复。
