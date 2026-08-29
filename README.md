@@ -2,12 +2,12 @@
 
 > 项目名：EasyWalker
 > 历史开发代号：ADV Walkman
-> 当前阶段：P3 稳定性 Stage A `0.8.5-p3d.stability-rc`，统一UI事务、可靠T保存、流式诊断与页面状态减负；A/B/C/D仍为DEVICE TEST
+> 当前阶段：P3已冻结为`FROZEN / UNVERIFIED / KNOWN ISSUES`；P4A+B联合固件`0.9.0-p4ab.controls`进入本地实现/DEVICE TEST
 > 平台：M5Stack Cardputer ADV
 
 ## 1. 项目是什么
 
-本轮实施与交付记录见 [P3_STABILITY_RC.md](docs/P3_STABILITY_RC.md)。Library、Playlist、后台调度与联合保存改为有明确所有者的事务；快速切库只允许最新Token提交，2秒无进展先局部恢复、再次失败仍可导航。T在所有页面先显示“保存中”，每个Ticket必须成功、失败或10秒超时。诊断改为1KiB流式生成，Stage A每15秒摘要、T/错误/恢复写完整快照。音乐、歌词、封面、标签和存档格式不变。构建与自动回归不能代替20分钟真机压力试用；扬声器破音继续暂缓，使用耳机验收。
+P3冻结证据见[P3交付路线](docs/P3_DELIVERY.md)，不生成原计划的0.8.6，也不把未验证项目写成通过。P4A+B实施与验收见[P4AB控制](docs/P4AB_CONTROLS.md)：播放器页只启用顶部盲操区1～8，9～12保持无动作；页面路由、上一首/下一首、四态播放模式和保存诊断均不改变媒体与音频Backend。
 
 后续本地音频或纯歌单导入的曲源、同步歌词、内嵌资源和多语言翻译规则见[媒体导入工作流](docs/MEDIA_IMPORT_WORKFLOW.md)。网络API只参与PC准备，设备固件不联网。
 
@@ -78,9 +78,20 @@ V1 不以以下内容为目标：
 
 ## 5. 当前最重要的技术任务
 
-### 当前交付入口 — 0.8.5 稳定性 Stage A
+### 当前交付入口 — 0.9.0 P4A+B Controls
 
-仅安装同名`ADV-Walkman-P3ABC-Gate.bin`。耳机播放至少20分钟；播放5分钟后进入Library，做三轮快速左右切换、每轮至少20次，并在切换中反向。每轮后验证Tab、Enter、Esc与T仍有响应。分别在Player/Playlist/Library/Settings按T，封面读取中快速按两次T；每个请求都应先显示“保存中”，正常3秒、繁忙5秒内给出结果，绝不能永久等待。Lyrics/Cover/Playlist/Library各验证15秒息屏唤醒。Stage A通过后才允许生成仅降低日志频率的`0.8.6-p3.closure`。完整标准见[P3_STABILITY_RC.md](docs/P3_STABILITY_RC.md)。
+只安装同名`ADV-Walkman-P3ABC-Gate.bin`，用耳机自由测试10～15分钟。Player逐个测试
+1～8；Playlist/Library/Settings按同位置不得漏出Transport。检查5秒Previous规则、
+Pause切歌、Normal/Repeat One/Repeat All/Shuffle循环、息屏首键吞掉、T保存及手动重启
+恢复。9～12必须无动作，音效仍为Original。完整清单见[P4AB控制](docs/P4AB_CONTROLS.md)。
+
+本地100项回归与13项C++计时契约、六环境构建均通过；联合BIN为794880 bytes，SHA-256为
+`56497cb931a43192dbad01b59c1419d9135e74a291cf4072a97deaafdc2b7035`，静态RAM 128656 bytes，
+媒体加事件49080/49152 bytes。SD已只覆盖同名联合BIN并复核Hash；当前仍为`DEVICE TEST`。
+
+### P3冻结入口 — 0.8.5 稳定性 Stage A（历史）
+
+仅安装同名`ADV-Walkman-P3ABC-Gate.bin`。耳机播放至少20分钟；播放5分钟后进入Library，做三轮快速左右切换、每轮至少20次，并在切换中反向。每轮后验证Tab、Enter、Esc与T仍有响应。分别在Player/Playlist/Library/Settings按T，封面读取中快速按两次T；每个请求都应先显示“保存中”，正常3秒、繁忙5秒内给出结果，绝不能永久等待。Lyrics/Cover/Playlist/Library各验证15秒息屏唤醒。该轮未取得完整通过证据，现已按用户决策冻结，不再生成`0.8.6-p3.closure`。历史标准见[P3_STABILITY_RC.md](docs/P3_STABILITY_RC.md)。
 
 Stage A六环境已构建通过；联合BIN为792192 bytes，SHA-256为`2b91291d11f5e76ad2b65efd7afb16037fbc1222b9cbaf3eb1910bbc0ed8c26c`，静态RAM为128568 bytes，媒体加事件为49080/49152 bytes。以上只证明本地门槛通过，P3A/B/C/D仍为`DEVICE TEST`。
 

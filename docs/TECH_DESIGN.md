@@ -1100,6 +1100,10 @@ UI 与按键布局都应以这一姿态作为重要设计输入。
 9  Original      10  Tape       11  Radio      12  Vocal Clear
 ```
 
+`0.9.0-p4ab.controls`只启用1～8。9～12在P5真正接入DSP前由
+`InputRouter`明确返回no-op；Footer第二枚图标继续显示真实Original，不能预告未生效音效。
+输入路由接收明确`UiPage`，而非`bool playerPage`，在动作产生前完成页面隔离。
+
 规则：
 
 - 2 / 3 故意重复 Play/Pause，扩大盲操命中区域；
@@ -1127,6 +1131,13 @@ Shuffle     = Repeat Off + Shuffle On
 
 因此不需要迁移既有 Queue / Session schema，也不允许暴露复杂 Repeat + Shuffle 组合。Shuffle 完成一轮后按 Repeat Off 语义停止。
 
+实现通过`PlayerController::setPlaybackMode(RepeatMode, bool)`及Runtime同名入口在
+一次Action内完成两维更新，只产生一个checkpoint。旧Session中的Repeat+Shuffle非法组合
+在用户操作前原样保留并显示`?`；第一次明确按Play Mode才归一化为Normal。
+
+Previous在真实位置大于5秒时Seek到本曲0秒，否则读取Queue的Previous history；Next按
+当前order前进。手动导航不受Repeat One拦截，Pause中切歌继续Pause；失败不生成checkpoint。
+
 ### 10.4 Normal-page Input
 
 播放列表、曲库、设置使用普通 UI 映射：
@@ -1148,7 +1159,7 @@ Screen Off 状态在所有页面先于 Context Keymap 处理：第一次任意�
 
 - Lock（锁键）；
 - 长按 / 组合键是否有必要；
-- 3×4 物理位置到 M5Cardputer 键盘事件的最终映射与去抖参数；
+- 9～12音效键在P5接入后的真机手感；
 - 特殊页面是否需要额外上下文行为。
 
 ---

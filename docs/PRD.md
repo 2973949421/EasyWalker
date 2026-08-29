@@ -5,7 +5,7 @@
 > 项目名：EasyWalker
 > 历史开发代号：ADV Walkman
 
-当前P3收口采用两阶段稳定性门槛：`0.8.5-p3d.stability-rc`必须先证明快速切换曲库、页面往返、息屏唤醒和T保存不会永久失去操作，才能生成仅降低日志频率的`0.8.6-p3.closure`。编译、自动状态机回归或一次未复现均不能替代20分钟耳机压力操作和新版日志。纯UI恢复不得调用Play/Pause/Stop/Seek，不得通过重启或重选歌曲自愈。
+P3已按产品决策冻结为`FROZEN / UNVERIFIED / KNOWN ISSUES`：保留`0.8.5-p3d.stability-rc`及失败证据，不生成`0.8.6-p3.closure`，也不把A/B/C/D写成PASS或DONE。已知稳定性、无LCOV旧封面、未选中行文件名回退、历史唤醒异常及保存终态证据转入P6。P4可继续，但不能用P4成功覆盖P3未通过项。
 
 ## 1. 产品定位
 

@@ -321,10 +321,10 @@ AC：
 
 | Gate | Status | Tasks | Result |
 |---|---|---|---|
-| P3A UI Foundation | DEVICE TEST | P3-01、P3-08、P3-09；P3-07 功能骨架 | `0.5.1` 功能 Gate PASS；`0.5.2` 文本修复及本地构建完成，待 Gate A-fix+B+C 回归 |
-| P3B Now Playing Chrome | DEVICE TEST | P3-02 | `0.6.0` 代码、自动检查及三环境构建完成；待联合 Gate 验收 |
-| P3C Media Resources | DEVICE TEST | P3-03～06、P3-12 | `0.7.6` 导航、分区绘制、自检及14px时间修复；仅本地，待与P3D合并真机确认 |
-| P3D Product UI Completion | DEVICE TEST | P3-07、P3-10、P3-11 | `0.8.0` 本地实现、62项检查与三环境构建通过；与P3C导航修复合并真机验收 |
+| P3A UI Foundation | FROZEN / UNVERIFIED | P3-01、P3-08、P3-09；P3-07 功能骨架 | 保留既有DEVICE TEST证据，不写PASS/DONE；遗留转P6 |
+| P3B Now Playing Chrome | FROZEN / UNVERIFIED | P3-02 | 保留既有DEVICE TEST证据，不写PASS/DONE；遗留转P6 |
+| P3C Media Resources | FROZEN / UNVERIFIED | P3-03～06、P3-12 | 保留既有DEVICE TEST证据，不写PASS/DONE；遗留转P6 |
+| P3D Product UI Completion | FROZEN / UNVERIFIED | P3-07、P3-10、P3-11 | 保留既有DEVICE TEST证据，不写PASS/DONE；遗留转P6 |
 
 P3A 编译成功后进入 `DEVICE TEST`，不能提前把 P3-01 / 08 / 09 标为 `DONE`。
 P3-07 在 P3A 只完成可用骨架，最终视觉仍由 P3D 验收。
@@ -334,7 +334,16 @@ P3-07 在 P3A 只完成可用骨架，最终视觉仍由 P3D 验收。
 和提交，真机仍只安装同一个 P3ABC BIN。0.7.3 改为自由试用后台分项记录，不强制用户
 按 A/B/C 顺序操作；P3A 文本回归未通过时仍不得标记 P3-01 / 08 / 09 为 `DONE`。
 
-### P3 全面稳定性 Stage A — 0.8.5（当前，DEVICE TEST）
+### P3最终移交 — 0.8.5（FROZEN / UNVERIFIED / KNOWN ISSUES）
+
+- [x] 冻结基线HEAD `7177052`；联合BIN 792192 bytes，SHA-256 `2b91291d11f5e76ad2b65efd7afb16037fbc1222b9cbaf3eb1910bbc0ed8c26c`
+- [x] 记录PCM 54.797ms及Audio Error/Backpressure 0/0，不删除音频通过证据
+- [x] 记录未通过：暖返回809ms、暖View 1356ms、歌词完整呈现176.107ms、输入75ms
+- [x] 历史唤醒停音/失去输入、最后T Ticket终态、无LCOV旧封面、未选中行basename列为KNOWN/UNVERIFIED
+- [x] KINO、`熱・情`、粤语媒体主观验收及扬声器破音分别转P6/DEFERRED
+- [x] 不生成`0.8.6-p3.closure`；允许进入P4但A/B/C/D均不写PASS或DONE
+
+### P3 全面稳定性 Stage A — 0.8.5（历史，已冻结）
 
 实施与验收记录：`docs/P3_STABILITY_RC.md`。基线3efeb01；用户确认0.8.4在播放一段时间后快速切换曲库可使UI永久卡死，音乐继续，任何操作无效；T保存也可能需要重复尝试。当前不能用“ESP硬件性能不足”概括，先修复状态所有权、旧结果提交和连续I/O/日志负载。
 
@@ -356,7 +365,7 @@ P3-07 在 P3A 只完成可用骨架，最终视觉仍由 P3D 验收。
 - [ ] boot 11保存回归：Ticket 1～6完成，日志结束时Ticket 7仍active/`save_status=4`；每个T请求必须有可追踪终态
 - [ ] 20分钟耳机、三轮快速切库、四页T、四场景睡醒及重启恢复真机确认
 - [ ] 严格输入/列表/暖返回/View/歌词/PCM/保存指标和零P0事务错误的新日志
-- [ ] Stage A通过后才生成0.8.6；如改业务代码必须重新Stage A。A/B/C/D仍DEVICE TEST，不进入P4
+- [x] 产品决策停止Stage A正式收口，不生成0.8.6；失败证据转P6，允许进入P4
 
 ### P3 完整刷新收尾候选 — 0.8.4（历史，仍出现P0卡死）
 
@@ -790,23 +799,33 @@ AC：
 
 # P4 — Keymap
 
+0.9.0本地交付记录：
+
+- [x] 100项主机回归及13项C++计时契约通过
+- [x] Dev、P3ABC、P3A、P1 Gate A/B、P2 Gate六环境构建通过，全部≤`0x140000`
+- [x] 联合BIN 794880 bytes、SHA-256 `56497cb931a43192dbad01b59c1419d9135e74a291cf4072a97deaafdc2b7035`
+- [x] 静态RAM 128656 bytes；媒体+事件49080/49152 bytes
+- [x] SD只覆盖同名联合BIN并复核Hash；未改媒体、字体、Queue、Session或历史日志
+- [ ] 10～15分钟真机自由验收；P4各项保持`DEVICE TEST`
+
 ## P4-01 Input Context Router
 
-Status: TODO
+Status: DEVICE TEST — 0.9.0 IMPLEMENTED
 
 AC：
 
-- [ ] 3×4 专用映射只在播放器页面生效
-- [ ] 离开播放器页面立即恢复普通键盘映射
-- [ ] 播放列表、曲库、设置中 Arrow / Enter / Esc 保持 UI 语义
-- [ ] 曲库页面单独识别 `S → Settings`，其他页面的 `S` 不进入设置
-- [ ] 旧数字列和 `H/L/Q/R/S/V` 全局快捷键不再生效
+- [x] 3×4 专用映射只在播放器页面生效
+- [x] 离开播放器页面立即恢复明确的页面映射
+- [x] 播放列表、曲库、设置中 Arrow / Enter / Esc 保持 UI 语义
+- [x] 曲库页面单独识别 `S → Settings`，其他页面的 `S` 不进入设置
+- [x] 旧数字列和 `H/L/Q/R/S/V` 全局快捷键不再生效
+- [ ] 真机页面隔离、短按、组合键、页面代次验收
 
 ---
 
 ## P4-02 Now Playing 3×4 Blind Zone
 
-Status: TODO
+Status: DEVICE TEST — KEYS 1–8 IMPLEMENTED; 9–12 DEFERRED TO P5
 
 目标：
 
@@ -817,27 +836,28 @@ Keymap：
 ```text
 1  Volume +       2  Play/Pause  3  Play/Pause  4  Previous
 5  Volume -       6  View        7  Play Mode   8  Next
-9  Original      10  Tape       11  Radio      12  Vocal Clear
+9  no-op         10  no-op      11  no-op      12  no-op
 ```
 
-0.7.3授权例外：1/5音量与2/3播放暂停已接通代码，6 View沿用P3C；真机仍待验。
-这不是P4整体完成，4/8上一首下一首、7播放模式与9–12音效仍TODO。
+0.9.0已接通1～8；9～12在P5真正实现DSP前保持无动作，不预告音效能力。P5再定义
+Original/Tape/Radio/Vocal Clear的实际键位和DSP合同。真机仍待验。
 
 AC：
 
-- [ ] 1 / 5 为 Volume + / -，4 / 8 为 Previous / Next
-- [ ] 2 / 3 均为 Play / Pause，形成较大的盲操命中区域
-- [ ] 6 为 View，7 为 Play Mode
-- [ ] 9–12 直接选择 Original / Tape / Radio / Vocal Clear
-- [ ] Esc 不属于 3×4 区，仍返回播放列表
-- [ ] 离开播放器页后这 12 个物理位置恢复普通键盘语义
-- [ ] 所有 Action 不直接耦合 Audio Backend
+- [x] 1 / 5 为 Volume + / -，4 / 8 为 Previous / Next
+- [x] 2 / 3 均为 Play / Pause，形成较大的盲操命中区域
+- [x] 6 为 View，7 为 Play Mode
+- [x] 9–12直接音效选择推迟到P5；0.9.0明确无动作
+- [x] Esc 不属于 3×4 区，仍返回播放列表
+- [x] 离开播放器页后这 12 个物理位置恢复页面语义或明确no-op
+- [x] 所有 Action 不直接耦合 Audio Backend
+- [ ] 真机1～12短按、按住、快速重按及页面隔离验收
 
 ---
 
 ## P4-03 Play Mode Action
 
-Status: TODO
+Status: DEVICE TEST — 0.9.0 IMPLEMENTED
 
 循环顺序：
 
@@ -847,42 +867,45 @@ Normal → Repeat One → Repeat All → Shuffle → Normal
 
 AC：
 
-- [ ] UI 四态原子映射到既有 `RepeatMode + Shuffle` 两维模型
-- [ ] Normal = Off + Shuffle Off
-- [ ] Repeat One = One + Shuffle Off
-- [ ] Repeat All = All + Shuffle Off
-- [ ] Shuffle = Off + Shuffle On，一轮结束后停止
-- [ ] 不暴露 Repeat + Shuffle 的复杂组合
-- [ ] 切换不重启当前歌曲，Footer 明确反馈当前模式
+- [x] UI 四态原子映射到既有 `RepeatMode + Shuffle` 两维模型
+- [x] Normal = Off + Shuffle Off
+- [x] Repeat One = One + Shuffle Off
+- [x] Repeat All = All + Shuffle Off
+- [x] Shuffle = Off + Shuffle On，一轮结束后停止
+- [x] 新操作不暴露Repeat+Shuffle；旧非法Session直到明确按键才归一化
+- [x] 切换不重启当前歌曲，Footer只局部反馈当前模式
+- [ ] 真机模式循环、Footer≤100ms及checkpoint恢复验收
 
 ---
 
 ## P4-04 Normal-page Input
 
-Status: TODO
+Status: DEVICE TEST — 0.9.0 IMPLEMENTED
 
 AC：
 
-- [ ] 播放列表 Up / Down 选择、Enter 播放、Esc 返回曲库
-- [ ] 曲库 Left / Right 选择、Enter 进入列表、S 进入设置、Esc no-op
-- [ ] 设置 Arrow / Enter 操作、Esc 返回曲库
-- [ ] 未来若出现文本输入，数字 / 字母恢复普通输入且不派发播放器 Action
+- [x] 播放列表 Up / Down 选择、Enter 播放、Esc 返回曲库
+- [x] 曲库 Left / Right 选择、Enter 进入列表、S 进入设置、Esc no-op
+- [x] 设置 Arrow / Enter 操作、Esc 返回曲库
+- [x] 当前无文本输入；其他字母/数字不派发播放器Action
+- [ ] 真机逐页验收
 
 ---
 
 ## P4-05 Screen-off Input Behavior
 
-Status: TODO
+Status: DEVICE TEST — EXISTING GATE EXTENDED TO P4 ACTIONS
 
 AC：
 
-- [ ] Screen Off 时全部快捷键原功能失效
-- [ ] 任意键第一次只唤醒屏幕
-- [ ] 唤醒按键事件不继续传递
-- [ ] Screen Off 时第一次按 `View` 只唤醒，不切换 View
-- [ ] 亮屏后第二次按键才执行
-- [ ] V1 不增加独立 Lock / Unlock 按键
-- [ ] V1 不要求长按或组合键
+- [x] Screen Off 时全部快捷键原功能失效
+- [x] 任意键第一次只唤醒屏幕
+- [x] 唤醒按键事件不继续传递，并等待整组释放
+- [x] Screen Off 时第一次按 `View` / Previous / Next / Play Mode只唤醒
+- [x] 亮屏并释放后第二次按键才执行
+- [x] V1 不增加独立 Lock / Unlock 按键
+- [x] V1 不要求长按或组合键
+- [ ] 真机15秒息屏下逐个新Action验收
 
 ---
 
@@ -989,6 +1012,11 @@ AC：
 - [ ] 长时间熄屏播放
 - [ ] 多次切歌 / seek
 - [ ] 无周期性崩溃
+- [ ] P3冻结遗留：暖返回、暖View、歌词完整呈现与输入接受严格阈值
+- [ ] P3冻结遗留：历史唤醒后停音/失去输入与最后T Ticket终态证据
+- [ ] P3冻结遗留：无LCOV目标不能保留旧封面；未选中行正式Title不能退回basename
+- [ ] KINO、`熱・情`及粤语媒体真机主观验收
+- [ ] 扬声器持续噪声/破音（DEFERRED；耳机主路径不因此阻塞）
 
 ---
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## V0.9.0 — Context controls and atomic playback mode
+
+Date: 2026-08-29
+
+- P3冻结为`FROZEN / UNVERIFIED / KNOWN ISSUES`；保留0.8.5尺寸、Hash、性能失败、唤醒/T证据缺口、LCOV/文件名逻辑缺陷和媒体未验收事实，不生成0.8.6。
+- `InputRouter`改用明确`UiPage`上下文；Player只派发盲操区1～8，Playlist/Library/Settings在动作产生前隔离，9～12保持no-op，旧全局播放器快捷键不恢复。
+- 新增Previous/Next：5秒规则、真实History、Queue order、Pause保持及Repeat One手动绕过沿用P1行为；只有成功动作才请求checkpoint。
+- 新增原子`setPlaybackMode(RepeatMode,bool)`，固定Normal→Repeat One→Repeat All→Shuffle→Normal；一次模式Action只产生一次checkpoint，非法旧组合在明确操作时归一化。
+- Footer只局部更新真实模式，Original音效标识不伪造P5能力；自由日志增加新Action请求/接受/失败、模式前后、Footer反馈和checkpoint修订。
+- 自动检查、六环境构建、固件尺寸/Hash与SD交付结果见`docs/P4AB_CONTROLS.md`。构建成功只进入DEVICE TEST，P3旧问题继续单列。
+
 ## V0.8.5 — UI transactions, reliable checkpoints and low-overhead diagnostics
 
 Date: 2026-08-29

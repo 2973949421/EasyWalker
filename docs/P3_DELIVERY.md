@@ -4,6 +4,21 @@
 > `TECH_DESIGN.md`、任务状态以 `TASKS.md` 为准。P3 不重新选择 Audio Backend，
 > 不改变 P1 Queue / Session 或 P2 Library Engine 语义。
 
+## 最终移交 — FROZEN / UNVERIFIED / KNOWN ISSUES
+
+产品决策以HEAD `7177052`及SD上的`0.8.5-p3d.stability-rc`为P3冻结基线，不生成
+`0.8.6-p3.closure`，A/B/C/D均不写PASS或DONE。联合BIN为792192 bytes，SHA-256为
+`2b91291d11f5e76ad2b65efd7afb16037fbc1222b9cbaf3eb1910bbc0ed8c26c`。
+
+已取得的音频证据为PCM峰值54.797ms、Audio Error/Backpressure 0/0；未通过项为
+暖返回809ms、暖View 1356ms、歌词完整呈现176.107ms及输入接受75ms。历史唤醒停音/
+失去输入未充分复验，最后一次T Ticket缺少终态证据。无LCOV保留旧封面、未选中行显示
+文件名的逻辑缺陷明确保留；四个当前曲库都有LCOV不等于缺陷修复。KINO、`熱・情`和
+粤语媒体未作真机主观验收，扬声器持续噪声/破音继续DEFERRED。以上转入P6稳定性清单。
+
+P4期间只在自然复现且阻塞新控制功能时修具体根因，不重新开启全面P3重构；P4通过也不能
+抹去本节证据。
+
 ## 当前验收方式 — 0.8.5 Stage A（覆盖下方历史 Gate 操作顺序）
 
 详见`P3_STABILITY_RC.md`。当前先验证稳定性RC，不生成最终closure：Library页面/请求/资源统一Token，旧结果不能提交；显式Scheduler不再让旧ready条带阻塞新页面；2秒无进展只允许一次局部恢复，再失败保持页面可导航。Playlist六行模型和字体租约跨Player暖返回保留。T使用递增Ticket，所有页面立即显示保存状态，关闭及回读校验后才成功，重复请求不会静默丢失。日志改为1KiB流式写，Stage A每15秒摘要、T/错误/恢复写完整快照。
