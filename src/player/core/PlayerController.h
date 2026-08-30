@@ -16,6 +16,7 @@ struct PlayerSnapshot {
     PlayerError error = PlayerError::None;
     AudioError audioError = AudioError::None;
     RepeatMode repeatMode = RepeatMode::Off;
+    SoundPreset soundPreset = SoundPreset::Original;
     bool shuffleEnabled = false;
     bool hasCurrent = false;
     size_t queueCount = 0;

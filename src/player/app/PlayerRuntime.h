@@ -30,6 +30,19 @@ class PlayerRuntime final {
     void setRepeatMode(RepeatMode mode);
     void setShuffleEnabled(bool enabled);
     bool setPlaybackMode(RepeatMode mode, bool shuffle);
+    bool setSoundPreset(SoundPreset preset);
+    SoundPreset soundPreset() const { return soundPreset_; }
+    SoundPreset appliedSoundPreset() const { return engine_.appliedSoundPreset(); }
+    uint32_t dspBlockMaxUs() const { return engine_.dspBlockMaxUs(); }
+    uint32_t dspCrossfadeCount() const { return engine_.dspCrossfadeCount(); }
+    uint32_t dspLimiterEvents() const { return engine_.dspLimiterEvents(); }
+    uint16_t dspPreLimiterPeakQ15() const { return engine_.dspPreLimiterPeakQ15(); }
+    uint32_t dspInvalidFallbacks() const { return engine_.dspInvalidFallbacks(); }
+    uint32_t presetApplyLatencyMaxUs() const { return engine_.presetApplyLatencyMaxUs(); }
+    static constexpr size_t dspRuntimeStateBytes() {
+        return Mp3PlaybackEngine::dspRuntimeStateBytes();
+    }
+    bool restoredInvalidSoundPreset() const { return restoredInvalidSoundPreset_; }
     uint8_t preferredNowPlayingView() const { return preferredNowPlayingView_; }
     void setPreferredNowPlayingView(uint8_t view);
 
@@ -90,6 +103,8 @@ class PlayerRuntime final {
     bool queuePublicationBlocked_ = false;
     bool persistenceSuspended_ = false;
     uint8_t preferredNowPlayingView_ = 0;
+    SoundPreset soundPreset_ = SoundPreset::Original;
+    bool restoredInvalidSoundPreset_ = false;
     uint32_t nextPersistenceAttemptAtMs_ = 0;
     uint32_t activeQueueGeneration_ = 0;
     uint32_t lastCheckpointAtMs_ = 0;

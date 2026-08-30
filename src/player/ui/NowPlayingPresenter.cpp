@@ -99,7 +99,8 @@ void NowPlayingPresenter::update(const PlayerSnapshot& snapshot,
         if (fonts_ && model_.path[0] && model_.active) {media_.selectTrack(model_.path);contentRow_=0;}
     }
     model_.updatePlayback(snapshot.state, snapshot.positionMs, snapshot.durationMs,
-                           snapshot.repeatMode, snapshot.shuffleEnabled);
+                           snapshot.repeatMode, snapshot.shuffleEnabled,
+                           snapshot.soundPreset);
     if (!model_.active) return;
     // Only the visible client requests the shared reader. A Playlist request
     // can replace an in-flight one; keyed results and the model's copy prevent
@@ -298,10 +299,16 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
         prepareRow(18, kBackground, 1.0f);
         CachedUiFont font(fonts_,14);if(fonts_)row_.setFont(&font);
         drawStateIcon(model_.state);
-        // Two compact, truthful marks: queue mode and unchanged Original path.
+        // Two compact, truthful marks: queue mode and active P5 sound preset.
         CachedUiFont iconFont(fonts_,10);if(fonts_)row_.setFont(&iconFont);
         drawPlaybackModeIcon(row_,modeIcon);
-        row_.drawCircle(123,8,5,kMuted);row_.drawFastHLine(120,8,7,kText);
+        row_.drawCircle(123,8,5,kMuted);
+        const char presetGlyph = model_.soundPreset==SoundPreset::Tape?'T':
+            model_.soundPreset==SoundPreset::Radio?'R':
+            model_.soundPreset==SoundPreset::VocalClear?'V':'O';
+        char presetText[2]={presetGlyph,'\0'};
+        row_.setTextColor(kText,kBackground);
+        UiTextLayout::draw(row_,presetText,{120,3,7,10,1,0,true});
         if(fonts_)row_.setFont(&font);
         UiTextLayout::draw(row_, statusText, {17, 2, 84, 16, 1, 0, true});
         pushRow(display, G::footerY);

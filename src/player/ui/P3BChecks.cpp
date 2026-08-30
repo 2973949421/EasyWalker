@@ -56,7 +56,7 @@ P3BCheckResult checkP3BModel() {
           "marquee_start_scroll");
     model.tick(7500);
     check(r, model.titleOffsetPx == 60, "marquee_speed");
-    model.updatePlayback(PlayerState::Paused, 43000, 100000, RepeatMode::Off, false);
+    model.updatePlayback(PlayerState::Paused, 43000, 100000, RepeatMode::Off, false, SoundPreset::Original);
     model.tick(10000);
     check(r, model.titleOffsetPx == 120 && model.phase == MarqueePhase::EndHold,
           "paused_marquee_end");
@@ -77,15 +77,15 @@ P3BCheckResult checkP3BModel() {
              std::strcmp(model.title, "Track") == 0, "metadata_path_isolation");
     check(r, model.applyMetadata(model.path, "曲名-日本語", "歌手", 25000) &&
              std::strcmp(model.title, "曲名-日本語") == 0, "metadata_utf8_copy");
-    model.updatePlayback(PlayerState::Paused, 43000, 0, RepeatMode::Off, false);
+    model.updatePlayback(PlayerState::Paused, 43000, 0, RepeatMode::Off, false, SoundPreset::Original);
     check(r, model.positionMs == 43000 && model.progressPixels() == -1,
           "restored_unknown_duration");
     model.tick(29000);
     check(r, model.positionMs == 43000, "no_ui_position_clock");
-    model.updatePlayback(PlayerState::Playing, 50000, 100000, RepeatMode::Off, true);
+    model.updatePlayback(PlayerState::Playing, 50000, 100000, RepeatMode::Off, true, SoundPreset::Original);
     check(r, model.progressPixels() == 61 && std::strcmp(model.modeLabel(), "SHUF") == 0,
           "progress_and_standard_shuffle");
-    model.updatePlayback(PlayerState::Playing, 110000, 100000, RepeatMode::All, true);
+    model.updatePlayback(PlayerState::Playing, 110000, 100000, RepeatMode::All, true, SoundPreset::Original);
     check(r, model.progressPixels() == 123 && std::strcmp(model.modeLabel(), "MODE?") == 0 &&
              model.repeat == RepeatMode::All && model.shuffle, "legacy_mode_readonly");
     check(r, NowPlayingModel::volumePercent(0) == 0 &&

@@ -46,7 +46,8 @@ class NowPlayingModel final {
     bool applyMetadata(const char* path, const char* title,
                        const char* artist, uint32_t nowMs);
     void updatePlayback(PlayerState state, uint32_t positionMs,
-                        uint32_t durationMs, RepeatMode repeat, bool shuffle);
+                        uint32_t durationMs, RepeatMode repeat, bool shuffle,
+                        SoundPreset soundPreset);
     void setTitleWidth(int32_t widthPx, uint32_t nowMs);
     void tick(uint32_t nowMs);
     void notifyVolumeAdjusted(uint8_t volume, uint32_t nowMs);
@@ -81,6 +82,7 @@ class NowPlayingModel final {
     char error[96] = {};
     PlayerState state = PlayerState::Empty;
     RepeatMode repeat = RepeatMode::Off;
+    SoundPreset soundPreset = SoundPreset::Original;
     bool shuffle = false;
     uint32_t positionMs = 0;
     uint32_t durationMs = 0;

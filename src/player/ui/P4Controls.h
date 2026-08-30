@@ -74,6 +74,14 @@ constexpr UiAction routedActionAt(UiPage page, int x, int y) {
                                                  ? UiAction::NextTrack
                                                  : playerKeyAt(x, y) == PlayerKey::CyclePlayMode
                                                        ? UiAction::CyclePlayMode
+                                                       : playerKeyAt(x, y) == PlayerKey::SoundOriginal
+                                                             ? UiAction::SetSoundOriginal
+                                                       : playerKeyAt(x, y) == PlayerKey::SoundTape
+                                                             ? UiAction::SetSoundTape
+                                                       : playerKeyAt(x, y) == PlayerKey::SoundRadio
+                                                             ? UiAction::SetSoundRadio
+                                                       : playerKeyAt(x, y) == PlayerKey::SoundVocalClear
+                                                             ? UiAction::SetSoundVocalClear
                                                        : UiAction::None)
                                  : page == UiPage::Playlist
                                        ? (x == 11 && y == 2
@@ -110,11 +118,17 @@ static_assert(playerKeyAt(12, 0) == PlayerKey::VolumeDown, "P4 key 5");
 static_assert(playerKeyAt(12, 1) == PlayerKey::View, "P4 key 6");
 static_assert(playerKeyAt(12, 2) == PlayerKey::CyclePlayMode, "P4 key 7");
 static_assert(playerKeyAt(12, 3) == PlayerKey::NextTrack, "P4 key 8");
-static_assert(playerKeyAt(11, 0) == PlayerKey::None &&
-                  playerKeyAt(11, 1) == PlayerKey::None &&
-                  playerKeyAt(11, 2) == PlayerKey::None &&
-                  playerKeyAt(11, 3) == PlayerKey::None,
-              "P4 keys 9-12 remain disabled");
+static_assert(playerKeyAt(11, 0) == PlayerKey::SoundOriginal &&
+                  playerKeyAt(11, 1) == PlayerKey::SoundTape &&
+                  playerKeyAt(11, 2) == PlayerKey::SoundRadio &&
+                  playerKeyAt(11, 3) == PlayerKey::SoundVocalClear,
+              "P5 keys 9-12 map directly to O/T/R/V");
+static_assert(routedActionAt(UiPage::Player,11,0)==UiAction::SetSoundOriginal &&
+                  routedActionAt(UiPage::Player,11,3)==UiAction::SetSoundVocalClear,
+              "P5 sound keys are enabled only on Player");
+static_assert(routedActionAt(UiPage::Library,11,0)==UiAction::None &&
+                  routedActionAt(UiPage::Playlist,11,0)==UiAction::None,
+              "P5 sound keys do not leak to other pages");
 static_assert(nextPlaybackMode(RepeatMode::Off, false).repeat == RepeatMode::One,
               "Normal to Repeat One");
 static_assert(nextPlaybackMode(RepeatMode::One, false).repeat == RepeatMode::All,

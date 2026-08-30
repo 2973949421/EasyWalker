@@ -121,7 +121,7 @@ bool encodeSession(
     uint8_t* output,
     uint32_t capacity,
     uint32_t& outputLength) {
-    if (session.repeatMode > 2 ||
+    if (session.repeatMode > 2 || session.soundPreset > 3 ||
         (session.currentIndex != kPersistedInvalidTrackIndex &&
          session.currentIndex >= kPersistedQueueMaxTracks) ||
         session.orderCount > kPersistedQueueMaxTracks ||
@@ -159,6 +159,7 @@ bool encodeSession(
     writeLe16(output + 18, session.orderCursor);
     output[20] = session.historyCount;
     output[21] = session.preferredNowPlayingView == 1 ? 1 : 0;
+    output[22] = session.soundPreset;
 
     uint32_t offset = 24;
     for (uint16_t index = 0; index < session.orderCount; ++index) {
@@ -193,6 +194,7 @@ bool decodeSession(
     output.orderCursor = readLe16(input + 18);
     output.historyCount = input[20];
     output.preferredNowPlayingView = input[21] == 1 ? 1 : 0;
+    output.soundPreset = input[22];
 
     const uint32_t expected =
         24 + (static_cast<uint32_t>(output.orderCount) * 2) +

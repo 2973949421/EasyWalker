@@ -10,9 +10,9 @@
 #include <cstdlib>
 namespace adv_walkman { namespace player {
 namespace {
-constexpr const char* kLog="/ADVWalkman/logs/p4-free-current.txt";
-constexpr const char* kPreviousLog="/ADVWalkman/logs/p4-free-previous.txt";
-constexpr const char* kRotateTemp="/ADVWalkman/logs/p4-free-rotate.tmp";
+constexpr const char* kLog="/ADVWalkman/logs/p5-free-current.txt";
+constexpr const char* kPreviousLog="/ADVWalkman/logs/p5-free-previous.txt";
+constexpr const char* kRotateTemp="/ADVWalkman/logs/p5-free-rotate.tmp";
 constexpr uint32_t kSummaryIntervalMs=60000;
 constexpr size_t kLogLimit=1024U*1024U;
 bool rotateLog(){
@@ -317,19 +317,26 @@ void FreeSession::prepareNext(const UiCoordinator& ui,const PlayerRuntime& playe
                 (unsigned long)wake.firstFrame,(unsigned long)wake.unlocked,(unsigned long)wake.position,!power.wakes?"NA":wake.firstFrame&&wake.unlocked?"YES":"PENDING");
             for(unsigned i=0;i<5;++i)append("sleep_%s=%u\nwake_%s=%u\n",scenes[i],ui.sleepsOn(i),scenes[i],ui.wakesOn(i));return;}
         case 9:{
-            append("save_requested_ticket=%lu\nsave_active_ticket=%lu\nsave_completed_ticket=%lu\nsave_status=%u\nstate_writes=%lu\ncheckpoint_revision=%lu\npersisted_checkpoint_revision=%lu\nprevious_requests=%lu\nprevious_accepted=%lu\nnext_requests=%lu\nnext_accepted=%lu\nplay_mode_requests=%lu\nplay_mode_accepted=%lu\ntransport_action_failures=%lu\n",
+            append("save_requested_ticket=%lu\nsave_active_ticket=%lu\nsave_completed_ticket=%lu\nsave_status=%u\nstate_writes=%lu\ncheckpoint_revision=%lu\npersisted_checkpoint_revision=%lu\nprevious_requests=%lu\nprevious_accepted=%lu\nnext_requests=%lu\nnext_accepted=%lu\nplay_mode_requests=%lu\nplay_mode_accepted=%lu\nsound_preset_requests=%lu\nsound_preset_accepted=%lu\nsound_preset_failures=%lu\ntransport_action_failures=%lu\n",
                 (unsigned long)save_.requested(),(unsigned long)save_.activeThrough(),(unsigned long)save_.completed(),unsigned(save_.status()),(unsigned long)player.stateWriteCount(),
                 (unsigned long)player.checkpointRevision(),(unsigned long)player.persistedCheckpointRevision(),
                 (unsigned long)previousRequests_,(unsigned long)u.previousActions,
                 (unsigned long)nextRequests_,(unsigned long)u.nextActions,
                 (unsigned long)playModeRequests_,(unsigned long)u.playModeActions,
+                (unsigned long)(u.soundPresetActions()+u.soundPresetFailures()),(unsigned long)u.soundPresetActions(),
+                (unsigned long)u.soundPresetFailures(),
                 (unsigned long)u.transportActionFailures);return;}
         case 10:
-            append("last_transport_index=%u\nlast_transport_state=%u\ntransport_first_pcm_max_ms=%lu\ntransport_pcm_completed=%lu\ntransport_pcm_pending=%u\ntransport_pcm_superseded=%lu\ntransport_paused=%lu\nmode_before_repeat=%u\nmode_before_shuffle=%u\nmode_after_repeat=%u\nmode_after_shuffle=%u\nmode_footer_max_ms=%lu\n",
+            append("last_transport_index=%u\nlast_transport_state=%u\ntransport_first_pcm_max_ms=%lu\ntransport_pcm_completed=%lu\ntransport_pcm_pending=%u\ntransport_pcm_replaced=%lu\ntransport_paused=%lu\nmode_before_repeat=%u\nmode_before_shuffle=%u\nmode_after_repeat=%u\nmode_after_shuffle=%u\nmode_footer_max_ms=%lu\nsound_preset=%u\nsound_footer_max_ms=%lu\nsound_pcm_apply_max_us=%lu\ndsp_block_max_us=%lu\ndsp_crossfades=%lu\ndsp_limiter_events=%lu\ndsp_pre_limiter_peak_q15=%u\ndsp_invalid_fallbacks=%lu\ndsp_state_bytes=%u\n",
                 unsigned(lastTransportIndex_),unsigned(lastTransportState_),
                 (unsigned long)transportFirstPcmMaxMs_,(unsigned long)transportPcmCompleted_,transportPcmPending_,
                 (unsigned long)transportPcmSuperseded_,(unsigned long)transportPaused_,u.modeBeforeRepeat,u.modeBeforeShuffle,
-                u.modeAfterRepeat,u.modeAfterShuffle,(unsigned long)u.modeFeedbackMaxMs);return;
+                u.modeAfterRepeat,u.modeAfterShuffle,(unsigned long)u.modeFeedbackMaxMs,
+                unsigned(player.soundPreset()),(unsigned long)u.soundFeedbackMaxMs(),
+                (unsigned long)player.presetApplyLatencyMaxUs(),(unsigned long)player.dspBlockMaxUs(),
+                (unsigned long)player.dspCrossfadeCount(),(unsigned long)player.dspLimiterEvents(),
+                player.dspPreLimiterPeakQ15(),(unsigned long)player.dspInvalidFallbacks(),
+                unsigned(PlayerRuntime::dspRuntimeStateBytes()));return;
         case 11:{
             static const char* phases[]={"idle","queue_path_prepare","open_target","write_header","write_payload","close_target","open_verify","read_verify","check_size","close_resize","create_target","flush_target","read_header","queue_path_fetch","publish","cleanup_close"};
             for(unsigned i=1;i<16;++i)append("store_%s_max_us=%lu\n",phases[i],(unsigned long)player.persistencePhasePeakUs(i));return;}
@@ -341,9 +348,9 @@ void FreeSession::prepareNext(const UiCoordinator& ui,const PlayerRuntime& playe
                 u.displaySelfChecks,u.displaySelfFailure?u.displaySelfFailure:"none",(unsigned long)ui.fonts().stats().ioErrors,
                 (unsigned long)ui.fonts().stats().drawMisses,(unsigned long)ui.metadataFallbacks(),ui.metadataFallbackCause());return;
         case 13:
-            append("elapsed_ms=%lu\npage=%s\nplayer_state=%s\nposition_ms=%lu\nsample_rate=%lu\nvolume=%u\npreferred_view=%u\neffective_view=%u\nheader_visible=%u\nrepeat_raw=%u\nshuffle_raw=%u\nspeaker_volume_raw=%u\nspeaker_volume_cap=%u\nminimum_heap=%lu\nheap_free=%lu\nheap_largest_block=%lu\nmedia_budget_bytes=%u\nmedia_plus_events_bytes=%lu\n",
+            append("elapsed_ms=%lu\npage=%s\nplayer_state=%s\nposition_ms=%lu\nsample_rate=%lu\nvolume=%u\npreferred_view=%u\neffective_view=%u\nheader_visible=%u\nrepeat_raw=%u\nshuffle_raw=%u\nsound_preset=%u\nspeaker_volume_raw=%u\nspeaker_volume_cap=%u\nminimum_heap=%lu\nheap_free=%lu\nheap_largest_block=%lu\nmedia_budget_bytes=%u\nmedia_plus_events_bytes=%lu\n",
                 (unsigned long)(millis()-started_),uiPageName(ui.page()),playerStateName(s.state),(unsigned long)s.positionMs,(unsigned long)s.sampleRateHz,player.volume(),player.preferredNowPlayingView(),unsigned(m.view),
-                ui.nowPlaying().model().headerVisible,unsigned(s.repeatMode),s.shuffleEnabled,player.rawSpeakerVolume(),VolumePolicy::maximumRaw,(unsigned long)minimumHeap_,(unsigned long)ESP.getFreeHeap(),
+                ui.nowPlaying().model().headerVisible,unsigned(s.repeatMode),s.shuffleEnabled,unsigned(s.soundPreset),player.rawSpeakerVolume(),VolumePolicy::maximumRaw,(unsigned long)minimumHeap_,(unsigned long)ESP.getFreeHeap(),
                 (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT),unsigned(kP3DMediaBudgetBytes),(unsigned long)p3MemoryReport[1]);return;
         case 14:
             append("input_selfcheck=%u\nactions=%lu\nnav_mask=%lu\nvolume_events=%lu\nplay_events=%lu\nview_events=%lu\nlibrary_text_seen=%u\nlibrary_text_ok=%u\nno_lyrics_view_noop=%lu\npreference_track_transitions=%lu\ncoverage_scope=free_main_path\nnot_exercised=playing_seek;manual_reboot_requires_host_comparison\nspeaker_distortion=DEFERRED\n",
@@ -354,8 +361,8 @@ void FreeSession::prepareNext(const UiCoordinator& ui,const PlayerRuntime& playe
                 (unsigned long)m.generation,ui.nowPlaying().model().active);
             append("track=%s\n",track_);return;
         case 16:
-            append("restored_track=%s\nrestored_position_ms=%lu\nrestored_view=%u\nstartup_paused=%u\nstartup_silent=%u\nstartup_observed_ms=%lu\n",
-                restoredTrack_,(unsigned long)restoredPosition_,restoredView_,startupPaused_,startupSilent_,(unsigned long)startupObservedMs_);return;
+            append("restored_track=%s\nrestored_position_ms=%lu\nrestored_view=%u\nrestored_sound_preset=%u\nrestored_sound_preset_invalid=%u\nstartup_paused=%u\nstartup_silent=%u\nstartup_observed_ms=%lu\n",
+                restoredTrack_,(unsigned long)restoredPosition_,restoredView_,unsigned(player.soundPreset()),player.restoredInvalidSoundPreset(),startupPaused_,startupSilent_,(unsigned long)startupObservedMs_);return;
         case 17:append("resource_path=%s\n",resourcePath_[0]?resourcePath_:"NA");return;
         case 18:append("nav_target=%s\n",ui.navigationTarget());return;
         case 19:append("browser_path=%s\n",ui.browser().currentPath());return;

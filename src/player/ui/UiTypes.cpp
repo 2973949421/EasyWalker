@@ -43,6 +43,10 @@ const char* uiActionName(UiAction action) {
         case UiAction::PreviousTrack:return "PREVIOUS";
         case UiAction::NextTrack:return "NEXT";
         case UiAction::CyclePlayMode:return "PLAY_MODE";
+        case UiAction::SetSoundOriginal:return "SOUND_ORIGINAL";
+        case UiAction::SetSoundTape:return "SOUND_TAPE";
+        case UiAction::SetSoundRadio:return "SOUND_RADIO";
+        case UiAction::SetSoundVocalClear:return "SOUND_VOCAL_CLEAR";
         case UiAction::SaveDiagnostics:return "SAVE_LOG";
         case UiAction::ToggleCurrentPlaybackPage:return "TAB_CURRENT";
     }

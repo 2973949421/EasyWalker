@@ -192,8 +192,9 @@ class UiCoordinator final : private PlaylistPageController {
     uint32_t inputOverflow_=0,inputStale_=0;
     uint32_t inputEpoch_=0;
     bool modeFeedbackPending_=false;
-    RepeatMode expectedModeRepeat_=RepeatMode::Off;
-    bool expectedModeShuffle_=false;
+    // 0..3 encode Normal/RepeatOne/RepeatAll/Shuffle; bit 7 encodes a
+    // SoundPreset value in bits 0..1. This replaces four parallel fields.
+    uint8_t feedbackExpected_=0;
     uint32_t modeRequestedAt_=0,modeStatusDrawBaseline_=0;
     DisplayLifecycle displayLifecycle_;
     bool wakeFramePending_=false;

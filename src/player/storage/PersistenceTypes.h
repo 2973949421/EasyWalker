@@ -44,6 +44,10 @@ struct PersistedSession {
     bool shuffleEnabled = false;
     // Session v1 reserved byte 21: 0=Lyrics, 1=Cover. Not audio state.
     uint8_t preferredNowPlayingView = 0;
+    // Session v1 reserved byte 22: SoundPreset 0..3. Byte 23 remains reserved.
+    // Decode preserves an invalid raw value so Runtime can record the fallback
+    // without rejecting the otherwise recoverable Session.
+    uint8_t soundPreset = static_cast<uint8_t>(SoundPreset::Original);
 
     uint16_t orderCount = 0;
     uint16_t orderCursor = 0;

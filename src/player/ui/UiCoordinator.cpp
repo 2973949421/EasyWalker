@@ -199,12 +199,20 @@ void UiCoordinator::service() {
             stats_.renderMaxUs = std::max(stats_.renderMaxUs,
                                           nowPlaying_.stats().renderMaxUs);
         }
-        if(modeFeedbackPending_ &&
+        if(modeFeedbackPending_ && (feedbackExpected_&0x80U)==0 &&
            nowPlaying_.stats().statusDraws>modeStatusDrawBaseline_ &&
-           nowPlaying_.model().repeat==expectedModeRepeat_ &&
-           nowPlaying_.model().shuffle==expectedModeShuffle_){
+           nowPlaying_.model().repeat==(feedbackExpected_==1?RepeatMode::One:
+               feedbackExpected_==2?RepeatMode::All:RepeatMode::Off) &&
+           nowPlaying_.model().shuffle==(feedbackExpected_==3)){
             stats_.modeFeedbackMaxMs=std::max(stats_.modeFeedbackMaxMs,
                                               uint32_t(millis()-modeRequestedAt_));
+            modeFeedbackPending_=false;
+        }
+        if(modeFeedbackPending_ && (feedbackExpected_&0x80U)!=0 &&
+           nowPlaying_.stats().statusDraws>modeStatusDrawBaseline_ &&
+           nowPlaying_.model().soundPreset==
+               static_cast<SoundPreset>(feedbackExpected_&0x03U)){
+            stats_.recordSoundFeedback(millis()-modeRequestedAt_);
             modeFeedbackPending_=false;
         }
         if(wakeFramePending_&&nowPlaying_.mediaStatus().frames>wake_.frames&&nowPlaying_.displayComplete()){
@@ -349,8 +357,30 @@ bool UiCoordinator::handleAction(UiAction action) {
                 stats_.modeAfterRepeat=static_cast<uint8_t>(after.repeatMode);
                 stats_.modeAfterShuffle=after.shuffleEnabled;
                 ++stats_.playModeActions;
-                expectedModeRepeat_=after.repeatMode;
-                expectedModeShuffle_=after.shuffleEnabled;
+                feedbackExpected_=after.shuffleEnabled?3U:
+                    after.repeatMode==RepeatMode::One?1U:
+                    after.repeatMode==RepeatMode::All?2U:0U;
+                modeRequestedAt_=millis();
+                modeStatusDrawBaseline_=nowPlaying_.stats().statusDraws;
+                modeFeedbackPending_=true;
+                return true;
+            }
+            if(action==UiAction::SetSoundOriginal ||
+               action==UiAction::SetSoundTape ||
+               action==UiAction::SetSoundRadio ||
+               action==UiAction::SetSoundVocalClear){
+                const SoundPreset preset=action==UiAction::SetSoundTape?SoundPreset::Tape:
+                    action==UiAction::SetSoundRadio?SoundPreset::Radio:
+                    action==UiAction::SetSoundVocalClear?SoundPreset::VocalClear:
+                    SoundPreset::Original;
+                const bool changed=player_->soundPreset()!=preset;
+                if(!player_->setSoundPreset(preset)){
+                    stats_.recordSoundFailure();
+                    return false;
+                }
+                stats_.recordSoundAction();
+                if(!changed)return true;
+                feedbackExpected_=0x80U|static_cast<uint8_t>(preset);
                 modeRequestedAt_=millis();
                 modeStatusDrawBaseline_=nowPlaying_.stats().statusDraws;
                 modeFeedbackPending_=true;

@@ -32,6 +32,10 @@ enum class UiAction : uint8_t {
     PreviousTrack,
     NextTrack,
     CyclePlayMode,
+    SetSoundOriginal,
+    SetSoundTape,
+    SetSoundRadio,
+    SetSoundVocalClear,
     SaveDiagnostics,
     ToggleCurrentPlaybackPage,
 };
@@ -61,6 +65,28 @@ struct UiStats {
     uint32_t renderMaxUs = 0;
     uint32_t inputEvents = 0;
     uint32_t previousActions = 0, nextActions = 0, playModeActions = 0;
+    // P5 sound diagnostics share one word: request/failure counts saturate at
+    // 255 and the measured footer delay saturates at 65535 ms.
+    uint32_t soundDiagnostics = 0;
+    uint8_t soundPresetActions() const { return soundDiagnostics & 0xFFU; }
+    uint8_t soundPresetFailures() const {
+        return (soundDiagnostics >> 8U) & 0xFFU;
+    }
+    uint16_t soundFeedbackMaxMs() const { return soundDiagnostics >> 16U; }
+    void recordSoundAction() {
+        const uint32_t count = soundPresetActions();
+        if (count != UINT8_MAX) soundDiagnostics += 1U;
+    }
+    void recordSoundFailure() {
+        const uint32_t count = soundPresetFailures();
+        if (count != UINT8_MAX) soundDiagnostics += 1U << 8U;
+    }
+    void recordSoundFeedback(uint32_t elapsedMs) {
+        const uint32_t bounded = elapsedMs > UINT16_MAX ? UINT16_MAX : elapsedMs;
+        if (bounded > soundFeedbackMaxMs()) {
+            soundDiagnostics = (soundDiagnostics & 0xFFFFU) | (bounded << 16U);
+        }
+    }
     uint32_t transportActionFailures = 0, modeFeedbackMaxMs = 0;
     uint8_t modeBeforeRepeat = 0, modeAfterRepeat = 0;
     bool modeBeforeShuffle = false, modeAfterShuffle = false;

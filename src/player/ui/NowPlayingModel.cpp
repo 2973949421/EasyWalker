@@ -78,7 +78,7 @@ bool NowPlayingModel::applyMetadata(const char* requestPath,
 
 void NowPlayingModel::updatePlayback(PlayerState newState, uint32_t newPosition,
                                      uint32_t newDuration, RepeatMode newRepeat,
-                                     bool newShuffle) {
+                                     bool newShuffle, SoundPreset newSoundPreset) {
     const int16_t oldProgress = progressPixels();
     if (positionMs / 1000 != newPosition / 1000 || durationMs != newDuration) {
         dirty |= DirtyTime;
@@ -86,12 +86,14 @@ void NowPlayingModel::updatePlayback(PlayerState newState, uint32_t newPosition,
     positionMs = newPosition;
     durationMs = newDuration;
     if (progressPixels() != oldProgress) dirty |= DirtyProgress;
-    if (state != newState || repeat != newRepeat || shuffle != newShuffle) {
+    if (state != newState || repeat != newRepeat || shuffle != newShuffle ||
+        soundPreset != newSoundPreset) {
         dirty |= DirtyStatus;
     }
     state = newState;
     repeat = newRepeat;
     shuffle = newShuffle;
+    soundPreset = newSoundPreset;
 }
 
 void NowPlayingModel::setTitleWidth(int32_t widthPx, uint32_t nowMs) {

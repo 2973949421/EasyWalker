@@ -28,6 +28,7 @@ bool hasMp3Extension(const char* path) {
 }  // namespace
 
 bool PlayerRuntime::begin(bool restoreSavedState) {
+    if (!PcmDsp::selfCheck()) return false;
     setVolume(VolumePolicy::initialLevel);
     if (!engine_.begin()) {
         return false;
@@ -128,6 +129,21 @@ bool PlayerRuntime::setPlaybackMode(RepeatMode mode, bool shuffle) {
     return changed;
 }
 
+bool PlayerRuntime::setSoundPreset(SoundPreset preset) {
+    if (preset != SoundPreset::Original && preset != SoundPreset::Tape &&
+        preset != SoundPreset::Radio && preset != SoundPreset::VocalClear) {
+        return false;
+    }
+    if (soundPreset_ == preset) return true;
+    if (!engine_.setSoundPreset(preset)) {
+        soundPreset_ = SoundPreset::Original;
+        return false;
+    }
+    soundPreset_ = preset;
+    requestCheckpoint();
+    return true;
+}
+
 void PlayerRuntime::setPreferredNowPlayingView(uint8_t view) {
     view = view == 1 ? 1 : 0;
     if (preferredNowPlayingView_ == view) return;
@@ -197,7 +213,9 @@ void PlayerRuntime::servicePersistence() {
 }
 
 PlayerSnapshot PlayerRuntime::snapshot() const {
-    return controller_.snapshot();
+    PlayerSnapshot result = controller_.snapshot();
+    result.soundPreset = soundPreset_;
+    return result;
 }
 
 bool PlayerRuntime::currentPath(char* output, size_t outputCapacity) const {
@@ -279,6 +297,15 @@ bool PlayerRuntime::restoreFromState() {
 
 bool PlayerRuntime::restoreSession(PersistedSession& session) {
     preferredNowPlayingView_ = session.preferredNowPlayingView == 1 ? 1 : 0;
+    restoredInvalidSoundPreset_ = session.soundPreset > 3;
+    soundPreset_ = restoredInvalidSoundPreset_
+                       ? SoundPreset::Original
+                       : static_cast<SoundPreset>(session.soundPreset);
+    if (!engine_.setSoundPreset(soundPreset_)) {
+        soundPreset_ = SoundPreset::Original;
+        engine_.setSoundPreset(soundPreset_);
+        restoredInvalidSoundPreset_ = true;
+    }
     const bool savedShuffleEnabled = session.shuffleEnabled;
     const uint16_t savedCurrentIndex = session.currentIndex;
     const uint32_t savedPositionMs = session.positionMs;
@@ -405,6 +432,7 @@ void PlayerRuntime::captureSession(PersistedSession& output) const {
     output.repeatMode = static_cast<uint8_t>(player.repeatMode);
     output.shuffleEnabled = queue.shuffleEnabled;
     output.preferredNowPlayingView = preferredNowPlayingView_;
+    output.soundPreset = static_cast<uint8_t>(soundPreset_);
     output.orderCount = static_cast<uint16_t>(queue.orderCount);
     output.orderCursor = static_cast<uint16_t>(queue.orderCursor);
     output.historyCount = static_cast<uint8_t>(
