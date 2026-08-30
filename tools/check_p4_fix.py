@@ -1,4 +1,4 @@
-"""Host contracts for 0.9.1; no device-timing claims are made here."""
+"""Host contracts for the current P4AB fix; no device-timing claims are made here."""
 import re
 import unittest
 import zlib
@@ -112,6 +112,10 @@ class P4FixChecks(unittest.TestCase):
         self.assertEqual(timelines[0],timelines[1])
         cover=PACKAGE / "ADVWalkman/library-covers/folders/KINO/cover.adv"
         self.assertEqual(validate_library_cover(cover),KINO_LIBRARY_SIZE)
+        self.assertEqual(KINO_LIBRARY_SIZE, (135,154))
+        for library in ("AveMujica","KINO","熱・情","粤语迷幻"):
+            item=PACKAGE / "ADVWalkman/library-covers/folders" / library / "cover.adv"
+            self.assertEqual(validate_library_cover(item),KINO_LIBRARY_SIZE)
 
 
 if __name__ == "__main__":

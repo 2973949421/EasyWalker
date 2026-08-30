@@ -14,6 +14,30 @@ struct PlaybackModeValue {
         : repeat(value), shuffle(shuffled) {}
 };
 
+enum class PlaybackModeIcon : uint8_t {
+    ListLoop,
+    RepeatOne,
+    ShuffleLoop,
+    ListOnce,
+    Invalid,
+};
+
+constexpr PlaybackModeIcon playbackModeIcon(RepeatMode repeat, bool shuffle) {
+    return shuffle ? (repeat == RepeatMode::Off ? PlaybackModeIcon::ShuffleLoop
+                                                : PlaybackModeIcon::Invalid)
+                   : repeat == RepeatMode::All ? PlaybackModeIcon::ListLoop
+                   : repeat == RepeatMode::One ? PlaybackModeIcon::RepeatOne
+                   : repeat == RepeatMode::Off ? PlaybackModeIcon::ListOnce
+                                               : PlaybackModeIcon::Invalid;
+}
+
+constexpr char playbackModeIconLabel(PlaybackModeIcon icon) {
+    return icon == PlaybackModeIcon::RepeatOne ? '1'
+         : icon == PlaybackModeIcon::ShuffleLoop ? 'R'
+         : icon == PlaybackModeIcon::ListOnce ? 'S'
+         : icon == PlaybackModeIcon::Invalid ? '?' : '\0';
+}
+
 constexpr PlaybackModeValue nextPlaybackMode(RepeatMode repeat, bool shuffle) {
     // A legacy Repeat+Shuffle combination is intentionally left untouched
     // until the user presses Play Mode; that explicit action normalizes it.
@@ -102,6 +126,18 @@ static_assert(!nextPlaybackMode(RepeatMode::Off, true).shuffle,
 static_assert(nextPlaybackMode(RepeatMode::One, true).repeat == RepeatMode::Off &&
                   !nextPlaybackMode(RepeatMode::One, true).shuffle,
               "legacy invalid mode normalizes only on explicit action");
+static_assert(playbackModeIcon(RepeatMode::All, false) == PlaybackModeIcon::ListLoop &&
+                  playbackModeIconLabel(PlaybackModeIcon::ListLoop) == '\0',
+              "list loop uses the unlabelled loop icon");
+static_assert(playbackModeIcon(RepeatMode::One, false) == PlaybackModeIcon::RepeatOne &&
+                  playbackModeIconLabel(PlaybackModeIcon::RepeatOne) == '1',
+              "repeat one uses the 1 loop icon");
+static_assert(playbackModeIcon(RepeatMode::Off, true) == PlaybackModeIcon::ShuffleLoop &&
+                  playbackModeIconLabel(PlaybackModeIcon::ShuffleLoop) == 'R',
+              "shuffle loop uses the R loop icon");
+static_assert(playbackModeIcon(RepeatMode::Off, false) == PlaybackModeIcon::ListOnce &&
+                  playbackModeIconLabel(PlaybackModeIcon::ListOnce) == 'S',
+              "list once uses the S loop icon");
 static_assert(routedActionAt(UiPage::Player, 12, 3) == UiAction::NextTrack,
               "player context owns blind key 8");
 static_assert(routedActionAt(UiPage::Library, 12, 3) == UiAction::Right,

@@ -605,6 +605,14 @@ bool P1DeviceTestRunner::runQueueModelChecks() {
         return false;
     }
 
+    if (!queue.reset(p1AllValidFixtures(), 2) || queue.currentSourceIndex() != 2 ||
+        !queue.retreatSequential(true) ||
+        queue.currentSourceIndex() != 1 || !queue.retreatSequential(true) ||
+        queue.currentSourceIndex() != 0 || !queue.retreatSequential(true) ||
+        queue.currentSourceIndex() != 2) {
+        return false;
+    }
+
     const char* const noPaths[] = {nullptr};
     FixedTrackSource empty(noPaths, 0);
     if (!queue.reset(empty, 0) || !queue.empty() ||
@@ -645,6 +653,20 @@ bool P1DeviceTestRunner::runControllerModeChecks() {
         return false;
     }
     runtime_->setShuffleEnabled(false);
+    runtime_->setRepeatMode(RepeatMode::Off);
+    if (!runtime_->replaceQueue(p1AllValidFixtures(), 2, true) ||
+        !runtime_->pause() || !runtime_->next()) {
+        return false;
+    }
+    snapshot = runtime_->snapshot();
+    if (snapshot.state != PlayerState::Paused || snapshot.currentIndex != 0 ||
+        !runtime_->previous()) {
+        return false;
+    }
+    snapshot = runtime_->snapshot();
+    if (snapshot.state != PlayerState::Paused || snapshot.currentIndex != 2) {
+        return false;
+    }
     runtime_->stop();
     return true;
 }

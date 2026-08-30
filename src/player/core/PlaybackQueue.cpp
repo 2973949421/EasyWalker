@@ -131,6 +131,21 @@ bool PlaybackQueue::previous() {
     return true;
 }
 
+bool PlaybackQueue::retreatSequential(bool wrapAtStart) {
+    if (!hasCurrent()) {
+        return false;
+    }
+    if (cursor_ != 0) {
+        --cursor_;
+        return true;
+    }
+    if (!wrapAtStart) {
+        return false;
+    }
+    cursor_ = static_cast<uint16_t>(count_ - 1);
+    return true;
+}
+
 void PlaybackQueue::setShuffleEnabled(bool enabled, bool beginNewQueueRound) {
     if (enabled == shuffleEnabled_ || !hasCurrent()) {
         shuffleEnabled_ = enabled;

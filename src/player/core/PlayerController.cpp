@@ -1,4 +1,5 @@
 #include "PlayerController.h"
+#include "PlaybackPolicy.h"
 
 #include <cstring>
 
@@ -143,8 +144,9 @@ bool PlayerController::next() {
         return false;
     }
 
-    const bool wrapAtEnd = repeatMode_ == RepeatMode::All;
-    if (!queue_.advance(wrapAtEnd)) {
+    // Manual navigation is never blocked by an automatic end-of-queue rule.
+    // List Once still stops on natural EOF, but its Next key wraps immediately.
+    if (!queue_.advance(manualTrackNavigationWraps())) {
         return false;
     }
     return selectAdvancedTrack();
@@ -165,7 +167,14 @@ bool PlayerController::previous() {
         return seekToMs(0);
     }
 
-    if (!queue_.previous()) {
+    if (manualPreviousUsesHistory(queue_.shuffleEnabled())) {
+        // Prefer the real random-play history.  A freshly selected shuffled
+        // track has no history yet, so choose another shuffled entry instead
+        // of turning the key into a silent no-op.
+        if (!queue_.previous() && !queue_.advance(true)) {
+            return false;
+        }
+    } else if (!queue_.retreatSequential(true)) {
         return false;
     }
     return selectAdvancedTrack();
@@ -392,7 +401,9 @@ bool PlayerController::handleTrackEnded() {
         return true;
     }
 
-    const bool wrapAtEnd = repeatMode_ == RepeatMode::All;
+    // Shuffle is a repeating random mode.  List Once is the only multi-track
+    // mode that stops at the natural end of its current round.
+    const bool wrapAtEnd = automaticTrackEndWraps(repeatMode_, queue_.shuffleEnabled());
     if (!queue_.advance(wrapAtEnd)) {
         engine_.stop();
         state_ = queue_.empty() ? PlayerState::Empty : PlayerState::Stopped;

@@ -4,7 +4,7 @@ import re
 import zlib
 from pathlib import Path
 
-VERSION='0.9.1-p4ab.fix'
+VERSION='0.9.2-p4ab.transportfix'
 
 def evaluate_render(record):
     required=('render_contract','render_pixel_selfcheck','frame_starts','frame_rejects','frame_repairs',

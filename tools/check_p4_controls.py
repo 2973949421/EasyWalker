@@ -52,6 +52,27 @@ class P4ControlChecks(unittest.TestCase):
         self.assertIn("nextPlaybackMode(before.repeatMode,before.shuffleEnabled)", coordinator)
         self.assertIn("player_->setPlaybackMode(next.repeat,next.shuffle)", coordinator)
 
+    def test_manual_navigation_and_automatic_end_are_separate(self):
+        policy = source("src/player/core/PlaybackPolicy.h")
+        controller = source("src/player/core/PlayerController.cpp")
+        queue = source("src/player/core/PlaybackQueue.cpp")
+        self.assertIn("manual Previous/Next wrap in every playback mode", policy)
+        self.assertIn("list once stops at natural queue end", policy)
+        self.assertIn("random loop starts a new shuffled round", policy)
+        self.assertIn("queue_.advance(manualTrackNavigationWraps())", controller)
+        self.assertIn("manualPreviousUsesHistory(queue_.shuffleEnabled())", controller)
+        self.assertIn("queue_.retreatSequential(true)", controller)
+        self.assertIn("bool PlaybackQueue::retreatSequential", queue)
+
+    def test_user_defined_mode_icons_are_mapped(self):
+        controls = source("src/player/ui/P4Controls.h")
+        presenter = source("src/player/ui/NowPlayingPresenter.cpp")
+        for name in ("ListLoop", "RepeatOne", "ShuffleLoop", "ListOnce"):
+            self.assertIn(name, controls)
+        for label in ("'1'", "'R'", "'S'"):
+            self.assertIn(label, controls)
+        self.assertIn("drawPlaybackModeIcon", presenter)
+
     def test_old_global_player_shortcuts_are_absent(self):
         router = source("src/player/ui/InputRouter.cpp")
         for shortcut in ("H/L/Q/R/S/V", "keyChar", "isKeyPressed"):

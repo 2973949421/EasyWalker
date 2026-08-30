@@ -119,7 +119,7 @@ class P3BLocalChecks(unittest.TestCase):
         ini.read(ROOT / "platformio.ini", encoding="utf-8-sig")
         for env in ["player-dev", "player-p3a-gate"]:
             section = ini[f"env:{env}"]
-            self.assertIn("0.9.1-p4ab.fix", section["build_flags"])
+            self.assertIn("0.9.2-p4ab.transportfix", section["build_flags"])
             self.assertEqual(int(section["custom_launcher_app_limit"], 0), 0x140000)
         for env in ["player-p1-gate-a", "player-p1-gate-b", "player-p2-gate"]:
             self.assertIn("-<player/ui/**>", ini[f"env:{env}"]["build_src_filter"])

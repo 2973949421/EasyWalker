@@ -36,6 +36,7 @@ class PlaybackQueue {
 
     bool advance(bool wrapAtEnd);
     bool previous();
+    bool retreatSequential(bool wrapAtStart);
 
     void setShuffleEnabled(bool enabled, bool beginNewQueueRound = false);
     bool shuffleEnabled() const;

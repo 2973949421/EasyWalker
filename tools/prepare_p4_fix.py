@@ -1,4 +1,4 @@
-"""Prepare and validate the changed 0.9.1 private SD resources."""
+"""Prepare and validate the current P4AB private SD resources."""
 from __future__ import annotations
 
 import argparse

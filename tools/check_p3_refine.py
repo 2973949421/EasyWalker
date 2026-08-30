@@ -96,5 +96,5 @@ class RefineChecks(unittest.TestCase):
         self.assertEqual(evaluate_wake(record)[0],'READY_FOR_REVIEW')
         self.assertEqual(evaluate_wake(dict(record,wake_complete='PENDING'))[0],'INCOMPLETE')
         self.assertEqual(evaluate_wake(dict(record,wake_first_frame_ms='90'))[0],'FAIL')
-        self.assertEqual(VERSION,'0.9.1-p4ab.fix')
+        self.assertEqual(VERSION,'0.9.2-p4ab.transportfix')
 if __name__=='__main__':unittest.main(verbosity=2)

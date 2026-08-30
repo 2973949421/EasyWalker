@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include "P4Controls.h"
 #include "UiTextLayout.h"
 
 namespace adv_walkman {
@@ -23,6 +24,25 @@ void formatTime(char* output, size_t capacity, uint32_t milliseconds) {
     std::snprintf(output, capacity, "%lu:%02lu",
                   static_cast<unsigned long>(seconds / 60U),
                   static_cast<unsigned long>(seconds % 60U));
+}
+
+void drawPlaybackModeIcon(M5Canvas& row, PlaybackModeIcon icon) {
+    const uint16_t color = icon == PlaybackModeIcon::Invalid ? TFT_ORANGE : kMuted;
+    // User-defined visual language: one compact loop frame, left arrow up,
+    // right arrow down; 1/R/S distinguishes one/random/single-pass.
+    row.drawFastHLine(104, 2, 8, color);
+    row.drawFastVLine(103, 4, 9, color);
+    row.drawLine(101, 5, 103, 2, color);
+    row.drawLine(105, 5, 103, 2, color);
+    row.drawFastHLine(104, 14, 8, color);
+    row.drawFastVLine(112, 3, 9, color);
+    row.drawLine(110, 11, 112, 14, color);
+    row.drawLine(114, 11, 112, 14, color);
+    const char label = playbackModeIconLabel(icon);
+    if (label) {
+        char text[2] = {label, '\0'};
+        row.drawString(text, 106, 4);
+    }
 }
 }  // namespace
 
@@ -271,20 +291,16 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
         std::snprintf(text,sizeof(text),"%s/%s",position,duration);
         const char* statusText=logNote_?(logNote_==1?"已保存":logNote_==3?"切换失败":logNote_==4?"保存中":logNote_==5?"状态已存 日志失败":"保存失败"):text;
         if(fonts_&&!fonts_->requestUiWindow(statusText,14,0,84,1))return false;
-        const char* mode=model_.modeLabel();
-        const char* modeGlyph=std::strcmp(mode,"ONE")==0?"1":std::strcmp(mode,"ALL")==0?"A":std::strcmp(mode,"SHUF")==0?"S":std::strcmp(mode,"NORM")==0?"":"?";
+        const auto modeIcon=playbackModeIcon(model_.repeat,model_.shuffle);
+        const char iconLabel=playbackModeIconLabel(modeIcon);
+        char modeGlyph[2]={iconLabel,'\0'};
         if(fonts_&&!fonts_->requestUiWindow(modeGlyph,10,0,12,1))return false;
         prepareRow(18, kBackground, 1.0f);
         CachedUiFont font(fonts_,14);if(fonts_)row_.setFont(&font);
         drawStateIcon(model_.state);
         // Two compact, truthful marks: queue mode and unchanged Original path.
         CachedUiFont iconFont(fonts_,10);if(fonts_)row_.setFont(&iconFont);
-        if(std::strcmp(mode,"NORM")==0){
-            row_.drawFastHLine(103,8,9,kMuted);row_.drawLine(109,5,112,8,kMuted);row_.drawLine(109,11,112,8,kMuted);
-        }else{
-            const char* label=std::strcmp(mode,"ONE")==0?"1":std::strcmp(mode,"ALL")==0?"A":std::strcmp(mode,"SHUF")==0?"S":"?";
-            row_.drawString(label,105,3);
-        }
+        drawPlaybackModeIcon(row_,modeIcon);
         row_.drawCircle(123,8,5,kMuted);row_.drawFastHLine(120,8,7,kText);
         if(fonts_)row_.setFont(&font);
         UiTextLayout::draw(row_, statusText, {17, 2, 84, 16, 1, 0, true});
