@@ -1,5 +1,16 @@
 # Changelog
 
+## V0.9.2 — Queue boundaries, mode icons and library cover contract
+
+Date: 2026-08-30
+
+- 根据0.9.1真机日志修复`twomoons.mp3`末项手动Next失败及直接选中末项后Previous无History失败；按键捕获正常、34次Transport拒绝与0/0 Audio Error/Backpressure明确区分。
+- 手动Previous/Next与自然EOF分离：顺序模式手动首尾循环，随机模式Next沿随机order、Previous优先真实History且无History也不静默失败；Repeat One手动切歌后保持单曲循环。
+- 自然EOF固定为列表单次停止、单曲循环重播、列表循环回首、随机循环开始新一轮；Queue/Session格式不变。
+- Footer播放模式改为用户定义的方形循环箭头：列表循环无内字、单曲`1`、随机`R`、列表单次`S`。
+- 删除KINO的135×173特例，全部曲库图片PC生成与交付合同统一为135×154；不增加图片缓存或设备RAM。
+- 主机状态检查和六环境构建通过；双月边界、四模式图标与真机时序仍为`DEVICE TEST`，详见`docs/P4AB_TRANSPORT_FIX.md`。
+
 ## V0.9.1 — Reliable saves, warm lists and lyric layout
 
 Date: 2026-08-29

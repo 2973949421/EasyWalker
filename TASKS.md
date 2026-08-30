@@ -410,7 +410,7 @@ P3-07 在 P3A 只完成可用骨架，最终视觉仍由 P3D 验收。
 - [x] 六行列表逐区准备/绘制，移除失败字模查询的20ms节流；复用暖窗口
 - [x] 共享135×18条带填充与提交互斥；曲库CRC暖返回保留；音频/存档服务分开
 - [x] Queue每步一个路径、写/Flush/关/回读分开，日志分步关闭，新增分阶段测量
-- [x] 曲库135×173完整合图与居中名称、紧凑唱片；10首译文复核与原文时间记录核对
+- [x] 当时完成曲库135×173原型与居中名称、紧凑唱片；0.9.2已由统一135×154交付合同取代；10首译文复核与原文时间记录核对
 - [x] Crucifix X本地无重编码迁移，11首绑定，暗黑天国保持无歌词
 - [x] 71项PC检查、C++编译期回归及六环境最终构建通过；BIN≤0x140000，媒体+输入48436 / 49152 bytes
 - [x] 同名联合BIN和22项资源已同步SD并核对；精确退役5个benchmark文件，19个存档/日志Hash未变；体积、SHA-256及证据边界见附件
@@ -600,7 +600,7 @@ Device AC — 等待 Gate A-fix+B+C，不用构建结果代替：
 - [ ] 长 Title 静止约 5 秒后滚动一遍
 - [ ] 滚动完成后再次静止约 5 秒
 - [ ] 24 px/s、最多 20 fps；Pause 继续滚动，换歌 / 更新标题 / 重入页面重置
-- [ ] Footer真实时间/进度/状态；右侧模式箭头或1/A/S与Original小标识互不重叠
+- [ ] Footer真实时间/进度/状态；右侧方形循环箭头及无内字/1/R/S与Original小标识互不重叠
 - [ ] 恢复后未知总时长显示 --:-- / 未知进度，不额外 Probe；异常模式显示 ? 并保留原值
 - [ ] 左侧音量浮层仅收到事件才显示，0 / 128 / 255 对应 0 / 50 / 100%，3 秒隐藏并局部恢复
 - [ ] 实体 Vol+/− 每次 ±8 后反映实际音量；细条 / 数字无不透明背景，3秒局部恢复
@@ -821,7 +821,7 @@ AC：
 
 ## P4-01 Input Context Router
 
-Status: DEVICE TEST — 0.9.0 IMPLEMENTED
+Status: DEVICE TEST — 0.9.2 BOUNDARY FIX IMPLEMENTED
 
 AC：
 
@@ -882,9 +882,12 @@ AC：
 - [x] Normal = Off + Shuffle Off
 - [x] Repeat One = One + Shuffle Off
 - [x] Repeat All = All + Shuffle Off
-- [x] Shuffle = Off + Shuffle On，一轮结束后停止
+- [x] Shuffle = Off + Shuffle On，一轮结束后重排下一轮
 - [x] 新操作不暴露Repeat+Shuffle；旧非法Session直到明确按键才归一化
 - [x] 切换不重启当前歌曲，Footer只局部反馈当前模式
+- [x] 手动Previous/Next与自然EOF分离：四态边界均有动作，Repeat One手动切歌后保持模式
+- [x] Footer改用用户定义的方形循环箭头：列表循环空心、单曲`1`、随机`R`、列表单次`S`
+- [x] KINO曲库图移除135×173例外，PC生成与SD资源统一135×154
 - [ ] 真机模式循环、Footer≤100ms及checkpoint恢复验收
 
 ---

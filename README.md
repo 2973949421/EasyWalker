@@ -2,12 +2,12 @@
 
 > 项目名：EasyWalker
 > 历史开发代号：ADV Walkman
-> 当前阶段：P3仍为`FROZEN / UNVERIFIED / KNOWN ISSUES`；P4A+B修复固件`0.9.1-p4ab.fix`已完成本地实现并进入DEVICE TEST
+> 当前阶段：P3仍为`FROZEN / UNVERIFIED / KNOWN ISSUES`；P4A+B边界导航修复固件`0.9.2-p4ab.transportfix`已完成本地实现并进入DEVICE TEST
 > 平台：M5Stack Cardputer ADV
 
 ## 1. 项目是什么
 
-P3冻结证据见[P3交付路线](docs/P3_DELIVERY.md)，不生成原计划的0.8.6，也不把未验证项目写成通过。P4A+B基线见[P4AB控制](docs/P4AB_CONTROLS.md)，0.9.1保存、列表、歌词与KINO资源修复见[P4A+B修复记录](docs/P4AB_FIX.md)。播放器页只启用顶部盲操区1～8，9～12保持无动作；不改变音频Backend或存档格式。
+P3冻结证据见[P3交付路线](docs/P3_DELIVERY.md)，不生成原计划的0.8.6，也不把未验证项目写成通过。P4A+B基线见[P4AB控制](docs/P4AB_CONTROLS.md)，0.9.1保存、列表、歌词与KINO资源修复见[P4A+B修复记录](docs/P4AB_FIX.md)，0.9.2边界导航、模式图标与曲库图片尺寸修复见[P4A+B Transport修复](docs/P4AB_TRANSPORT_FIX.md)。播放器页只启用顶部盲操区1～8，9～12保持无动作；不改变音频Backend或存档格式。
 
 后续本地音频或纯歌单导入的曲源、同步歌词、内嵌资源和多语言翻译规则见[媒体导入工作流](docs/MEDIA_IMPORT_WORKFLOW.md)。网络API只参与PC准备，设备固件不联网。
 
@@ -475,7 +475,7 @@ V1 以“耳机孔朝上、设备竖持”为主要播放器使用姿态。播�
 └────────┴────────────┴────────────┴──────────┘
 ```
 
-`View` 在有可用歌词时切换 Lyrics / Cover；无歌词时保持 Cover。`Play Mode` 按 `Normal → Repeat One → Repeat All → Shuffle → Normal` 循环。旧数字列以及 `H/L/Q/R/S/V` 全局快捷键不再是 V1 基线。
+`View` 在有可用歌词时切换 Lyrics / Cover；无歌词时保持 Cover。`Play Mode` 按 `Normal（列表单次） → Repeat One（单曲循环） → Repeat All（列表循环） → Shuffle（随机循环） → Normal` 循环。手动Previous/Next在四态边界都可用；只有自然播完遵循Normal停止、Repeat One重播、Repeat All回首、Shuffle重排下一轮。旧数字列以及 `H/L/Q/R/S/V` 全局快捷键不再是 V1 基线。
 
 离开播放器页面后立即恢复普通 UI 输入：方向键导航、Enter 确认、Esc 返回。曲库页面额外使用 `S` 进入设置；播放器和播放列表中的 `S` 不承担该功能。
 

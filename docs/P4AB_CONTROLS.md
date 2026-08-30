@@ -17,17 +17,20 @@ no-op，等待P5 DSP；音频Backend、3×1536缓冲、Queue/Session格式、音
   为Volume-、View、Play Mode、Next；`x=11`整排无动作。
 - Playlist只产生Up/Down/Enter/Esc/Tab；Library产生Left/Right/Enter/Esc/Tab及S；Settings
   产生方向/Enter/Esc/Tab，S无动作。页面代次仍丢弃旧动作，息屏仍吞掉首组按键。
-- Previous大于5秒回本曲0秒，否则走真实History；Next按order。Pause保持，Repeat One不
-  拦截手动导航，Normal边界失败保持原状态且不请求checkpoint。
+- 0.9.2起手动导航与自然EOF严格分离。Previous大于5秒回本曲0秒；否则顺序模式按源索引
+  后退并在首项回末项，Shuffle优先走真实History、无History时选择新的随机项。Next按
+  当前order前进并在边界开始下一轮。Pause保持，Repeat One不拦截手动导航。
 - `setPlaybackMode(RepeatMode,bool)`在一次Action内同时修改Repeat/Shuffle，并只请求一次
-  checkpoint。四态为Normal、Repeat One、Repeat All、Shuffle；Shuffle单轮结束停止。
-- Footer只更新模式区域并记录实际绘制延迟；第二图标继续显示Original。
+  checkpoint。四态为Normal、Repeat One、Repeat All、Shuffle；自然EOF分别为停止、重播
+  本曲、列表回首和随机重排下一轮。
+- Footer只更新模式区域并记录实际绘制延迟；播放模式统一使用方形循环箭头，列表循环无
+  内字、单曲循环`1`、随机循环`R`、列表单次`S`；第二图标继续显示Original。
 
 ## 自动验证与构建
 
 `tools/check_p4_controls.py`覆盖1～12坐标、页面隔离、成功才checkpoint、单次原子模式保存及
 诊断字段；`P4Controls.h`把生产映射和四态循环编译成static_assert。既有P1 Gate继续覆盖
-5秒Previous、History、Pause切歌、Repeat One手动Next、Repeat All、Shuffle单轮和
+5秒Previous、顺序边界、随机History、Pause切歌、Repeat One手动Next、Repeat All和随机循环及
 Session非法旧组合恢复。
 
 构建目标：Dev、P3ABC、P3A、P1 Gate A、P1 Gate B、P2 Gate。最终结果：
@@ -54,8 +57,8 @@ Git忽略的恢复目录按原Hash保存；未写入媒体、字体、Queue、Se
 
 1. Player逐一短按1～8，每次只触发一次；在其他三页按同位置，不得漏出播放器Action。
 2. 播放超过5秒按Previous回本曲开头，5秒内再按进入History；播放和暂停中分别测Prev/Next。
-3. 用`熱・情`36秒Overture验证Repeat One自然重播；Normal末项停止推进，Repeat All末项回首。
-4. Shuffle连续Next确认单轮不重复，Previous按真实History返回；切模式不得重置歌曲、位置或Pause。
+3. 用`熱・情`36秒Overture验证Repeat One自然重播；Normal自然播完末项停止，手动Next仍回首；Repeat All末项自然回首。
+4. Shuffle连续Next确认一轮内不重复、轮末自动开始新随机轮；Previous按真实History返回；切模式不得重置歌曲、位置或Pause。
 5. Footer模式反馈目标≤100ms；9～12全部无动作，音效图标仍为Original。
 6. 设置15秒息屏，Previous/Next/Play Mode第一次只唤醒，全部释放后第二次才执行。
 7. 快速交替Previous/Next至少10次，保持可操作且无Audio Error/Backpressure。

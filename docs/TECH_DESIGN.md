@@ -5,7 +5,7 @@
 
 P3稳定性RC采用`UiRequestToken(pageEpoch, requestGeneration, resourceGeneration)`作为所有异步UI结果的唯一归属依据。`LibraryPageController`拥有曲库事务，`PlaylistPageController`拥有六行窗口，`UiWorkScheduler`只按工作结果排程，`CheckpointCoordinator`拥有T保存Ticket；资源读取器和Scheduler不改变产品页面或音频Transport。完整实现和验收边界见`P3_STABILITY_RC.md`。
 
-0.9.1把T保存的状态结果与诊断结果拆开：独立CRC保护的`SAVE_BEGIN`/`SAVE_END`包围分步状态保存和完整快照，任何完整快照破损都不能吞掉Ticket终态。详细段设计上限768 bytes，周期摘要60秒；P4日志在1MiB的current/previous间轮换。RTC breadcrumb已删除，复位原因仅在启动摘要写SD。Playlist暖返回复用六行模型及字体租约；歌词坐标在既有Glyph数组内完成水平/垂直居中，不增加媒体工作集。完整边界见`P4AB_FIX.md`。
+0.9.1把T保存的状态结果与诊断结果拆开：独立CRC保护的`SAVE_BEGIN`/`SAVE_END`包围分步状态保存和完整快照，任何完整快照破损都不能吞掉Ticket终态。详细段设计上限768 bytes，周期摘要60秒；P4日志在1MiB的current/previous间轮换。RTC breadcrumb已删除，复位原因仅在启动摘要写SD。Playlist暖返回复用六行模型及字体租约；歌词坐标在既有Glyph数组内完成水平/垂直居中，不增加媒体工作集。完整边界见`P4AB_FIX.md`。0.9.2进一步把手动队列导航与自然EOF策略分开，并冻结全部曲库图的PC生成尺寸为135×154，详见`P4AB_TRANSPORT_FIX.md`。
 
 ## 1. 设计目标
 
@@ -832,7 +832,8 @@ hold 5s → scroll left once → hold 5s → repeat
 Player 自己的完整 512-byte 有界名称，以免长文件名在滚动前就被截断。
 
 时间 / 进度只来自 Snapshot；恢复 Pause 且 duration=0 时总时长为 `--:--`、进度未知，
-不额外Probe。14px时间区域x17/width84；右侧x103～112显示顺序箭头或1/A/S，
+不额外Probe。14px时间区域x17/width84；右侧x101～114显示统一方形循环箭头，按模式
+分别无内字/`1`/`R`/`S`，
 x118～128圆内直线表示Original。异常组合绘制?并记录原值，不伪装DSP。
 
 标题、Artist、时间 / 进度、状态行与 Content 独立更新。非 Player 页面不因秒数变化
@@ -1044,7 +1045,7 @@ Library绘制交给`LibraryVisual`：固定顶部174px独立封面、y174高22px
 /ADVWalkman/library-covers/root.cover.adv   # 未分类
 ```
 
-LCOV v1头24bytes，小端：magic[4]、version/headerLength/width/height/format/reserved各u16、payloadLength/CRC32各u32；按实际宽高读取RGB565，宽≤135/高≤174，兼容旧120×120及新135×173。歌曲ACOV头不变。`ImageBand`每次≤512bytes，填满18px条带再一次提交；共享缓冲占有期间不得绘制Header/Footer，条带边界公平轮转。顺序读取不重复Seek，呈现不访问SD；同资源重绘不重算CRC。缺失/损坏占位并记录具体原因。
+LCOV v1头24bytes，小端：magic[4]、version/headerLength/width/height/format/reserved各u16、payloadLength/CRC32各u32；读取器按实际宽高读取RGB565并保留宽≤135/高≤174的旧资源兼容能力，但PC生产与交付的曲库图固定135×154，禁止单库尺寸特例。歌曲ACOV头不变。`ImageBand`每次≤512bytes，填满18px条带再一次提交；共享缓冲占有期间不得绘制Header/Footer，条带边界公平轮转。顺序读取不重复Seek，呈现不访问SD；同资源重绘不重算CRC。缺失/损坏占位并记录具体原因。
 
 设置仅包含屏幕亮度、息屏时间、关于、返回Launcher。SettingsPanel内部子面板不是第五个页面。独立`DisplaySettingsStore`保存显示偏好，不改Player Session：
 
@@ -1131,14 +1132,15 @@ Repeat All  = Repeat All + Shuffle Off
 Shuffle     = Repeat Off + Shuffle On
 ```
 
-因此不需要迁移既有 Queue / Session schema，也不允许暴露复杂 Repeat + Shuffle 组合。Shuffle 完成一轮后按 Repeat Off 语义停止。
+因此不需要迁移既有 Queue / Session schema，也不允许暴露复杂 Repeat + Shuffle 组合。产品中的Shuffle是随机循环：自然播完一轮后重排下一轮，同时避免把上一轮最后一首立即放到下一轮首位。
 
 实现通过`PlayerController::setPlaybackMode(RepeatMode, bool)`及Runtime同名入口在
 一次Action内完成两维更新，只产生一个checkpoint。旧Session中的Repeat+Shuffle非法组合
 在用户操作前原样保留并显示`?`；第一次明确按Play Mode才归一化为Normal。
 
-Previous在真实位置大于5秒时Seek到本曲0秒，否则读取Queue的Previous history；Next按
-当前order前进。手动导航不受Repeat One拦截，Pause中切歌继续Pause；失败不生成checkpoint。
+Previous在真实位置大于5秒时Seek到本曲0秒；否则顺序模式按源索引后退并在首项回到末项，Shuffle优先读取真实Previous history，无历史时选择新的随机项。Next按当前order前进并在边界开始下一轮；手动导航在四种模式下都不能因自然EOF规则而变成无响应。Repeat One仅控制自然EOF，手动切歌后模式仍保持Repeat One。Pause中切歌继续Pause；真正无有效Queue等失败不生成checkpoint。
+
+自然EOF策略独立为：Normal停止、Repeat One重播当前歌曲、Repeat All回到列表首项、Shuffle重排下一轮。Footer模式图标统一绘制方形循环箭头：Repeat All无内字、Repeat One为`1`、Shuffle为`R`、Normal为`S`，非法旧组合为`?`。
 
 ### 10.4 Normal-page Input
 
