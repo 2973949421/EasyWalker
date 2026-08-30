@@ -26,6 +26,13 @@ enum class RepeatMode : uint8_t {
     One = 2,
 };
 
+enum class SoundPreset : uint8_t {
+    Original = 0,
+    Tape = 1,
+    Radio = 2,
+    VocalClear = 3,
+};
+
 enum class PlayerError : uint8_t {
     None,
     InvalidArgument,
@@ -39,6 +46,7 @@ enum class PlayerError : uint8_t {
 
 const char* playerStateName(PlayerState state);
 const char* repeatModeName(RepeatMode mode);
+const char* soundPresetName(SoundPreset preset);
 const char* playerErrorName(PlayerError error);
 
 }  // namespace player

@@ -41,6 +41,18 @@ class Mp3PlaybackEngine final {
     bool seekToMs(uint32_t targetMs);
     void setVolume(uint8_t volume);
     uint8_t volume() const {return volume_;}
+    bool setSoundPreset(SoundPreset preset);
+    SoundPreset soundPreset() const { return output_.soundPreset(); }
+    SoundPreset appliedSoundPreset() const { return output_.appliedSoundPreset(); }
+    uint32_t dspBlockMaxUs() const { return output_.dspBlockMaxUs(); }
+    uint32_t dspCrossfadeCount() const { return output_.dspCrossfadeCount(); }
+    uint32_t dspLimiterEvents() const { return output_.dspLimiterEvents(); }
+    uint16_t dspPreLimiterPeakQ15() const { return output_.dspPreLimiterPeakQ15(); }
+    uint32_t dspInvalidFallbacks() const { return output_.dspInvalidFallbacks(); }
+    uint32_t presetApplyLatencyMaxUs() const { return output_.presetApplyLatencyMaxUs(); }
+    static constexpr size_t dspRuntimeStateBytes() {
+        return M5SpeakerPcmOutput::dspRuntimeStateBytes();
+    }
     bool pollEvent(AudioEvent& event);
     AudioStatus status() const;
     void resetDiagnostics();

@@ -1,5 +1,6 @@
 #include "player/audio/M5SpeakerPcmOutput.h"
 
+#include <algorithm>
 #include <cstdint>
 
 namespace adv_walkman {
@@ -13,6 +14,8 @@ bool M5SpeakerPcmOutput::begin() {
     activeBuffer_ = 0;
     sampleRateHz_ = 0;
     submittedFrames_ = 0;
+    activeBufferProcessed_ = false;
+    dsp_.resetStream();
     return speaker_ != nullptr;
 }
 
@@ -21,6 +24,9 @@ bool M5SpeakerPcmOutput::SetRate(int hz) {
         return false;
     }
     sampleRateHz_ = static_cast<uint32_t>(hz);
+    // Invalid DSP coefficients fall back to Original internally. Playback
+    // remains available as long as the AudioOutput rate itself is valid.
+    dsp_.setSampleRate(sampleRateHz_);
     return AudioOutput::SetRate(hz);
 }
 
@@ -34,10 +40,28 @@ bool M5SpeakerPcmOutput::queueBuffer() {
     }
 
     const size_t frames = bufferIndex_;
+    if (!activeBufferProcessed_) {
+        const uint32_t startedAtUs = micros();
+        dsp_.processBlock(buffers_[activeBuffer_], frames);
+        dspBlockMaxUs_ = std::max<uint16_t>(dspBlockMaxUs_,
+            static_cast<uint16_t>(std::min<uint32_t>(UINT16_MAX,
+                                                     micros() - startedAtUs)));
+        activeBufferProcessed_ = true;
+    }
     if (!speaker_->playRaw(buffers_[activeBuffer_], frames, sampleRateHz_,
                            false, 1, kVirtualChannel)) {
         ++backpressureEvents_;
         return false;
+    }
+
+    // A prepared buffer is not audible until M5.Speaker accepts it.  Complete
+    // the application metric only after the real PCM submission succeeds.
+    if (presetApplyPending_) {
+        const uint16_t elapsedMs = static_cast<uint16_t>(
+            static_cast<uint16_t>(millis()) - presetRequestedAtMs_);
+        presetApplyLatencyMaxMs_ =
+            std::max<uint16_t>(presetApplyLatencyMaxMs_, elapsedMs);
+        presetApplyPending_ = false;
     }
 
     submittedFrames_ += frames;
@@ -57,6 +81,7 @@ bool M5SpeakerPcmOutput::queueBuffer() {
     ++pcmBuffersSinceReset_;
     activeBuffer_ = (activeBuffer_ + 1) % kBufferCount;
     bufferIndex_ = 0;
+    activeBufferProcessed_ = false;
     return true;
 }
 
@@ -100,8 +125,11 @@ bool M5SpeakerPcmOutput::stop() {
     }
     bufferIndex_ = 0;
     activeBuffer_ = 0;
+    activeBufferProcessed_ = false;
     sampleRateHz_ = 0;
     submittedFrames_ = 0;
+    dsp_.resetStream();
+    presetApplyPending_ = false;
     return true;
 }
 
@@ -113,11 +141,24 @@ void M5SpeakerPcmOutput::resetDiagnostics() {
     pcmSubmitGapOver100Ms_ = 0;
     pcmLastSubmitAtUs_ = 0;
     pcmSubmitObservedSinceReset_ = false;
+    dspBlockMaxUs_ = 0;
+    presetApplyLatencyMaxMs_ = 0;
+    dsp_.resetDiagnostics();
 }
 
 void M5SpeakerPcmOutput::breakSubmitGapWindow() {
     pcmLastSubmitAtUs_ = 0;
     pcmSubmitObservedSinceReset_ = false;
+}
+
+bool M5SpeakerPcmOutput::setSoundPreset(SoundPreset preset, bool smooth) {
+    const bool changed = preset != dsp_.preset();
+    const bool result = dsp_.setPreset(preset, smooth);
+    if (result && changed && smooth) {
+        presetRequestedAtMs_ = static_cast<uint16_t>(millis());
+        presetApplyPending_ = true;
+    }
+    return result;
 }
 
 uint32_t M5SpeakerPcmOutput::sampleRateHz() const {

@@ -79,6 +79,11 @@ Mp3PlaybackEngine::~Mp3PlaybackEngine() {
     closePlaybackImmediate();
 }
 
+bool Mp3PlaybackEngine::setSoundPreset(SoundPreset preset) {
+    const bool activelyStreaming = state_ == AudioState::Playing;
+    return output_.setSoundPreset(preset, activelyStreaming);
+}
+
 bool Mp3PlaybackEngine::begin() {
     closePlaybackImmediate();
     resetDiagnostics();

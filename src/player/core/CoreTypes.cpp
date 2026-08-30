@@ -31,6 +31,20 @@ const char* repeatModeName(RepeatMode mode) {
     return "UNKNOWN";
 }
 
+const char* soundPresetName(SoundPreset preset) {
+    switch (preset) {
+        case SoundPreset::Original:
+            return "ORIGINAL";
+        case SoundPreset::Tape:
+            return "TAPE";
+        case SoundPreset::Radio:
+            return "RADIO";
+        case SoundPreset::VocalClear:
+            return "VOCAL_CLEAR";
+    }
+    return "UNKNOWN";
+}
+
 const char* playerErrorName(PlayerError error) {
     switch (error) {
         case PlayerError::None:
