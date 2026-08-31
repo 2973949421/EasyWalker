@@ -16,9 +16,6 @@ constexpr uint16_t kPanel = 0x10E3;
 constexpr uint16_t kAccent = 0xFBE0;
 constexpr uint16_t kMuted = 0x8410;
 constexpr uint16_t kText = 0xFFFF;
-constexpr uint16_t kTapeIcon = 0xFD20;
-constexpr uint16_t kRadioIcon = 0x5D7C;
-constexpr uint16_t kVocalIcon = 0xF81F;
 constexpr float kTitleSize = 1.0f;
 constexpr float kSmallSize = 1.0f;
 
@@ -311,16 +308,16 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
         // Two compact, truthful marks: queue mode and active P5 sound preset.
         CachedUiFont iconFont(fonts_,10);if(fonts_)row_.setFont(&iconFont);
         drawPlaybackModeIcon(row_,modeIcon);
-        const uint16_t presetColor=model_.soundPreset==SoundPreset::Tape?kTapeIcon:
-            model_.soundPreset==SoundPreset::Radio?kRadioIcon:
-            model_.soundPreset==SoundPreset::VocalClear?kVocalIcon:kMuted;
-        row_.fillCircle(123,8,6,presetColor);
+        // Keep the footer monochrome: the letter is the preset distinction.
+        // Explicitly restore the text color before drawing status text so the
+        // compact icon cannot leak styling into the time/progress information.
         row_.drawCircle(123,8,6,kText);
-        row_.setTextColor(kBackground,presetColor);
+        row_.setTextColor(kText,kBackground);
         const int presetWidth=UiTextLayout::singleLineWidth(row_,presetText);
         UiTextLayout::draw(row_,presetText,
             {int16_t(123-presetWidth/2),3,int16_t(presetWidth),10,1,0,false});
         if(fonts_)row_.setFont(&font);
+        row_.setTextColor(kText,kBackground);
         UiTextLayout::draw(row_, statusText, {17, 2, 84, 16, 1, 0, true});
         pushRow(display, G::footerY);
         row_.setFont(&fonts::Font0);

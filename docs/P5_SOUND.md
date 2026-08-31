@@ -1,4 +1,4 @@
-# P5A+B Sound — 0.10.1-p5.soundfix
+# P5A+B Sound — 0.10.2-p5.monochrome
 
 Status: `DEVICE TEST`
 
@@ -21,7 +21,7 @@ P5只修改耳机验收使用的PCM音效、播放器页9～12号键、Footer第
 
 ## 输入、显示与恢复
 
-播放器页9／10／11／12分别选择Original／Tape／Radio／Vocal Clear。其他页面沿用自己的导航语义，不产生音效Action；息屏第一组键仍只唤醒。Footer第二枚圆形标识显示O／T／R／V，变化只使Footer状态区失效。0.10.1为四种状态使用不同底色、白色轮廓及按真实字宽居中的深色字母；当前字母会与播放模式图标一起显式预取，不再依赖偶然缓存命中。
+播放器页9／10／11／12分别选择Original／Tape／Radio／Vocal Clear。其他页面沿用自己的导航语义，不产生音效Action；息屏第一组键仍只唤醒。Footer第二枚圆形标识以纯黑白显示O／T／R／V，变化只使Footer状态区失效。当前字母会与播放模式图标一起显式预取并按真实字宽居中；图标绘制后显式恢复黑白文字状态，不再依赖偶然缓存命中，也不能把音效样式泄漏到时间或进度信息。
 
 Session v1头长度保持24 bytes：字节22保存0～3，字节23继续保留。旧Session的零值自然恢复Original；非法值回退Original并记录诊断，但不让歌曲、位置、Queue、Pause或播放模式恢复失败。一次有效Preset变化只请求一个checkpoint。
 
@@ -32,20 +32,16 @@ Session v1头长度保持24 bytes：字节22保存0～3，字节23继续保留�
 - 完整DSP运行状态为244 bytes，并有编译期`<=256 bytes`断言；没有新增PCM、文件、图片或全屏缓存。
 - `player-dev`静态RAM为128880 bytes，较0.9.2基线128624 bytes净增256 bytes；媒体+事件预算保持49080/49152 bytes。
 
-六环境均通过，BIN尺寸如下：
+0.10.1业务代码曾通过六环境构建；0.10.2只撤回Footer配色并增加颜色隔离断言，因此按最小有效范围重建实际交付使用的两个环境：
 
 | 环境 | BIN bytes |
 |---|---:|
-| player-dev | 805344 |
-| player-p3abc-gate | 805408 |
-| player-p3a-gate | 791616 |
-| player-p1-gate-a | 681872 |
-| player-p1-gate-b | 682736 |
-| player-p2-gate | 732208 |
+| player-dev | 805296 |
+| player-p3abc-gate | 805360 |
 
-联合BIN SHA-256为`f0e5ca918e1717d7baa70e27b5ce0a2133a5c26ef79b3f6059ccf6fe3d24158f`。联合BIN较0.10.0增加48 bytes，`player-dev`静态RAM仍为128880 bytes，普通RAM净变化为0。全部固件均低于`0x140000`；最低Heap、最大连续可用块、DSP实际耗时、PCM提交峰值与听感必须由新P5真机日志取得。构建通过不代表这些项目已经通过。
+联合BIN SHA-256为`5320884ea5a1eff0fd4cc88f0c44d47e741cf48f973c2cf17fc8e7317c44ed15`。`player-dev`静态RAM仍为128880 bytes，普通RAM净变化为0；两个BIN均低于`0x140000`。最低Heap、最大连续可用块、DSP实际耗时、PCM提交峰值与听感必须由新P5真机日志取得。构建通过不代表这些项目已经通过。
 
-0.10.0真机日志确认12次Preset请求均被接受，Footer反馈峰值3ms、首个PCM生效37ms、PCM提交峰值51.818ms、Audio Error／Backpressure为0／0；同时记录到`face=4, U+0054`缺字，直接支持本轮Footer字模修复。2026-08-31已仅覆盖SD的`/firmware/ADV-Walkman-P3ABC-Gate.bin`为0.10.1，复制后为805408 bytes且SHA-256与上述联合BIN一致；旧0.10.0 BIN已保存在Git忽略的本地恢复目录。音乐、歌词、封面、字体、Queue、Session和历史日志均未改动。
+0.10.0真机日志确认12次Preset请求均被接受，Footer反馈峰值3ms、首个PCM生效37ms、PCM提交峰值51.818ms、Audio Error／Backpressure为0／0；同时记录到`face=4, U+0054`缺字，直接支持Footer字模修复。0.10.1真机截图进一步暴露彩色图标的文字颜色泄漏，本轮据此恢复黑白并增加回归。2026-08-31已仅覆盖SD的`/firmware/ADV-Walkman-P3ABC-Gate.bin`为0.10.2，复制后为805360 bytes且SHA-256与上述联合BIN一致；彩色0.10.1 BIN已保存到Git忽略的本地恢复目录。音乐、歌词、封面、字体、Queue、Session和历史日志均未改动。
 
 ## 真机验收重点
 

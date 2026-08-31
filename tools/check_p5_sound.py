@@ -135,13 +135,16 @@ class P5SoundChecks(unittest.TestCase):
         self.assertLess(cascade_db(radio, rate, 10000), -10)
         self.assertGreater(cascade_db(vocal, rate, 3000), 3.0)
 
-    def test_sound_footer_preloads_and_distinguishes_all_glyphs(self):
+    def test_sound_footer_preloads_and_keeps_monochrome_state(self):
         presenter = source("src/player/ui/NowPlayingPresenter.cpp")
         self.assertIn('requestUiWindow("OTRV",10,0,40,1)', presenter)
         self.assertIn("requestUiWindow(presetText,10,0,12,1)", presenter)
-        self.assertIn("fillCircle(123,8,6,presetColor)", presenter)
+        self.assertIn("drawCircle(123,8,6,kText)", presenter)
+        self.assertNotIn("fillCircle(123,8,6", presenter)
+        self.assertGreaterEqual(
+            presenter.count("row_.setTextColor(kText,kBackground)"), 2)
         for color in ("kTapeIcon", "kRadioIcon", "kVocalIcon"):
-            self.assertIn(color, presenter)
+            self.assertNotIn(color, presenter)
 
     def test_crossfade_limiter_and_diagnostics_are_wired(self):
         dsp = source("src/player/audio/PcmDsp.cpp")

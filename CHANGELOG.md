@@ -1,5 +1,12 @@
 # Changelog
 
+## V0.10.2 — Monochrome sound footer
+
+Date: 2026-08-31
+
+- 撤回0.10.1音效图标的彩色填充，Footer恢复纯黑白圆框与O/T/R/V字母，不用颜色区分Preset。
+- 修复音效图标绘制后未恢复文字颜色、导致时间／进度信息继承Preset颜色的样式泄漏；保留字模预取、真实字宽居中和DSP听感调整。
+
 ## V0.10.1 — Sound contrast and footer feedback
 
 Date: 2026-08-31

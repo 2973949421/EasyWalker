@@ -927,7 +927,7 @@ AC：
 
 ## P5-01 Sound Preset Engine
 
-Status: DEVICE TEST — 0.10.1 SOUND/ICON REFINED
+Status: DEVICE TEST — 0.10.2 MONOCHROME FOOTER
 
 目标：
 
@@ -950,7 +950,8 @@ AC：
 - [x] Vocal Clear轻度突出中频和2–4kHz人声存在感
 - [x] 20ms双链交叉淡化及快速切换状态回归
 - [x] 0.10.1增强Tape/Vocal Clear差异，Radio保持明显带限
-- [x] Footer O/T/R/V显式预取、按真实字宽居中并使用不同底色
+- [x] Footer O/T/R/V显式预取、按真实字宽居中并保持纯黑白
+- [x] 音效图标绘制后恢复Footer文字颜色，不污染时间或进度显示
 - [ ] 真机确认切换无频繁明显爆音
 - [ ] 真机确认Preset不造成可感知播放卡顿
 - [x] 用户不需要手动调DSP参数
