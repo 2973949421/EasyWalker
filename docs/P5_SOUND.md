@@ -1,4 +1,4 @@
-# P5A+B Sound — 0.10.0-p5.sound
+# P5A+B Sound — 0.10.1-p5.soundfix
 
 Status: `DEVICE TEST`
 
@@ -13,21 +13,21 @@ P5只修改耳机验收使用的PCM音效、播放器页9～12号键、Footer第
 | Preset | 固定处理 |
 |---|---|
 | Original | int16逐样本直通 |
-| Tape | -2dB预留、180Hz低架+1dB、4.5kHz高架-3dB、轻软饱和 |
+| Tape | -2.5dB预留、180Hz低架+1.5dB、4.2kHz高架-4.5dB、较明显但有界的软饱和、1.15输出补偿 |
 | Radio | 200Hz高通、5kHz低通、-18dBFS/2.5:1轻压缩、轻软饱和 |
-| Vocal Clear | -1.5dB预留、180Hz低架-1dB、1.2kHz+1dB、3kHz+2dB |
+| Vocal Clear | -2.5dB预留、180Hz低架-1.5dB、1.2kHz+2dB、3kHz+3.5dB、1.15输出补偿 |
 
 三个处理Preset末端均使用-1dBFS、即时Attack、80ms Release的无Look-ahead峰值保护。Preset切换运行新旧两链20ms线性交叉淡化；暂停切换只更新目标，Seek、换歌、采样率变化和Stop重置滤波历史。
 
 ## 输入、显示与恢复
 
-播放器页9／10／11／12分别选择Original／Tape／Radio／Vocal Clear。其他页面沿用自己的导航语义，不产生音效Action；息屏第一组键仍只唤醒。Footer第二枚圆形标识显示O／T／R／V，变化只使Footer状态区失效。
+播放器页9／10／11／12分别选择Original／Tape／Radio／Vocal Clear。其他页面沿用自己的导航语义，不产生音效Action；息屏第一组键仍只唤醒。Footer第二枚圆形标识显示O／T／R／V，变化只使Footer状态区失效。0.10.1为四种状态使用不同底色、白色轮廓及按真实字宽居中的深色字母；当前字母会与播放模式图标一起显式预取，不再依赖偶然缓存命中。
 
 Session v1头长度保持24 bytes：字节22保存0～3，字节23继续保留。旧Session的零值自然恢复Original；非法值回退Original并记录诊断，但不让歌曲、位置、Queue、Pause或播放模式恢复失败。一次有效Preset变化只请求一个checkpoint。
 
 ## 本地证据
 
-- 全部`tools/check_*.py`主机回归通过（PlatformIO专用`check_launcher_size.py`由构建调用）。
+- 16项可直接执行的`tools/check_*.py`主机回归全部通过（PlatformIO专用`check_launcher_size.py`由构建调用）。
 - Original边界样本、44.1/48kHz及非标准采样率、频响参考、快速切换、Session byte22和页面隔离均有检查。
 - 完整DSP运行状态为244 bytes，并有编译期`<=256 bytes`断言；没有新增PCM、文件、图片或全屏缓存。
 - `player-dev`静态RAM为128880 bytes，较0.9.2基线128624 bytes净增256 bytes；媒体+事件预算保持49080/49152 bytes。
@@ -36,16 +36,16 @@ Session v1头长度保持24 bytes：字节22保存0～3，字节23继续保留�
 
 | 环境 | BIN bytes |
 |---|---:|
-| player-dev | 805296 |
-| player-p3abc-gate | 805360 |
+| player-dev | 805344 |
+| player-p3abc-gate | 805408 |
 | player-p3a-gate | 791616 |
-| player-p1-gate-a | 681968 |
-| player-p1-gate-b | 682832 |
-| player-p2-gate | 732304 |
+| player-p1-gate-a | 681872 |
+| player-p1-gate-b | 682736 |
+| player-p2-gate | 732208 |
 
-联合BIN SHA-256为`0e24da3f61b8bda0444526a79e6bf8c09472247237f881ce6262e5b878fe7993`。全部固件均低于`0x140000`；最低Heap、最大连续可用块、DSP实际耗时、PCM提交峰值与听感必须由新P5真机日志取得。构建通过不代表这些项目已经通过。
+联合BIN SHA-256为`f0e5ca918e1717d7baa70e27b5ce0a2133a5c26ef79b3f6059ccf6fe3d24158f`。联合BIN较0.10.0增加48 bytes，`player-dev`静态RAM仍为128880 bytes，普通RAM净变化为0。全部固件均低于`0x140000`；最低Heap、最大连续可用块、DSP实际耗时、PCM提交峰值与听感必须由新P5真机日志取得。构建通过不代表这些项目已经通过。
 
-2026-08-31已仅覆盖SD的`/firmware/ADV-Walkman-P3ABC-Gate.bin`；目标为805360 bytes，复制后SHA-256与上述联合BIN完全一致。音乐、歌词、封面、字体、Queue、Session和历史日志均未改动。
+0.10.0真机日志确认12次Preset请求均被接受，Footer反馈峰值3ms、首个PCM生效37ms、PCM提交峰值51.818ms、Audio Error／Backpressure为0／0；同时记录到`face=4, U+0054`缺字，直接支持本轮Footer字模修复。2026-08-31已仅覆盖SD的`/firmware/ADV-Walkman-P3ABC-Gate.bin`为0.10.1，复制后为805408 bytes且SHA-256与上述联合BIN一致；旧0.10.0 BIN已保存在Git忽略的本地恢复目录。音乐、歌词、封面、字体、Queue、Session和历史日志均未改动。
 
 ## 真机验收重点
 

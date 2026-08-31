@@ -96,5 +96,5 @@ class RefineChecks(unittest.TestCase):
         self.assertEqual(evaluate_wake(record)[0],'READY_FOR_REVIEW')
         self.assertEqual(evaluate_wake(dict(record,wake_complete='PENDING'))[0],'INCOMPLETE')
         self.assertEqual(evaluate_wake(dict(record,wake_first_frame_ms='90'))[0],'FAIL')
-        self.assertEqual(VERSION,'0.10.0-p5.sound')
+        self.assertEqual(VERSION,'0.10.1-p5.soundfix')
 if __name__=='__main__':unittest.main(verbosity=2)

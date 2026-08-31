@@ -52,8 +52,17 @@ void PcmDsp::Biquad::reset() {
 float PcmDsp::Chain::process(float input, float attackCoefficient,
                              float releaseCoefficient) {
     float output = input * inputGain;
-    for (uint8_t index = 0; index < sectionCount; ++index) {
-        output = sections[index].process(output);
+    // The production presets have at most three fixed sections. Expanding the
+    // tiny loop avoids a per-section counter/branch in the PCM hot path while
+    // keeping the chain state and coefficient representation unchanged.
+    if (sectionCount >= 1) {
+        output = sections[0].process(output);
+    }
+    if (sectionCount >= 2) {
+        output = sections[1].process(output);
+    }
+    if (sectionCount >= 3) {
+        output = sections[2].process(output);
     }
     if (compressor) {
         const float level = std::fabs(output);
@@ -69,8 +78,9 @@ float PcmDsp::Chain::process(float input, float attackCoefficient,
         }
     }
     if (saturation) {
-        output = saturate(output, preset == static_cast<uint8_t>(SoundPreset::Radio)
-                                      ? 0.80f : 0.65f);
+        const float drive = preset == static_cast<uint8_t>(SoundPreset::Radio)
+                                ? 0.80f : 0.95f;
+        output = saturate(output, drive);
     }
     return output * outputGain;
 }
@@ -248,7 +258,8 @@ void PcmDsp::processBlock(int16_t* samples, size_t frames) {
         output = limited(output, processed);
         const float scaled = std::max(-32768.0f,
                                       std::min(32767.0f, output * 32767.0f));
-        samples[index] = static_cast<int16_t>(std::lrintf(scaled));
+        samples[index] = static_cast<int16_t>(
+            scaled >= 0.0f ? scaled + 0.5f : scaled - 0.5f);
     }
 }
 
@@ -383,12 +394,12 @@ bool PcmDsp::configure(Chain& chain, SoundPreset preset) {
         return true;
     }
     if (preset == SoundPreset::Tape) {
-        chain.inputGain = dbToLinear(-2.0f);
-        chain.outputGain = 1.12f;
+        chain.inputGain = dbToLinear(-2.5f);
+        chain.outputGain = 1.15f;
         chain.saturation = true;
         chain.sectionCount = 2;
-        return configureLowShelf(chain.sections[0], 180.0f, 1.0f) &&
-               configureHighShelf(chain.sections[1], 4500.0f, -3.0f);
+        return configureLowShelf(chain.sections[0], 180.0f, 1.5f) &&
+               configureHighShelf(chain.sections[1], 4200.0f, -4.5f);
     }
     if (preset == SoundPreset::Radio) {
         chain.inputGain = 0.90f;
@@ -400,12 +411,12 @@ bool PcmDsp::configure(Chain& chain, SoundPreset preset) {
                configureLowPass(chain.sections[1], 5000.0f, kSqrtHalf);
     }
     if (preset == SoundPreset::VocalClear) {
-        chain.inputGain = dbToLinear(-1.5f);
-        chain.outputGain = 1.12f;
+        chain.inputGain = dbToLinear(-2.5f);
+        chain.outputGain = 1.15f;
         chain.sectionCount = 3;
-        return configureLowShelf(chain.sections[0], 180.0f, -1.0f) &&
-               configurePeak(chain.sections[1], 1200.0f, 0.8f, 1.0f) &&
-               configurePeak(chain.sections[2], 3000.0f, 1.0f, 2.0f);
+        return configureLowShelf(chain.sections[0], 180.0f, -1.5f) &&
+               configurePeak(chain.sections[1], 1200.0f, 0.8f, 2.0f) &&
+               configurePeak(chain.sections[2], 3000.0f, 1.0f, 3.5f);
     }
     return false;
 }

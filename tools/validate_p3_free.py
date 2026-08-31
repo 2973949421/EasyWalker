@@ -4,7 +4,7 @@ import re
 import zlib
 from pathlib import Path
 
-VERSION='0.10.0-p5.sound'
+VERSION='0.10.1-p5.soundfix'
 
 def evaluate_render(record):
     required=('render_contract','render_pixel_selfcheck','frame_starts','frame_rejects','frame_repairs',

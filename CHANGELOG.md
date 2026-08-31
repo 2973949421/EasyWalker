@@ -1,5 +1,14 @@
 # Changelog
 
+## V0.10.1 — Sound contrast and footer feedback
+
+Date: 2026-08-31
+
+- 根据0.10.0真机日志确认四个Preset请求、DSP应用和保存均实际生效；差异不足来自Tape/Vocal参数过轻，不是安装了错误固件。
+- Tape加强低频暖色、高频衰减与软饱和；Vocal Clear加强1.2kHz和3kHz存在感，同时保留预留增益、-1dBFS保护及20ms交叉淡化。
+- 修复Footer只预取播放模式字模、未预取当前O/T/R/V字模的问题；图标改为不同底色、白色轮廓和按真实字宽居中的字母，避免O/V被7px框裁切。
+- 固定三段Biquad热循环并减少逐样本舍入开销；主机16项回归与六环境构建通过，静态RAM不增加，仍须耳机真机确认听感。
+
 ## V0.10.0 — Fixed sound presets
 
 Date: 2026-08-31

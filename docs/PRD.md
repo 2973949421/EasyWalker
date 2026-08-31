@@ -7,7 +7,7 @@
 
 P3已按产品决策冻结为`FROZEN / UNVERIFIED / KNOWN ISSUES`：保留`0.8.5-p3d.stability-rc`及失败证据，不生成`0.8.6-p3.closure`，也不把A/B/C/D写成PASS或DONE。已知稳定性、无LCOV旧封面、未选中行文件名回退、历史唤醒异常及保存终态证据转入P6。P4可继续，但不能用P4成功覆盖P3未通过项。
 
-P5A+B以`0.10.0-p5.sound`实现Original、Tape、Radio、Vocal Clear四个互斥固定音效。参数不在设备端开放；播放器页9～12号键直接选择，Footer显示O/T/R/V，最后成功保存的音效随Session恢复。P5只承诺耳机路径，扬声器破音与P3/P4既有性能问题继续留在P6。
+P5A+B以`0.10.1-p5.soundfix`实现Original、Tape、Radio、Vocal Clear四个互斥固定音效。参数不在设备端开放；播放器页9～12号键直接选择，Footer以不同底色显示O/T/R/V，最后成功保存的音效随Session恢复。0.10.1增强Tape与Vocal Clear的可辨识度，同时保持保护器和20ms切换淡化。P5只承诺耳机路径，扬声器破音与P3/P4既有性能问题继续留在P6。
 
 ## 1. 产品定位
 

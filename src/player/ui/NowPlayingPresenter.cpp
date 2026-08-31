@@ -16,6 +16,9 @@ constexpr uint16_t kPanel = 0x10E3;
 constexpr uint16_t kAccent = 0xFBE0;
 constexpr uint16_t kMuted = 0x8410;
 constexpr uint16_t kText = 0xFFFF;
+constexpr uint16_t kTapeIcon = 0xFD20;
+constexpr uint16_t kRadioIcon = 0x5D7C;
+constexpr uint16_t kVocalIcon = 0xF81F;
 constexpr float kTitleSize = 1.0f;
 constexpr float kSmallSize = 1.0f;
 
@@ -54,7 +57,8 @@ void NowPlayingPresenter::begin() {
 const char* NowPlayingPresenter::bootFontSelfCheck(M5GFX& display){
     if(!fonts_)return "font_cache_unbound";
     const uint32_t started=millis();
-    while(!fonts_->requestUiWindow("ADVWalkmanBenchmark",12,0,220,1)){
+    while(!fonts_->requestUiWindow("ADVWalkmanBenchmark",12,0,220,1)||
+          !fonts_->requestUiWindow("OTRV",10,0,40,1)){
         fonts_->service();if(millis()-started>5000)return "font_warmup_timeout";delay(1);
     }
     prepareRow(18,kBackground,1);CachedUiFont font(fonts_,12);row_.setFont(&font);
@@ -295,20 +299,27 @@ bool NowPlayingPresenter::renderOne(M5GFX& display) {
         const auto modeIcon=playbackModeIcon(model_.repeat,model_.shuffle);
         const char iconLabel=playbackModeIconLabel(modeIcon);
         char modeGlyph[2]={iconLabel,'\0'};
-        if(fonts_&&!fonts_->requestUiWindow(modeGlyph,10,0,12,1))return false;
+        const char presetGlyph = model_.soundPreset==SoundPreset::Tape?'T':
+            model_.soundPreset==SoundPreset::Radio?'R':
+            model_.soundPreset==SoundPreset::VocalClear?'V':'O';
+        char presetText[2]={presetGlyph,'\0'};
+        if(fonts_&&(!fonts_->requestUiWindow(modeGlyph,10,0,12,1)||
+                    !fonts_->requestUiWindow(presetText,10,0,12,1)))return false;
         prepareRow(18, kBackground, 1.0f);
         CachedUiFont font(fonts_,14);if(fonts_)row_.setFont(&font);
         drawStateIcon(model_.state);
         // Two compact, truthful marks: queue mode and active P5 sound preset.
         CachedUiFont iconFont(fonts_,10);if(fonts_)row_.setFont(&iconFont);
         drawPlaybackModeIcon(row_,modeIcon);
-        row_.drawCircle(123,8,5,kMuted);
-        const char presetGlyph = model_.soundPreset==SoundPreset::Tape?'T':
-            model_.soundPreset==SoundPreset::Radio?'R':
-            model_.soundPreset==SoundPreset::VocalClear?'V':'O';
-        char presetText[2]={presetGlyph,'\0'};
-        row_.setTextColor(kText,kBackground);
-        UiTextLayout::draw(row_,presetText,{120,3,7,10,1,0,true});
+        const uint16_t presetColor=model_.soundPreset==SoundPreset::Tape?kTapeIcon:
+            model_.soundPreset==SoundPreset::Radio?kRadioIcon:
+            model_.soundPreset==SoundPreset::VocalClear?kVocalIcon:kMuted;
+        row_.fillCircle(123,8,6,presetColor);
+        row_.drawCircle(123,8,6,kText);
+        row_.setTextColor(kBackground,presetColor);
+        const int presetWidth=UiTextLayout::singleLineWidth(row_,presetText);
+        UiTextLayout::draw(row_,presetText,
+            {int16_t(123-presetWidth/2),3,int16_t(presetWidth),10,1,0,false});
         if(fonts_)row_.setFont(&font);
         UiTextLayout::draw(row_, statusText, {17, 2, 84, 16, 1, 0, true});
         pushRow(display, G::footerY);

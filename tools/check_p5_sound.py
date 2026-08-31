@@ -124,16 +124,24 @@ class P5SoundChecks(unittest.TestCase):
 
     def test_reference_frequency_shapes(self):
         rate, q = 44100, 1/math.sqrt(2)
-        tape = (shelf(rate, 180, 1), shelf(rate, 4500, -3, True))
+        tape = (shelf(rate, 180, 1.5), shelf(rate, 4200, -4.5, True))
         radio = (high_pass(rate, 200, q), low_pass(rate, 5000, q))
-        vocal = (shelf(rate, 180, -1), peak(rate, 1200, .8, 1),
-                 peak(rate, 3000, 1, 2))
-        self.assertGreater(cascade_db(tape, rate, 100), 0.5)
-        self.assertLess(cascade_db(tape, rate, 10000), -2.0)
+        vocal = (shelf(rate, 180, -1.5), peak(rate, 1200, .8, 2),
+                 peak(rate, 3000, 1, 3.5))
+        self.assertGreater(cascade_db(tape, rate, 100), 1.0)
+        self.assertLess(cascade_db(tape, rate, 10000), -3.5)
         self.assertLess(cascade_db(radio, rate, 80), -12)
         self.assertGreater(cascade_db(radio, rate, 1000), -1)
         self.assertLess(cascade_db(radio, rate, 10000), -10)
-        self.assertGreater(cascade_db(vocal, rate, 3000), 1.5)
+        self.assertGreater(cascade_db(vocal, rate, 3000), 3.0)
+
+    def test_sound_footer_preloads_and_distinguishes_all_glyphs(self):
+        presenter = source("src/player/ui/NowPlayingPresenter.cpp")
+        self.assertIn('requestUiWindow("OTRV",10,0,40,1)', presenter)
+        self.assertIn("requestUiWindow(presetText,10,0,12,1)", presenter)
+        self.assertIn("fillCircle(123,8,6,presetColor)", presenter)
+        for color in ("kTapeIcon", "kRadioIcon", "kVocalIcon"):
+            self.assertIn(color, presenter)
 
     def test_crossfade_limiter_and_diagnostics_are_wired(self):
         dsp = source("src/player/audio/PcmDsp.cpp")

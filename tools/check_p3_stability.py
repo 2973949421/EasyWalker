@@ -54,7 +54,7 @@ class StabilityChecks(unittest.TestCase):
         self.assertEqual([r['sequence'] for r in full_records(records)], ['2'])
 
     def test_stage_a_version_and_single_keyboard_update(self):
-        self.assertEqual(VERSION, '0.10.0-p5.sound')
+        self.assertEqual(VERSION, '0.10.1-p5.soundfix')
         main = (ROOT/'src/player/app/PlayerDevMain.cpp').read_text(encoding='utf-8')
         loop = main.split('void loop()')[1]
         self.assertEqual(loop.count('M5Cardputer.update()'), 1)
