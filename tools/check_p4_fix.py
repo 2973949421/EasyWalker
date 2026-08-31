@@ -34,7 +34,7 @@ class P4FixChecks(unittest.TestCase):
         runtime = source("src/player/ui/RuntimeDiagnostics.cpp")
         self.assertIn("char buffer_[1024]", header)
         self.assertIn("kSummaryIntervalMs=60000", log)
-        self.assertIn("p4-free-current.txt", log)
+        self.assertIn("p5-free-current.txt", log)
         self.assertIn("kLogLimit=1024U*1024U", log)
         self.assertNotIn("RTC_NOINIT_ATTR", source("src/player/ui/RuntimeDiagnostics.h") + runtime)
         self.assertIn("case 11", log)

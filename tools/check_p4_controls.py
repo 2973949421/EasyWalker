@@ -44,7 +44,7 @@ class P4ControlChecks(unittest.TestCase):
         next_ = runtime.split("bool PlayerRuntime::next()", 1)[1].split(
             "bool PlayerRuntime::previous()", 1)[0]
         atomic = runtime.split("bool PlayerRuntime::setPlaybackMode", 1)[1].split(
-            "void PlayerRuntime::setPreferredNowPlayingView", 1)[0]
+            "bool PlayerRuntime::setSoundPreset", 1)[0]
         self.assertIn("if (result) requestCheckpoint();", previous)
         self.assertIn("if (result) requestCheckpoint();", next_)
         self.assertEqual(atomic.count("requestCheckpoint()"), 1)

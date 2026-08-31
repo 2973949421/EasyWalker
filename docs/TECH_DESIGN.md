@@ -7,6 +7,8 @@ P3稳定性RC采用`UiRequestToken(pageEpoch, requestGeneration, resourceGenerat
 
 0.9.1把T保存的状态结果与诊断结果拆开：独立CRC保护的`SAVE_BEGIN`/`SAVE_END`包围分步状态保存和完整快照，任何完整快照破损都不能吞掉Ticket终态。详细段设计上限768 bytes，周期摘要60秒；P4日志在1MiB的current/previous间轮换。RTC breadcrumb已删除，复位原因仅在启动摘要写SD。Playlist暖返回复用六行模型及字体租约；歌词坐标在既有Glyph数组内完成水平/垂直居中，不增加媒体工作集。完整边界见`P4AB_FIX.md`。0.9.2进一步把手动队列导航与自然EOF策略分开，并冻结全部曲库图的PC生成尺寸为135×154，详见`P4AB_TRANSPORT_FIX.md`。
 
+0.10.0在`M5SpeakerPcmOutput`已有Mono缓冲中原地执行`PcmDsp`，位置固定为下混之后、`playRaw`之前。双链TDF-II Biquad只在20ms切换期同时运行；系数只在采样率或Preset变化时计算，逐样本路径无SD、动态分配或三角函数。Session v1继续为24-byte头，保留字节22保存Preset，字节23不动；完整实现边界见`P5_SOUND.md`。
+
 ## 1. 设计目标
 
 技术设计优先级：
@@ -1103,8 +1105,8 @@ UI 与按键布局都应以这一姿态作为重要设计输入。
 9  Original      10  Tape       11  Radio      12  Vocal Clear
 ```
 
-`0.9.0-p4ab.controls`只启用1～8。9～12在P5真正接入DSP前由
-`InputRouter`明确返回no-op；Footer第二枚图标继续显示真实Original，不能预告未生效音效。
+`0.9.0-p4ab.controls`只启用1～8；`0.10.0-p5.sound`正式启用9～12，
+分别直接选择Original、Tape、Radio和Vocal Clear。Footer第二枚圆形图标显示O/T/R/V。
 输入路由接收明确`UiPage`，而非`bool playerPage`，在动作产生前完成页面隔离。
 
 规则：
@@ -1163,7 +1165,7 @@ Screen Off 状态在所有页面先于 Context Keymap 处理：第一次任意�
 
 - Lock（锁键）；
 - 长按 / 组合键是否有必要；
-- 9～12音效键在P5接入后的真机手感；
+- 9～12音效键与四种Preset的真机听感；
 - 特殊页面是否需要额外上下文行为。
 
 ---

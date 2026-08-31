@@ -1,5 +1,15 @@
 # Changelog
 
+## V0.10.0 — Fixed sound presets
+
+Date: 2026-08-31
+
+- 在Stereo→Mono下混后、既有3×1536 PCM提交前增加原地DSP：Original严格直通，Tape轻暖化，Radio带限/轻压缩，Vocal Clear轻推人声存在感。
+- Tape、Radio、Vocal Clear统一使用-1dBFS无Look-ahead峰值保护；切换以20ms双链交叉淡化完成，不新增PCM、SD或全屏缓存。
+- 播放器页9～12号键直接选择O/T/R/V；其他页面不泄漏音效Action，Footer只刷新第二枚圆形音效标识。
+- Session v1长度不变，使用保留字节22保存音效；旧存档自然恢复Original，非法值只回退Original而不破坏歌曲、Queue、位置或Pause恢复。
+- 增加DSP块耗时、首个实际PCM生效延迟、交叉淡化、限幅和安全回退诊断；主机回归及六环境构建完成后仍须耳机真机验收。
+
 ## V0.9.2 — Queue boundaries, mode icons and library cover contract
 
 Date: 2026-08-30

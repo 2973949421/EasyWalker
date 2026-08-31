@@ -2,12 +2,12 @@
 
 > 项目名：EasyWalker
 > 历史开发代号：ADV Walkman
-> 当前阶段：P3仍为`FROZEN / UNVERIFIED / KNOWN ISSUES`；P4A+B边界导航修复固件`0.9.2-p4ab.transportfix`已完成本地实现并进入DEVICE TEST
+> 当前阶段：P3仍为`FROZEN / UNVERIFIED / KNOWN ISSUES`；P5A+B音效固件`0.10.0-p5.sound`已完成本地实现并进入DEVICE TEST
 > 平台：M5Stack Cardputer ADV
 
 ## 1. 项目是什么
 
-P3冻结证据见[P3交付路线](docs/P3_DELIVERY.md)，不生成原计划的0.8.6，也不把未验证项目写成通过。P4A+B基线见[P4AB控制](docs/P4AB_CONTROLS.md)，0.9.1保存、列表、歌词与KINO资源修复见[P4A+B修复记录](docs/P4AB_FIX.md)，0.9.2边界导航、模式图标与曲库图片尺寸修复见[P4A+B Transport修复](docs/P4AB_TRANSPORT_FIX.md)。播放器页只启用顶部盲操区1～8，9～12保持无动作；不改变音频Backend或存档格式。
+P3冻结证据见[P3交付路线](docs/P3_DELIVERY.md)，不生成原计划的0.8.6，也不把未验证项目写成通过。P4A+B基线见[P4AB控制](docs/P4AB_CONTROLS.md)，0.9.1保存、列表、歌词与KINO资源修复见[P4A+B修复记录](docs/P4AB_FIX.md)，0.9.2边界导航、模式图标与曲库图片尺寸修复见[P4A+B Transport修复](docs/P4AB_TRANSPORT_FIX.md)。P5在播放器页启用9～12号键直接选择Original、Tape、Radio和Vocal Clear，完整参数、RAM边界与验收状态见[P5音效记录](docs/P5_SOUND.md)；音频Backend、3×1536缓冲和Session v1长度保持不变。
 
 后续本地音频或纯歌单导入的曲源、同步歌词、内嵌资源和多语言翻译规则见[媒体导入工作流](docs/MEDIA_IMPORT_WORKFLOW.md)。网络API只参与PC准备，设备固件不联网。
 

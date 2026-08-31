@@ -30,7 +30,7 @@ void FreeSession::begin(){
     if(!inputCheck_)fail("input","edge_selfcheck");
     if(!SD.exists("/ADVWalkman/logs"))SD.mkdir("/ADVWalkman/logs");
     if(!rotateLog())fail("logging","rotate_log");
-    // Only the bounded P4 current/previous pair is scanned. The 3.61 MiB P3
+    // Only the bounded P5 current/previous pair is scanned. The historical P3
     // journal is preserved as history and is never reopened by this version.
     const char* logs[]={kPreviousLog,kLog};
     for(const char* path:logs){auto previous=SD.open(path,"r");if(previous){

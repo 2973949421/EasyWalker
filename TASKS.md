@@ -927,7 +927,7 @@ AC：
 
 ## P5-01 Sound Preset Engine
 
-Status: TODO
+Status: DEVICE TEST — 0.10.0 IMPLEMENTED
 
 目标：
 
@@ -942,30 +942,30 @@ V1 Preset：
 
 AC：
 
-- [ ] 四种 Preset 可切换
-- [ ] 一次只允许一个 Preset 生效
-- [ ] Original 不增加主动声音染色
-- [ ] Tape 实现轻度暖化、高频衰减和轻软饱和
-- [ ] Radio 实现约 200–5000 Hz 带通、轻压缩和轻软饱和
-- [ ] Vocal Clear 轻度突出中频和 2–4 kHz 人声存在感
-- [ ] 切换 Preset 不崩溃
-- [ ] 切换时无频繁明显爆音
-- [ ] Preset 不造成可感知播放卡顿
-- [ ] 用户不需要手动调 DSP 参数
+- [x] 四种 Preset 已接入9～12号实体键、Runtime和Footer
+- [x] 一次只允许一个 Preset 生效
+- [x] Original逐样本直通，不增加主动声音染色
+- [x] Tape实现轻度暖化、高频衰减和轻软饱和
+- [x] Radio实现约200–5000Hz带通、轻压缩和轻软饱和
+- [x] Vocal Clear轻度突出中频和2–4kHz人声存在感
+- [x] 20ms双链交叉淡化及快速切换状态回归
+- [ ] 真机确认切换无频繁明显爆音
+- [ ] 真机确认Preset不造成可感知播放卡顿
+- [x] 用户不需要手动调DSP参数
 
 ---
 
 ## P5-02 Gain / Limiter Safety
 
-Status: TODO
+Status: DEVICE TEST — PROTECTION IMPLEMENTED
 
 AC：
 
-- [ ] 预设处理后不存在频繁明显 clipping
-- [ ] Original 路径不被过度压缩
-- [ ] 保护逻辑低延迟、低复杂度
-- [ ] 参数通过真机 A/B 小范围微调
-- [ ] 不实现复杂 Mastering Limiter
+- [x] 三个处理Preset使用-1dBFS即时Attack/80ms Release保护
+- [x] Original路径不经过动态压缩或Limiter
+- [x] 保护逻辑无Look-ahead、无新增PCM缓冲
+- [ ] 固定参数通过本轮一次真机A/B确认
+- [x] 不实现复杂Mastering Limiter
 
 ---
 
